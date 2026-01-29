@@ -1,0 +1,244 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  username  String   @unique
+  avatar    String?
+  role      String   @default("user")
+  balance   Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cards         Card[]
+  listings      Listing[]
+  transactions  Transaction[]
+  orders        Order[]
+  userCards     UserCard[]
+  rechargeOrders RechargeOrder[]
+  cardRecharges  CardRechargeOrder[]
+
+  @@index([email])
+}
+
+model Card {
+  id          String   @id @default(cuid())
+  cardNumber  String   @unique
+  cardName    String
+  cardTypeName String   // 改名避免冲突
+  balance     Float
+  expireDate  String
+  cvv         String
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing  Listing?
+  order    Order?
+
+  cardTypeId  String
+  cardType    CardType @relation(fields: [cardTypeId], references: [id])
+
+  @@index([userId])
+  @@index([cardTypeId])
+}
+
+model Listing {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  askPrice    Float
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  cardId   String  @unique
+  card     Card    @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders   Order[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Order {
+  id        String   @id @default(cuid())
+  quantity  Int      @default(1)
+  price     Float
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  listingId String
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  buyerId   String
+  buyer     User    @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  cardId    String  @unique
+  card      Card    @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([buyerId])
+  @@index([listingId])
+}
+
+model Transaction {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  amount    Float
+  status    String   @default("pending")
+  
+  // 新增字段（都是可选的，不会影响现有数据）
+  paymentMethod  String?
+  paymentNetwork String?
+  txHash         String?
+  paymentProof   String?  @db.Text
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model SystemConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model CardType {
+  id                    String   @id @default(cuid())
+  name                  String
+  cardBin               String   @unique
+  issuer                String   @default("美国")
+  
+  // ========== 用户端显示费率（仅展示） ==========
+  displayOpenFee        Float    @default(10)
+  displayMonthlyFee     Float?
+  displayRechargeFee    String?
+  displayTransactionFee String?
+  displayRefundFee      String?
+  displayAuthFee        String?
+  
+  // ========== 实际运行费率 ==========
+  // 开卡费用
+  openFee               Float    @default(2)
+  monthlyFee            Float    @default(0.1)
+  
+  // 充值费用
+  rechargeFeePercent    Float    @default(2)
+  rechargeFeeMin        Float    @default(0.6)
+  
+  // 交易费用
+  transactionFeePercent Float    @default(1)
+  transactionFeeMin     Float    @default(0.6)
+  
+  // 授权手续费（每笔固定）
+  authFee               Float    @default(0.2)
+  
+  // 授权费用（百分比）
+  authFeePercent        Float    @default(0)
+  authFeeMin            Float    @default(0)
+  
+  // 授权失败费
+  authFailFee           Float    @default(0.5)
+  
+  // 退款手续费
+  refundFeePercent      Float    @default(1)
+  refundFeeMin          Float    @default(0.5)
+  smallRefundFee        Float    @default(3)
+  largeRefundThreshold  Float    @default(20)
+  
+  // 跨境手续费
+  crossBorderFeePercent Float    @default(1)
+  crossBorderFeeMin     Float    @default(0)
+  
+  // 拒付费
+  chargebackFee         Float    @default(15)
+  
+  // 状态
+  isActive              Boolean  @default(true)
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // 关联 - 添加反向关联
+  cards                 Card[]
+  userCards             UserCard[]
+}
+
+model OpenCardNotice {
+  id        String   @id @default(cuid())
+  content   String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserCard {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardTypeId      String
+  cardType        CardType @relation(fields: [cardTypeId], references: [id])
+  gsalaryCardId   String?  @unique
+  cardNoLast4     String?
+  status          String   @default("pending")
+  balance         Float    @default(0)
+  openFee         Float
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  recharges CardRechargeOrder[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model RechargeOrder {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount        Float
+  actualAmount  Float?
+  paymentMethod String
+  status        String   @default("pending")
+  txHash        String?
+  paymentUrl    String?
+  remark        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model CardRechargeOrder {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userCardId String
+  userCard   UserCard @relation(fields: [userCardId], references: [id], onDelete: Cascade)
+  amount     Float
+  fee        Float
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userCardId])
+}

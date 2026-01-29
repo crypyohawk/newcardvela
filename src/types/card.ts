@@ -1,0 +1,22 @@
+export interface Card {
+  id: string;
+  cardNumber: string;
+  cardName: string;
+  cardType: string;
+  balance: number;
+  expireDate: string;
+  cvv: string;
+  status: string;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateCardRequest {
+  cardNumber: string;
+  cardName: string;
+  cardType: string;
+  balance: number;
+  expireDate: string;
+  cvv: string;
+}
