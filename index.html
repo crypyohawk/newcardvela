@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CardVela - International Virtual Card Marketplace</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">
+                <h1>💳 CardVela</h1>
+            </div>
+            <ul class="nav-links">
+                <li><a href="index.html" class="active" data-i18n="nav.home">Home</a></li>
+                <li><a href="products.html" data-i18n="nav.products">Virtual Cards</a></li>
+                <li><a href="#about" data-i18n="nav.about">About</a></li>
+                <li><a href="#contact" data-i18n="nav.contact">Contact</a></li>
+            </ul>
+            <div class="nav-actions">
+                <div class="language-selector">
+                    <select id="languageSelect" onchange="changeLanguage(this.value)">
+                        <option value="en">English</option>
+                        <option value="zh">中文</option>
+                    </select>
+                </div>
+                <button class="cart-btn" onclick="toggleCart()">
+                    🛒 <span id="cartCount">0</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <h1 data-i18n="hero.title">Purchase Virtual Cards Globally</h1>
+                <p data-i18n="hero.subtitle">Instant delivery • Secure payments • Multiple currencies</p>
+                <a href="products.html" class="btn btn-primary" data-i18n="hero.cta">Browse Cards</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features">
+        <div class="container">
+            <h2 data-i18n="features.title">Why Choose CardVela?</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3 data-i18n="features.instant.title">Instant Delivery</h3>
+                    <p data-i18n="features.instant.desc">Receive your virtual card details immediately after purchase</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3 data-i18n="features.secure.title">Secure & Safe</h3>
+                    <p data-i18n="features.secure.desc">Bank-level encryption and secure payment processing</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🌍</div>
+                    <h3 data-i18n="features.global.title">Global Access</h3>
+                    <p data-i18n="features.global.desc">Use cards worldwide for online purchases</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💰</div>
+                    <h3 data-i18n="features.currency.title">Multiple Currencies</h3>
+                    <p data-i18n="features.currency.desc">Support for USD, EUR, GBP, CNY and more</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Popular Cards Section -->
+    <section class="popular-cards">
+        <div class="container">
+            <h2 data-i18n="popular.title">Popular Virtual Cards</h2>
+            <div class="cards-grid" id="popularCards">
+                <!-- Cards will be loaded dynamically -->
+            </div>
+            <div class="text-center">
+                <a href="products.html" class="btn btn-secondary" data-i18n="popular.viewAll">View All Cards</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="about">
+        <div class="container">
+            <h2 data-i18n="about.title">About CardVela</h2>
+            <p data-i18n="about.description">CardVela is your trusted international marketplace for virtual cards. We provide instant access to prepaid virtual cards for online shopping, subscriptions, and secure payments worldwide.</p>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="contact">
+        <div class="container">
+            <h2 data-i18n="contact.title">Contact Us</h2>
+            <p data-i18n="contact.email">Email: support@cardvela.com</p>
+            <p data-i18n="contact.hours">Available 24/7</p>
+        </div>
+    </section>
+
+    <!-- Shopping Cart Sidebar -->
+    <div id="cartSidebar" class="cart-sidebar">
+        <div class="cart-header">
+            <h3 data-i18n="cart.title">Shopping Cart</h3>
+            <button class="close-btn" onclick="toggleCart()">✕</button>
+        </div>
+        <div id="cartItems" class="cart-items">
+            <!-- Cart items will be loaded dynamically -->
+        </div>
+        <div class="cart-footer">
+            <div class="cart-total">
+                <span data-i18n="cart.total">Total:</span>
+                <span id="cartTotal">$0.00</span>
+            </div>
+            <button class="btn btn-primary btn-block" onclick="checkout()" data-i18n="cart.checkout">Checkout</button>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 CardVela. <span data-i18n="footer.rights">All rights reserved.</span></p>
+        </div>
+    </footer>
+
+    <script src="i18n.js"></script>
+    <script src="cart.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
