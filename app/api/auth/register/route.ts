@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { db } from '../../../../src/lib/db';
-import { generateToken } from '../../../../src/lib/auth';
+import jwt from 'jsonwebtoken';
+import { prisma } from '../../../../src/lib/prisma';
+import { verifyCode } from '../../../../src/lib/verificationCodes';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 // 简单的内存限流
 const registerAttempts = new Map<string, { count: number; lastAttempt: number }>();
@@ -45,69 +48,84 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { username, email, password } = body;
+    const { email, username, password, code, referralCode } = body;
 
-    // 输入验证
-    if (!username || !email || !password) {
-      return NextResponse.json({ error: '请填写所有字段' }, { status: 400 });
+    // 验证 - 移除 confirmPassword 的验证（因为前端用验证码方式）
+    if (!email || !username || !password) {
+      return NextResponse.json({ error: '请填写所有必填项' }, { status: 400 });
     }
 
-    // 用户名格式验证
-    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-      return NextResponse.json({ 
-        error: '用户名只能包含字母、数字、下划线，长度3-20' 
-      }, { status: 400 });
+    if (!code) {
+      return NextResponse.json({ error: '请输入验证码' }, { status: 400 });
     }
 
-    // 邮箱格式验证
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json({ error: '邮箱格式不正确' }, { status: 400 });
-    }
-
-    // 密码强度验证
-    if (password.length < 8) {
-      return NextResponse.json({ error: '密码至少8位' }, { status: 400 });
+    if (password.length < 6) {
+      return NextResponse.json({ error: '密码至少6位' }, { status: 400 });
     }
 
     const emailLower = email.toLowerCase();
 
-    // 检查用户是否已存在
-    const existingUser = await db.user.findFirst({
-      where: {
-        OR: [{ email: emailLower }, { username }],
-      },
-    });
-
-    if (existingUser) {
-      return NextResponse.json({ 
-        error: existingUser.email === emailLower ? '邮箱已注册' : '用户名已存在' 
-      }, { status: 400 });
+    // 验证验证码
+    if (!verifyCode(emailLower, code)) {
+      return NextResponse.json({ error: '验证码无效或已过期' }, { status: 400 });
     }
 
+    // 检查邮箱是否已存在
+    const existingEmail = await prisma.user.findUnique({ where: { email: emailLower } });
+    if (existingEmail) {
+      return NextResponse.json({ error: '该邮箱已注册' }, { status: 400 });
+    }
+
+    // 检查用户名是否已存在
+    const existingUsername = await prisma.user.findUnique({ where: { username } });
+    if (existingUsername) {
+      return NextResponse.json({ error: '该用户名已被使用' }, { status: 400 });
+    }
+
+    // 验证推荐码
+    let referrerId: string | null = null;
+    if (referralCode && referralCode.trim()) {
+      const referrer = await prisma.user.findFirst({
+        where: { referralCode: referralCode.trim().toUpperCase() }
+      });
+      if (referrer) {
+        referrerId = referrer.id;
+      }
+    }
+
+    // 加密密码
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 生成推荐码
+    const newReferralCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+
     // 创建用户
-    const hashedPassword = await bcrypt.hash(password, 12);
-    const user = await db.user.create({
+    const user = await prisma.user.create({
       data: {
-        username,
         email: emailLower,
+        username,
         password: hashedPassword,
+        referralCode: newReferralCode,
+        referredBy: referrerId,
       },
     });
 
-    const token = generateToken({ userId: user.id, email: user.email });
+    // 生成 token
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
 
     return NextResponse.json({
       token,
       user: {
         id: user.id,
-        username: user.username,
         email: user.email,
+        username: user.username,
+        role: user.role,
         balance: user.balance,
       },
     });
 
   } catch (error: any) {
     console.error('注册失败:', error);
-    return NextResponse.json({ error: '注册失败，请稍后再试' }, { status: 500 });
+    return NextResponse.json({ error: '注册失败' }, { status: 500 });
   }
 }

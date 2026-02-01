@@ -1,16 +1,25 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ username: '', email: '', password: '', code: '' });
+  const searchParams = useSearchParams();
+  const [form, setForm] = useState({ username: '', email: '', password: '', code: '', referralCode: '' });
   const [loading, setLoading] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [error, setError] = useState('');
+
+  // 从 URL 获取推荐码
+  useEffect(() => {
+    const ref = searchParams.get('ref');
+    if (ref) {
+      setForm(prev => ({ ...prev, referralCode: ref }));
+    }
+  }, [searchParams]);
 
   const handleSendCode = async () => {
     if (!form.email) {
@@ -65,7 +74,10 @@ export default function RegisterPage() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          referralCode: form.referralCode.trim().toUpperCase() || undefined
+        }),
       });
 
       const data = await res.json();
@@ -148,6 +160,20 @@ export default function RegisterPage() {
               className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3"
               required
             />
+          </div>
+
+          {/* 推荐码输入框 */}
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">推荐码（选填）</label>
+            <input
+              type="text"
+              value={form.referralCode}
+              onChange={(e) => setForm({ ...form, referralCode: e.target.value.toUpperCase() })}
+              placeholder="填写推荐人的推荐码"
+              maxLength={10}
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 uppercase"
+            />
+            <p className="text-xs text-gray-500 mt-1">如有推荐人，请填写其推荐码</p>
           </div>
 
           <button

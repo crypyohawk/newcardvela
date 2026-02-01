@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../src/lib/auth';
 import { quickApplyCard, getCards, getCardDetail } from '../../../../src/lib/gsalary';
+import { prisma } from '../../../../src/lib/prisma';
 
 // 获取用户的卡片列表
 export async function GET(request: NextRequest) {
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 计算费用
-    const rechargeFee = initialAmount * (cardType.rechargeFee / 100);
+    const rechargeFee = initialAmount * (cardType.rechargeFeePercent / 100);
     const totalCost = cardType.openFee + initialAmount + rechargeFee;
 
     if (user.balance < totalCost) {
@@ -289,6 +290,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // 开卡成功后，检查并发放推荐奖励
+    await checkAndGrantReferralReward(userCard.userId);
+
     return NextResponse.json({
       success: true,
       card: userCard,
@@ -297,5 +301,53 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('开卡失败:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// 开卡成功后，检查并发放推荐奖励
+async function checkAndGrantReferralReward(userId: string) {
+  try {
+    // 获取推荐功能设置
+    const enabledConfig = await prisma.systemConfig.findUnique({
+      where: { key: 'referral_enabled' }
+    });
+    
+    if (enabledConfig?.value !== 'true') return;
+
+    // 获取用户信息
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        referredBy: true,
+      }
+    });
+
+    if (!user?.referredBy) return;
+
+    // 检查是否是首次开卡
+    const userCardCount = await prisma.userCard.count({
+      where: { userId }
+    });
+
+    // 只有首次开卡才发放奖励
+    if (userCardCount !== 1) return;  // ← 这里：如果不是第1张卡，直接返回不发奖励
+
+    // 获取奖励金额
+    const rewardConfig = await prisma.systemConfig.findUnique({
+      where: { key: 'referral_reward_amount' }
+    });
+    const rewardAmount = parseFloat(rewardConfig?.value || '5');
+
+    // 发放奖励给推荐人
+    await prisma.user.update({
+      where: { id: user.referredBy },
+      data: { balance: { increment: rewardAmount } }
+    });
+    
+    console.log(`[推荐奖励] 用户 ${user.username} 首次开卡，推荐人 ${user.referredBy} 获得 $${rewardAmount}`);
+  } catch (error) {
+    console.error('发放推荐奖励失败:', error);
   }
 }

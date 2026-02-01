@@ -10,14 +10,12 @@ interface CardType {
   name: string;
   cardBin: string;
   issuer: string;
-  // 用户端显示字段
   displayOpenFee: number;
   displayMonthlyFee: number | null;
   displayRechargeFee: string | null;
   displayTransactionFee: string | null;
   displayRefundFee: string | null;
   displayAuthFee: string | null;
-  // 实际运行字段（用于计算）
   openFee: number;
   monthlyFee: number;
   rechargeFeePercent: number;
@@ -40,13 +38,20 @@ interface CardDetail {
   expiry: string;
 }
 
+interface ReferralInfo {
+  referralCode: string;
+  referralLink: string;
+  settings: { enabled: boolean; promptText: string; rewardAmount: number };
+  referrals: any[];
+}
+
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
   const [cardTypes, setCardTypes] = useState<CardType[]>([]);
   const [userCards, setUserCards] = useState<UserCard[]>([]);
   const [notices, setNotices] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'cards' | 'open' | 'recharge' | 'history'>('cards');
+  const [activeTab, setActiveTab] = useState<'cards' | 'open' | 'recharge' | 'referral'>('cards');
   const [openingCard, setOpeningCard] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
@@ -83,6 +88,22 @@ export default function DashboardPage() {
   const [paymentProof, setPaymentProof] = useState<string>('');
   const [isFirstRecharge, setIsFirstRecharge] = useState(true);
 
+  // 添加推荐相关状态
+  const [referralInfo, setReferralInfo] = useState<ReferralInfo | null>(null);
+
+  const [openCardNotices, setOpenCardNotices] = useState<string[]>([]);
+  const [billingExamples, setBillingExamples] = useState<Array<{
+    id: string;
+    name: string;
+    address: string;
+    city: string;
+    state: string;
+    zip: string;
+    country: string;
+    billingAddress: string;
+  }>>([]);
+  const [agreedToNotices, setAgreedToNotices] = useState(false);
+
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
@@ -91,6 +112,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchData();
+    fetchReferralInfo();
   }, []);
 
   const fetchData = async () => {
@@ -107,9 +129,32 @@ export default function DashboardPage() {
       
       setCardTypes(configData.cardTypes || []);
       setNotices(configData.notices || []);
+      setOpenCardNotices(configData.notices || []);
+      setBillingExamples(configData.billingExamples || []);
       setUserCards(cardsData.cards || []);
+      
+      // 获取推荐设置
+      if (configData.referral) {
+        setReferralInfo(prev => prev ? { ...prev, settings: configData.referral } : null);
+      }
     } catch (error) {
       console.error('加载数据失败:', error);
+    }
+  };
+
+  const fetchReferralInfo = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const res = await fetch('/api/referral', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setReferralInfo(data);
+      }
+    } catch (error) {
+      console.error('获取推荐信息失败:', error);
     }
   };
 
@@ -533,35 +578,43 @@ export default function DashboardPage() {
             <div className="text-sm text-gray-400">账户余额充值</div>
           </button>
           <button
-            onClick={() => setActiveTab('history')}
-            className={`p-4 rounded-xl text-left transition ${activeTab === 'history' ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'}`}
+            onClick={() => setActiveTab('referral')}
+            className={`p-4 rounded-xl text-left transition ${activeTab === 'referral' ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'}`}
           >
-            <div className="text-2xl mb-2">📋</div>
-            <div className="font-semibold">交易记录</div>
-            <div className="text-sm text-gray-400">查看所有交易</div>
+            <div className="text-2xl mb-2">🎁</div>
+            <div className="font-semibold">推荐奖励</div>
+            <div className="text-sm text-gray-400">邀请好友得奖励</div>
           </button>
         </div>
+
+        {/* 在快捷操作区域后添加推荐横幅 */}
+        {referralInfo?.settings?.enabled && (
+          <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl p-4 mb-8">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <h3 className="font-bold text-lg">🎁 {referralInfo.settings.promptText}</h3>
+                <p className="text-sm opacity-90 mt-1">
+                  您的推荐码：<span className="font-mono bg-white/20 px-2 py-1 rounded">{referralInfo.referralCode}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(referralInfo.referralLink);
+                  setMessage({ type: 'success', text: '推荐链接已复制！' });
+                }}
+                className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100"
+              >
+                复制链接
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 我的卡片 */}
         {activeTab === 'cards' && (
           <div className="bg-slate-800 rounded-xl p-6">
             <h2 className="text-xl font-bold mb-6">我的卡片</h2>
             
-            {/* 账单地址提示 */}
-            {userCards.length > 0 && (
-              <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6">
-                <h3 className="font-semibold text-blue-300 mb-2">📋 订阅服务时使用以下账单地址：</h3>
-                <div className="grid grid-cols-2 gap-2 text-sm text-gray-300">
-                  <div><span className="text-gray-500">姓名:</span> Michael Johnson</div>
-                  <div><span className="text-gray-500">地址:</span> 1209 Orange Street</div>
-                  <div><span className="text-gray-500">城市:</span> Wilmington</div>
-                  <div><span className="text-gray-500">州:</span> DE (Delaware)</div>
-                  <div><span className="text-gray-500">邮编:</span> 19801</div>
-                  <div><span className="text-gray-500">国家:</span> United States</div>
-                </div>
-              </div>
-            )}
-
             {userCards.length === 0 ? (
               <div className="text-center py-12 text-gray-400">
                 <div className="text-4xl mb-4">💳</div>
@@ -750,6 +803,34 @@ export default function DashboardPage() {
                     </button>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* 订阅服务时的持卡人信息填写推荐 - 显示在卡片类型下方 */}
+            {billingExamples.length > 0 && (
+              <div className="bg-blue-900/30 border border-blue-700 rounded-xl p-5 mt-6">
+                <h3 className="font-bold text-blue-300 mb-4">📋 订阅服务时的持卡人信息填写推荐：</h3>
+                <div className="space-y-4">
+                  {billingExamples.map((example, index) => (
+                    <div key={example.id} className="bg-slate-800/50 rounded-lg p-4">
+                      <div className="text-blue-400 font-semibold text-sm mb-2">示例 {index + 1}</div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm text-gray-300">
+                        <div><span className="text-gray-500">姓名:</span> {example.name}</div>
+                        {example.address && <div><span className="text-gray-500">街道:</span> {example.address}</div>}
+                        {example.city && <div><span className="text-gray-500">城市:</span> {example.city}</div>}
+                        {example.state && <div><span className="text-gray-500">州:</span> {example.state}</div>}
+                        {example.zip && <div><span className="text-gray-500">邮编:</span> {example.zip}</div>}
+                        {example.country && <div><span className="text-gray-500">国家:</span> {example.country}</div>}
+                      </div>
+                      {example.billingAddress && (
+                        <div className="mt-3 pt-3 border-t border-blue-700/50">
+                          <span className="text-gray-500 text-sm">账单地址 (Billing Address):</span>
+                          <p className="text-blue-200 font-medium mt-1">{example.billingAddress}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -958,14 +1039,92 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* 交易记录 */}
-        {activeTab === 'history' && (
+        {/* 推荐奖励 */}
+        {activeTab === 'referral' && (
           <div className="bg-slate-800 rounded-xl p-6">
-            <h2 className="text-xl font-bold mb-6">交易记录</h2>
-            <div className="text-center py-12 text-gray-400">
-              <div className="text-4xl mb-4">📋</div>
-              <p>暂无交易记录</p>
-            </div>
+            <h2 className="text-xl font-bold mb-6">🎁 推荐奖励</h2>
+            
+            {referralInfo ? (
+              <div className="space-y-6">
+                {referralInfo.settings?.enabled && referralInfo.settings?.promptText && (
+                  <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl p-4">
+                    <p className="font-bold text-lg">{referralInfo.settings.promptText}</p>
+                    <p className="text-sm opacity-90 mt-1">
+                      每成功推荐一位好友开卡，您将获得 ${referralInfo.settings.rewardAmount} 奖励
+                    </p>
+                  </div>
+                )}
+
+                <div className="bg-slate-700 rounded-lg p-4">
+                  <h3 className="font-semibold mb-3">我的推荐码</h3>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 bg-slate-800 px-4 py-3 rounded-lg font-mono text-xl tracking-wider">
+                      {referralInfo.referralCode || '生成中...'}
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(referralInfo.referralCode || '');
+                        setMessage({ type: 'success', text: '推荐码已复制！' });
+                      }}
+                      className="bg-blue-600 px-4 py-3 rounded-lg hover:bg-blue-700"
+                    >
+                      复制
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-slate-700 rounded-lg p-4">
+                  <h3 className="font-semibold mb-3">推荐链接</h3>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 bg-slate-800 px-4 py-3 rounded-lg text-sm break-all">
+                      {referralInfo.referralLink || ''}
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(referralInfo.referralLink || '');
+                        setMessage({ type: 'success', text: '推荐链接已复制！' });
+                      }}
+                      className="bg-green-600 px-4 py-3 rounded-lg hover:bg-green-700 whitespace-nowrap"
+                    >
+                      复制链接
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">分享此链接给好友，好友注册时会自动填入您的推荐码</p>
+                </div>
+
+                <div className="bg-slate-700 rounded-lg p-4">
+                  <h3 className="font-semibold mb-3">已推荐用户 ({referralInfo.referrals?.length || 0})</h3>
+                  {referralInfo.referrals && referralInfo.referrals.length > 0 ? (
+                    <div className="space-y-2">
+                      {referralInfo.referrals.map((ref: any) => (
+                        <div key={ref.id} className="flex items-center justify-between bg-slate-800 px-4 py-3 rounded-lg">
+                          <div>
+                            <span className="font-medium">{ref.username}</span>
+                            <span className="text-gray-400 text-sm ml-2">
+                              {new Date(ref.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <span className={`text-sm px-2 py-1 rounded ${ref.hasOpenedCard ? 'bg-green-600' : 'bg-gray-600'}`}>
+                            {ref.hasOpenedCard ? '已开卡 ✓' : '未开卡'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-400">
+                      <div className="text-4xl mb-2">👥</div>
+                      <p>暂无推荐用户</p>
+                      <p className="text-sm">分享您的推荐码或链接给好友吧！</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-400">
+                <div className="text-4xl mb-4">🎁</div>
+                <p>加载中...</p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1314,8 +1473,33 @@ export default function DashboardPage() {
       {/* 开卡确认弹窗 - 添加到文件末尾 */}
       {showOpenCardConfirm && selectedCardType && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 p-6 rounded-xl w-full max-w-sm">
+          <div className="bg-slate-800 p-6 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">确认开卡</h3>
+            
+            {/* 开卡须知 - 必须阅读才能同意 */}
+            {notices.length > 0 && (
+              <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-4 mb-4">
+                <h4 className="font-semibold text-yellow-300 mb-3">⚠️ 开卡须知（请仔细阅读）</h4>
+                <div className="text-sm text-gray-300 space-y-2 max-h-48 overflow-y-auto pr-2 mb-4">
+                  {notices.map((notice, index) => (
+                    <p key={index} className="flex items-start gap-2">
+                      <span className="text-yellow-400 font-mono">{index + 1}.</span>
+                      <span>{notice}</span>
+                    </p>
+                  ))}
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer border-t border-yellow-700/50 pt-3">
+                  <input
+                    type="checkbox"
+                    checked={agreedToNotices}
+                    onChange={(e) => setAgreedToNotices(e.target.checked)}
+                    className="w-4 h-4 rounded border-yellow-600 text-yellow-600 focus:ring-yellow-500"
+                  />
+                  <span className="text-sm text-yellow-200">我已阅读并同意以上开卡须知</span>
+                </label>
+              </div>
+            )}
+
             <p className="text-gray-300 mb-4">
               确认开通 <span className="text-blue-400 font-semibold">{selectedCardType.name}</span> 虚拟卡？
             </p>
@@ -1337,16 +1521,25 @@ export default function DashboardPage() {
 
             <div className="flex gap-3">
               <button
-                onClick={() => { setShowOpenCardConfirm(false); setSelectedCardType(null); }}
+                onClick={() => { 
+                  setShowOpenCardConfirm(false); 
+                  setSelectedCardType(null); 
+                  setAgreedToNotices(false);
+                }}
                 className="flex-1 bg-slate-600 py-3 rounded-lg hover:bg-slate-500"
               >
                 取消
               </button>
               <button
                 onClick={confirmOpenCard}
-                className="flex-1 bg-blue-600 py-3 rounded-lg hover:bg-blue-700"
+                disabled={notices.length > 0 && !agreedToNotices}
+                className={`flex-1 py-3 rounded-lg font-semibold transition ${
+                  notices.length > 0 && !agreedToNotices 
+                    ? 'bg-gray-600 cursor-not-allowed opacity-50' 
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
-                确认开卡
+                {notices.length > 0 && !agreedToNotices ? '请先同意须知' : '确认开卡'}
               </button>
             </div>
           </div>

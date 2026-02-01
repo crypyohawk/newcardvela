@@ -2,18 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  html {
-    font-family: system-ui, sans-serif;
-  }
+export interface Card {
+  id: string;
+  cardNumber: string;
+  cardName: string;
+  cardType: string;
+  balance: number;
+  expireDate: string;
+  cvv: string;
+  status: string;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-@layer components {
-  .btn-primary {
-    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors;
-  }
-  
-  .btn-secondary {
-    @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors;
-  }
+export interface CreateCardRequest {
+  cardNumber: string;
+  cardName: string;
+  cardType: string;
+  balance: number;
+  expireDate: string;
+  cvv: string;
 }

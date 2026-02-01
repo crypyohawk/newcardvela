@@ -1,5 +1,7 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
-import { getCardDetail, rechargeCard, freezeCard, unfreezeCard, cancelCard } from '../../../../../src/lib/gsalary';
+import { getCardDetail, rechargeCard } from '../../../../../src/lib/gsalary';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
 
 export async function GET(
@@ -52,14 +54,9 @@ export async function POST(
         result = await rechargeCard(params.id, amount);
         break;
       case 'freeze':
-        result = await freezeCard(params.id);
-        break;
       case 'unfreeze':
-        result = await unfreezeCard(params.id);
-        break;
       case 'cancel':
-        result = await cancelCard(params.id);
-        break;
+        return NextResponse.json({ error: '该功能暂未实现' }, { status: 400 });
       default:
         return NextResponse.json({ error: '无效的操作' }, { status: 400 });
     }

@@ -18,6 +18,13 @@ model User {
   avatar    String?
   role      String   @default("user")
   balance   Float    @default(0)
+  
+  // 推荐相关 - 改为可选
+  referralCode    String?  @unique           // 改为可选
+  referredBy      String?
+  referrer        User?    @relation("Referrals", fields: [referredBy], references: [id])
+  referrals       User[]   @relation("Referrals")
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -28,8 +35,10 @@ model User {
   userCards     UserCard[]
   rechargeOrders RechargeOrder[]
   cardRecharges  CardRechargeOrder[]
+  referralRewards ReferralReward[]
 
   @@index([email])
+  @@index([referralCode])
 }
 
 model Card {
@@ -241,4 +250,18 @@ model CardRechargeOrder {
 
   @@index([userId])
   @@index([userCardId])
+}
+
+// 推荐奖励记录
+model ReferralReward {
+  id              String   @id @default(cuid())
+  referrerId      String                          // 推荐人ID
+  referrer        User     @relation(fields: [referrerId], references: [id])
+  referredUserId  String                          // 被推荐人ID
+  amount          Float                           // 奖励金额
+  status          String   @default("pending")    // pending, completed
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([referrerId])
 }

@@ -1,5 +1,7 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
-import { getBalance, getCardBins } from '../../../../src/lib/gsalary';
+import { getBalance, getCards } from '../../../../src/lib/gsalary';
 
 export async function GET(request: NextRequest) {
   const results: Record<string, any> = {
@@ -56,7 +58,7 @@ export async function GET(request: NextRequest) {
   };
 
   try {
-    const bins = await getCardBins();
+    const bins = await getCards();
     binsTest.status = 'success';
     binsTest.details = bins;
   } catch (error: any) {

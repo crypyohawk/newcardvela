@@ -1,6 +1,27 @@
-node_modules
-# Keep environment variables out of version control
+# 依赖
+node_modules/
+
+# 构建输出
+.next/
+out/
+.build/
+
+# 环境变量（重要！不要上传）
 .env
-.env.local
-.env.production
-certbot/
+.env.* 
+
+# 日志
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# VSCode
+.vscode/
+
+# Docker
+docker-compose.override.yml
+
+# Prisma
+prisma/*.db

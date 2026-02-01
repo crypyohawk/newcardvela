@@ -1,49 +1,50 @@
-// 使用 global 确保在开发模式下不会被重置
+// 验证码内存存储
+// 使用 global 防止热重载时丢失数据
 const globalForCodes = globalThis as unknown as {
-  verificationCodes: Map<string, { code: string; expires: number }>;
+  verificationCodes: Map<string, { code: string; expiresAt: number }>;
 };
 
+const codes = globalForCodes.verificationCodes || new Map<string, { code: string; expiresAt: number }>();
+
 if (!globalForCodes.verificationCodes) {
-  globalForCodes.verificationCodes = new Map();
+  globalForCodes.verificationCodes = codes;
 }
 
-const verificationCodes = globalForCodes.verificationCodes;
-
 export function setCode(email: string, code: string) {
-  console.log('[验证码] 存储:', email.toLowerCase(), code);
-  verificationCodes.set(email.toLowerCase(), {
+  const emailLower = email.toLowerCase();
+  codes.set(emailLower, {
     code,
-    expires: Date.now() + 5 * 60 * 1000, // 5分钟有效
+    expiresAt: Date.now() + 5 * 60 * 1000,
   });
+  console.log('[验证码] 存储:', emailLower, code, '当前存储数量:', codes.size);
 }
 
 export function verifyCode(email: string, code: string): boolean {
   const emailLower = email.toLowerCase();
-  const record = verificationCodes.get(emailLower);
+  const stored = codes.get(emailLower);
 
-  console.log('[验证码] 验证:', emailLower, '输入:', code, '存储:', record);
+  console.log('[验证码] 验证:', {
+    email: emailLower,
+    inputCode: code,
+    storedCode: stored?.code,
+    exists: !!stored,
+    expired: stored ? stored.expiresAt < Date.now() : null,
+    mapSize: codes.size,
+  });
 
-  if (!record) {
-    console.log('[验证码] 未找到记录');
+  if (!stored) return false;
+  if (stored.expiresAt < Date.now()) {
+    codes.delete(emailLower);
     return false;
   }
-  if (Date.now() > record.expires) {
-    console.log('[验证码] 已过期');
-    verificationCodes.delete(emailLower);
-    return false;
-  }
-  if (record.code !== code) {
-    console.log('[验证码] 不匹配');
-    return false;
-  }
+  if (stored.code !== code) return false;
 
-  console.log('[验证码] 验证成功');
-  verificationCodes.delete(emailLower);
+  codes.delete(emailLower);
   return true;
 }
 
 export function getCode(email: string): string | null {
-  const record = verificationCodes.get(email.toLowerCase());
-  if (!record || Date.now() > record.expires) return null;
-  return record.code;
+  const stored = codes.get(email.toLowerCase());
+  if (!stored || stored.expiresAt < Date.now()) return null;
+  return stored.code;
 }

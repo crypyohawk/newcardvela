@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getBalance } from '../../../../src/lib/gsalary';
 import { verifyToken, getTokenFromRequest } from '../../../../src/lib/auth';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const token = getTokenFromRequest(request);

@@ -1,117 +1,137 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 
 export default function RegisterForm() {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
+  const [referrerName, setReferrerName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  
   const { register } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const ref = searchParams.get('ref');
+    if (ref) {
+      setReferralCode(ref);
+      // 验证推荐码
+      fetch(`/api/referral/check?code=${ref}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.valid) {
+            setReferrerName(data.referrerName);
+          }
+        });
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
-    if (password !== confirmPassword) {
-      setError('密码确认不一致');
-      return;
-    }
-
     setLoading(true);
 
     try {
-      await register(email, username, password, confirmPassword);
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, username, password, confirmPassword, referralCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      
+      localStorage.setItem('token', data.token);
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.message || '注册失败，请重试');
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {error && <div className="bg-red-100 text-red-700 p-3 rounded">{error}</div>}
+      
+      {referrerName && (
+        <div className="bg-green-100 text-green-700 p-3 rounded text-sm">
+          🎉 您由 <strong>{referrerName}</strong> 邀请注册，开卡成功后双方各得奖励！
+        </div>
+      )}
+
       <div>
-        <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-          邮箱
-        </label>
+        <label className="block text-sm font-medium text-gray-700">邮箱</label>
         <input
-          id="email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
         />
       </div>
 
       <div>
-        <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-          用户名
-        </label>
+        <label className="block text-sm font-medium text-gray-700">用户名</label>
         <input
-          id="username"
           type="text"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           required
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
         />
       </div>
 
       <div>
-        <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-          密码
-        </label>
+        <label className="block text-sm font-medium text-gray-700">密码</label>
         <input
-          id="password"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
         />
       </div>
 
       <div>
-        <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-          确认密码
-        </label>
+        <label className="block text-sm font-medium text-gray-700">确认密码</label>
         <input
-          id="confirmPassword"
           type="password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
         />
       </div>
 
-      {error && (
-        <div className="text-red-600 text-sm">{error}</div>
-      )}
+      <div>
+        <label className="block text-sm font-medium text-gray-700">推荐码（选填）</label>
+        <input
+          type="text"
+          value={referralCode}
+          onChange={(e) => setReferralCode(e.target.value)}
+          placeholder="有推荐码请填写"
+          className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+        />
+      </div>
 
       <button
         type="submit"
         disabled={loading}
-        className="w-full btn-primary disabled:opacity-50"
+        className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
       >
         {loading ? '注册中...' : '注册'}
       </button>
 
-      <div className="text-center text-sm text-gray-600">
-        已有账号？{' '}
-        <a href="/login" className="text-blue-600 hover:text-blue-500">
-          登录
-        </a>
-      </div>
+      <p className="text-center text-sm text-gray-600">
+        已有账号？<Link href="/login" className="text-blue-600 hover:underline">立即登录</Link>
+      </p>
     </form>
   );
 }

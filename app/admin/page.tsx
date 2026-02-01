@@ -42,9 +42,16 @@ interface Order {
   };
 }
 
+interface Notice {
+  id: string;
+  content: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
 export default function AdminPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds'>('cards');
+  const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds' | 'referral'>('cards');
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -54,6 +61,36 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [withdrawOrders, setWithdrawOrders] = useState<Order[]>([]);
   const [refunds, setRefunds] = useState<Order[]>([]);
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [newNotice, setNewNotice] = useState('');
+  const [billingAddress, setBillingAddress] = useState({
+    name: 'Michael Johnson',
+    address: '1209 Orange Street',
+    city: 'Wilmington',
+    state: 'DE (Delaware)',
+    zip: '19801',
+    country: 'United States',
+    billingAddress: '1209 Orange Street, Wilmington, DE 19801, USA'
+  });
+  const [billingExamples, setBillingExamples] = useState<Array<{
+    id: string;
+    name: string;
+    address: string;
+    city: string;
+    state: string;
+    zip: string;
+    country: string;
+    billingAddress: string;
+}>>([]);
+  const [newBillingExample, setNewBillingExample] = useState({
+    name: '',
+    address: '',
+    city: '',
+    state: '',
+    zip: '',
+    country: 'United States',
+    billingAddress: ''
+  });
 
   // 添加/编辑卡片类型表单
   const [showAddCard, setShowAddCard] = useState(false);
@@ -84,7 +121,7 @@ export default function AdminPage() {
 
   const fetchData = async () => {
     setLoading(true);
-    await Promise.all([fetchCardTypes(), fetchUsers(), fetchOrders(), fetchWithdrawOrders(), fetchRefunds()]);
+    await Promise.all([fetchCardTypes(), fetchUsers(), fetchOrders(), fetchWithdrawOrders(), fetchRefunds(), fetchNotices()]);
     setLoading(false);
   };
 
@@ -147,6 +184,171 @@ export default function AdminPage() {
       console.error('获取退款记录失败:', error);
     }
   };
+
+  const fetchNotices = async () => {
+    try {
+      const res = await fetch('/api/admin/notices', {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotices(data.notices || []);
+        if (data.billingExamples) {
+          setBillingExamples(data.billingExamples);
+        }
+      }
+    } catch (error) {
+      console.error('获取开卡须知失败:', error);
+    }
+  };
+
+  const saveNotice = async () => {
+    if (!newNotice.trim()) return;
+    try {
+      const res = await fetch('/api/admin/notices', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getToken()}`
+        },
+        body: JSON.stringify({ content: newNotice })
+      });
+      if (res.ok) {
+        setMessage({ type: 'success', text: '添加成功' });
+        setNewNotice('');
+        fetchNotices();
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: '添加失败' });
+    }
+  };
+
+  const deleteNotice = async (id: string) => {
+    try {
+      const res = await fetch(`/api/admin/notices/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      });
+      if (res.ok) {
+        setMessage({ type: 'success', text: '删除成功' });
+        fetchNotices();
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: '删除失败' });
+    }
+  };
+
+  const saveBillingAddress = async () => {
+    try {
+      const res = await fetch('/api/admin/billing-address', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getToken()}`
+        },
+        body: JSON.stringify(billingAddress)
+      });
+      if (res.ok) {
+        setMessage({ type: 'success', text: '账单地址保存成功' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: '保存失败' });
+    }
+  };
+
+  const addBillingExample = async () => {
+    if (!newBillingExample.name.trim() || !newBillingExample.billingAddress.trim()) {
+      setMessage({ type: 'error', text: '姓名和账单地址不能为空' });
+      return;
+    }
+    try {
+      const res = await fetch('/api/admin/billing-examples', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getToken()}`
+        },
+        body: JSON.stringify(newBillingExample)
+      });
+      if (res.ok) {
+        setMessage({ type: 'success', text: '添加成功' });
+        setNewBillingExample({
+          name: '',
+          address: '',
+          city: '',
+          state: '',
+          zip: '',
+          country: 'United States',
+          billingAddress: ''
+        });
+        fetchNotices();
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: '添加失败' });
+    }
+  };
+
+  const deleteBillingExample = async (id: string) => {
+    try {
+      const res = await fetch(`/api/admin/billing-examples/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      });
+      if (res.ok) {
+        setMessage({ type: 'success', text: '删除成功' });
+        fetchNotices();
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: '删除失败' });
+    }
+  };
+
+  // 推广设置状态
+  const [referralSettings, setReferralSettings] = useState({
+    enabled: false,
+    rewardAmount: '5',
+    promptText: '推荐好友注册开卡，即可获得 $5 奖励！'
+  });
+
+  const fetchReferralSettings = async () => {
+    try {
+      const res = await fetch('/api/admin/referral-settings', {
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.referralSettings) setReferralSettings(data.referralSettings);
+      }
+    } catch (error) {
+      console.error('获取推广设置失败:', error);
+    }
+  };
+
+  const saveReferralSettings = async () => {
+    try {
+      const res = await fetch('/api/admin/referral-settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getToken()}`
+        },
+        body: JSON.stringify(referralSettings)
+      });
+      if (res.ok) {
+        setMessage({ type: 'success', text: '推广设置保存成功' });
+      } else {
+        const data = await res.json();
+        setMessage({ type: 'error', text: data.error || '保存失败' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: '保存失败' });
+    }
+  };
+
+  useEffect(() => {
+    fetchNotices();
+    fetchReferralSettings();
+  }, []);
 
   // 打开编辑弹窗
   const handleEditCard = (card: CardType) => {
@@ -348,6 +550,12 @@ export default function AdminPage() {
           >
             退款管理
           </button>
+          <button
+            onClick={() => setActiveTab('referral')}
+            className={`px-4 py-2 rounded-lg ${activeTab === 'referral' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+          >
+            推广设置
+          </button>
         </div>
 
         {/* 卡片类型管理 - 改为跳转链接 */}
@@ -409,9 +617,187 @@ export default function AdminPage() {
 
         {/* 开卡须知 */}
         {activeTab === 'notices' && (
-          <div className="bg-slate-800 rounded-xl p-6">
-            <h2 className="text-xl font-bold mb-6">开卡须知</h2>
-            <p className="text-gray-400">功能开发中...</p>
+          <div className="space-y-6">
+            {/* 开卡须知管理 */}
+            <div className="bg-slate-800 rounded-xl p-6">
+              <h2 className="text-xl font-bold mb-6">📋 开卡须知</h2>
+              
+              <div className="mb-6">
+                <label className="block text-sm text-gray-400 mb-2">添加新的开卡须知条款</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newNotice}
+                    onChange={(e) => setNewNotice(e.target.value)}
+                    placeholder="例如：开卡后请在24小时内完成首次充值..."
+                    className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                    onKeyDown={(e) => e.key === 'Enter' && saveNotice()}
+                  />
+                  <button
+                    onClick={saveNotice}
+                    disabled={!newNotice.trim()}
+                    className="bg-blue-600 px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    添加
+                  </button>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <h3 className="text-sm text-gray-400 mb-2">当前须知列表（用户开卡时会看到以下内容）</h3>
+              </div>
+
+              {notices.length === 0 ? (
+                <div className="text-center py-8 bg-slate-700/50 rounded-lg">
+                  <p className="text-gray-400">暂无开卡须知，请添加</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {notices.map((notice, index) => (
+                    <div key={notice.id} className="flex items-center justify-between bg-slate-700 rounded-lg px-4 py-3 group">
+                      <div className="flex items-start gap-3">
+                        <span className="text-blue-400 font-mono text-sm mt-0.5">{index + 1}.</span>
+                        <span className="text-gray-200">{notice.content}</span>
+                      </div>
+                      <button
+                        onClick={() => deleteNotice(notice.id)}
+                        className="text-red-400 hover:text-red-300 text-sm px-3 py-1 rounded hover:bg-red-600/20 transition"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 订阅服务持卡人信息配置 - 替换原来的账单地址配置部分 */}
+            <div className="bg-slate-800 rounded-xl p-6">
+              <h2 className="text-xl font-bold mb-6">📋 订阅服务时的持卡人信息填写推荐</h2>
+              
+              {/* 添加新示例表单 */}
+              <div className="bg-slate-700/50 rounded-lg p-4 mb-6">
+                <h3 className="text-sm font-semibold text-gray-300 mb-4">添加新的信息示例</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">姓名 *</label>
+                    <input
+                      type="text"
+                      value={newBillingExample.name}
+                      onChange={(e) => setNewBillingExample({ ...newBillingExample, name: e.target.value })}
+                      placeholder="例如：Michael Johnson"
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">街道地址</label>
+                    <input
+                      type="text"
+                      value={newBillingExample.address}
+                      onChange={(e) => setNewBillingExample({ ...newBillingExample, address: e.target.value })}
+                      placeholder="例如：1209 Orange Street"
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">城市</label>
+                    <input
+                      type="text"
+                      value={newBillingExample.city}
+                      onChange={(e) => setNewBillingExample({ ...newBillingExample, city: e.target.value })}
+                      placeholder="例如：Wilmington"
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">州</label>
+                    <input
+                      type="text"
+                      value={newBillingExample.state}
+                      onChange={(e) => setNewBillingExample({ ...newBillingExample, state: e.target.value })}
+                      placeholder="例如：DE (Delaware)"
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">邮编</label>
+                    <input
+                      type="text"
+                      value={newBillingExample.zip}
+                      onChange={(e) => setNewBillingExample({ ...newBillingExample, zip: e.target.value })}
+                      placeholder="例如：19801"
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">国家</label>
+                    <input
+                      type="text"
+                      value={newBillingExample.country}
+                      onChange={(e) => setNewBillingExample({ ...newBillingExample, country: e.target.value })}
+                      placeholder="例如：United States"
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-sm text-gray-400 mb-1">账单地址 (Billing Address) *</label>
+                    <input
+                      type="text"
+                      value={newBillingExample.billingAddress}
+                      onChange={(e) => setNewBillingExample({ ...newBillingExample, billingAddress: e.target.value })}
+                      placeholder="例如：1209 Orange Street, Wilmington, DE 19801, USA"
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={addBillingExample}
+                  className="mt-4 bg-blue-600 px-6 py-2 rounded-lg hover:bg-blue-700"
+                >
+                  添加示例
+                </button>
+              </div>
+
+              {/* 已添加的示例列表 */}
+              <div>
+                <h3 className="text-sm text-gray-400 mb-3">已添加的信息示例（用户开卡时会看到以下内容）</h3>
+                {billingExamples.length === 0 ? (
+                  <div className="text-center py-8 bg-slate-700/50 rounded-lg">
+                    <p className="text-gray-400">暂无信息示例，请添加</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {billingExamples.map((example, index) => (
+                      <div key={example.id} className="bg-slate-700 rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <span className="text-blue-400 font-semibold">示例 {index + 1}</span>
+                          <button
+                            onClick={() => deleteBillingExample(example.id)}
+                            className="text-red-400 hover:text-red-300 text-sm px-3 py-1 rounded hover:bg-red-600/20 transition"
+                          >
+                            删除
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm text-gray-300">
+                          <div><span className="text-gray-500">姓名:</span> {example.name}</div>
+                          {example.address && <div><span className="text-gray-500">街道:</span> {example.address}</div>}
+                          {example.city && <div><span className="text-gray-500">城市:</span> {example.city}</div>}
+                          {example.state && <div><span className="text-gray-500">州:</span> {example.state}</div>}
+                          {example.zip && <div><span className="text-gray-500">邮编:</span> {example.zip}</div>}
+                          {example.country && <div><span className="text-gray-500">国家:</span> {example.country}</div>}
+                        </div>
+                        {example.billingAddress && (
+                          <div className="mt-2 pt-2 border-t border-slate-600">
+                            <span className="text-gray-500 text-sm">账单地址:</span>
+                            <p className="text-blue-200">{example.billingAddress}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -731,6 +1117,68 @@ export default function AdminPage() {
                 </tbody>
               </table>
             )}
+          </div>
+        )}
+
+        {/* 推广设置 */}
+        {activeTab === 'referral' && (
+          <div className="bg-slate-800 rounded-xl p-6">
+            <h2 className="text-xl font-bold mb-6">🎁 推广引流设置</h2>
+            
+            <div className="space-y-6 max-w-lg">
+              <div className="flex items-center justify-between bg-slate-700/50 p-4 rounded-lg">
+                <div>
+                  <label className="font-medium">启用推荐功能</label>
+                  <p className="text-sm text-gray-400">开启后用户可通过推荐码邀请新用户</p>
+                </div>
+                <button
+                  onClick={() => setReferralSettings({ ...referralSettings, enabled: !referralSettings.enabled })}
+                  className={`w-14 h-8 rounded-full transition relative ${referralSettings.enabled ? 'bg-green-600' : 'bg-gray-600'}`}
+                >
+                  <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${referralSettings.enabled ? 'left-7' : 'left-1'}`} />
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">奖励金额 (USD)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={referralSettings.rewardAmount}
+                  onChange={(e) => setReferralSettings({ ...referralSettings, rewardAmount: e.target.value })}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3"
+                />
+                <p className="text-xs text-gray-500 mt-1">被推荐用户首次开卡成功后，推荐人获得的奖励金额</p>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">推广提示文案</label>
+                <textarea
+                  value={referralSettings.promptText}
+                  onChange={(e) => setReferralSettings({ ...referralSettings, promptText: e.target.value })}
+                  rows={3}
+                  placeholder="例如：推荐好友注册开卡，即可获得 $5 奖励！"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3"
+                />
+              </div>
+
+              <button
+                onClick={saveReferralSettings}
+                className="w-full bg-blue-600 py-3 rounded-lg hover:bg-blue-700 font-semibold"
+              >
+                保存设置
+              </button>
+
+              {referralSettings.enabled && referralSettings.promptText && (
+                <div className="mt-6 pt-6 border-t border-slate-700">
+                  <p className="text-sm text-gray-400 mb-3">预览效果：</p>
+                  <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl p-4">
+                    <p className="font-bold">🎁 {referralSettings.promptText}</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

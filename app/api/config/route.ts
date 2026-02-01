@@ -1,36 +1,49 @@
 import { NextResponse } from 'next/server';
-import { db } from '../../../src/lib/db';
+import { prisma } from '../../../src/lib/prisma';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    // 从数据库获取卡片类型
-    const cardTypes = await db.cardType.findMany({
+    // 获取启用的卡片类型
+    const cardTypes = await prisma.cardType.findMany({
       where: { isActive: true },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' }
     });
 
-    // 从数据库获取支付配置
-    let paymentConfig: Record<string, string> = {};
-    try {
-      const configs = await db.systemConfig.findMany();
-      configs.forEach((c: any) => { paymentConfig[c.key] = c.value; });
-    } catch (e) {
-      // SystemConfig 表可能不存在
-    }
+    // 获取开卡须知
+    const notices = await prisma.openCardNotice.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' }
+    });
+
+    // 获取所有系统配置
+    const systemConfigs = await prisma.systemConfig.findMany({
+      where: {
+        key: { in: ['referral_enabled', 'referral_prompt_text', 'referral_reward_amount', 'billing_examples'] }
+      }
+    });
+
+    const configMap: Record<string, string> = {};
+    systemConfigs.forEach(s => { configMap[s.key] = s.value; });
 
     return NextResponse.json({
       cardTypes,
-      paymentConfig,
-      notices: [
-        '1. 开卡后请及时充值使用，长期不使用的卡片可能会被自动注销。',
-        '2. 请勿用于任何违法违规用途，否则将冻结账户。',
-        '3. 卡片余额支持提现，提现将扣除相应手续费。',
-        '4. 如遇支付问题，请联系客服处理。',
-        '5. 本平台保留最终解释权。',
-      ],
+      notices: notices.map(n => n.content),
+      referral: {
+        enabled: configMap['referral_enabled'] === 'true',
+        promptText: configMap['referral_prompt_text'] || '',
+        rewardAmount: parseFloat(configMap['referral_reward_amount'] || '5')
+      },
+      billingExamples: configMap['billing_examples'] ? JSON.parse(configMap['billing_examples']) : []
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('获取配置失败:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ 
+      cardTypes: [], 
+      notices: [], 
+      referral: { enabled: false, promptText: '', rewardAmount: 5 },
+      billingExamples: []
+    });
   }
 }
