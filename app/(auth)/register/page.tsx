@@ -10,6 +10,7 @@ function RegisterContent() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [codeSent, setCodeSent] = useState(false);
@@ -17,6 +18,12 @@ function RegisterContent() {
   
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // 自动填充推荐码（如果 URL 中有）
+  useState(() => {
+    const ref = searchParams.get('ref');
+    if (ref) setReferralCode(ref);
+  });
 
   const sendCode = async () => {
     if (!email.trim()) {
@@ -51,7 +58,7 @@ function RegisterContent() {
 
   const handleRegister = async () => {
     if (!email || !username || !password || !code) {
-      setMessage({ type: 'error', text: '请填写所有字段' });
+      setMessage({ type: 'error', text: '请填写所有必填项' });
       return;
     }
 
@@ -65,7 +72,7 @@ function RegisterContent() {
           username,
           password,
           code,
-          referralCode: searchParams.get('ref') || undefined,
+          referralCode: referralCode || undefined,
         }),
       });
 
@@ -85,8 +92,9 @@ function RegisterContent() {
 
       setMessage({ type: 'success', text: '注册成功！正在跳转...' });
       
-      // 立即跳转，不等待延迟
-      router.push('/dashboard');
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 1500);
     } catch (error: any) {
       console.error('注册错误:', error);
       setMessage({ type: 'error', text: error.message || '注册失败' });
@@ -100,64 +108,93 @@ function RegisterContent() {
         <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">注册账户</h1>
 
         {message && (
-          <div className={`mb-4 p-3 rounded-lg ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          <div className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
             {message.text}
           </div>
         )}
 
         <div className="space-y-4">
-          <input
-            type="email"
-            placeholder="邮箱"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-
-          <input
-            type="text"
-            placeholder="用户名"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-
-          <input
-            type="password"
-            placeholder="密码"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-
-          <div className="flex gap-2">
+          {/* 邮箱 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
             <input
-              type="text"
-              placeholder="验证码"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              type="email"
+              placeholder="请输入邮箱"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <button
-              onClick={sendCode}
-              disabled={codeLoading || codeSent}
-              className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 disabled:opacity-50"
-            >
-              {codeLoading ? '发送中...' : codeSent ? '已发送' : '获取码'}
-            </button>
           </div>
 
+          {/* 用户名 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+            <input
+              type="text"
+              placeholder="请输入用户名"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* 密码 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
+            <input
+              type="password"
+              placeholder="请输入密码（至少6位）"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* 邮箱验证码 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">邮箱验证码</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="请输入验证码"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                onClick={sendCode}
+                disabled={codeLoading || codeSent}
+                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 disabled:opacity-50 whitespace-nowrap text-sm"
+              >
+                {codeLoading ? '发送中...' : codeSent ? '已发送' : '获取码'}
+              </button>
+            </div>
+          </div>
+
+          {/* 推荐码 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">推荐码（可选）</label>
+            <input
+              type="text"
+              placeholder="请输入推荐码"
+              value={referralCode}
+              onChange={(e) => setReferralCode(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* 注册按钮 */}
           <button
             onClick={handleRegister}
             disabled={loading}
-            className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium mt-6"
           >
             {loading ? '注册中...' : '注册'}
           </button>
         </div>
 
-        <p className="text-center mt-4 text-gray-600">
-          已有账户？<Link href="/login" className="text-blue-600 hover:underline">登录</Link>
+        <p className="text-center mt-6 text-gray-600">
+          已有账户？<Link href="/login" className="text-blue-600 hover:underline font-medium">登录</Link>
         </p>
       </div>
     </div>

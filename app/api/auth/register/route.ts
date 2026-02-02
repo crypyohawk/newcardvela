@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../../../src/lib/prisma';
-import { verifyCode } from '../../../../src/lib/verificationCodes';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -66,6 +65,7 @@ export async function POST(request: NextRequest) {
     const emailLower = email.toLowerCase();
 
     // 验证验证码
+    const { verifyCode } = await import('../../../../src/lib/verificationCodes');
     if (!verifyCode(emailLower, code)) {
       return NextResponse.json({ error: '验证码无效或已过期' }, { status: 400 });
     }
@@ -82,15 +82,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '该用户名已被使用' }, { status: 400 });
     }
 
-    // 验证推荐码
+    // 验证推荐码并获取推荐人ID
     let referrerId: string | null = null;
     if (referralCode && referralCode.trim()) {
       const referrer = await prisma.user.findFirst({
         where: { referralCode: referralCode.trim().toUpperCase() }
       });
-      if (referrer) {
-        referrerId = referrer.id;
+      
+      if (!referrer) {
+        return NextResponse.json({ error: '推荐码无效' }, { status: 400 });
       }
+      
+      referrerId = referrer.id;
     }
 
     // 加密密码
