@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface User {
@@ -13,8 +13,13 @@ export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const initialized = useRef(false);
 
   useEffect(() => {
+    // 防止重复执行
+    if (initialized.current) return;
+    initialized.current = true;
+
     const checkAuth = async () => {
       const token = localStorage.getItem('token');
       
@@ -51,5 +56,11 @@ export function useAuth() {
     checkAuth();
   }, [router]);
 
-  return { user, loading };
+  const logout = () => {
+    localStorage.removeItem('token');
+    setUser(null);
+    router.push('/login');
+  };
+
+  return { user, loading, logout };
 }
