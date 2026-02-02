@@ -25,9 +25,19 @@ export async function POST(
       return NextResponse.json({ error: '充值金额无效' }, { status: 400 });
     }
 
-    const card = await db.userCard.findFirst({
-      where: { id: params.id, userId: payload.userId },
-      include: { cardType: true },
+    // 获取卡片类型信息时，确保包含 rechargeFee
+    const card = await db.userCard.findUnique({
+      where: { id: params.id },
+      include: { 
+        cardType: {
+          select: {
+            id: true,
+            name: true,
+            openFee: true,
+            rechargeFeePercent: true,  // 使用正确的字段名
+          }
+        } 
+      },
     });
 
     if (!card) {
@@ -56,9 +66,9 @@ export async function POST(
       // 继续尝试充值
     }
 
-    // 从卡片类型获取手续费率
-    const feeRate = card.cardType?.rechargeFee ? card.cardType.rechargeFee / 100 : 0.02;
-    const fee = amount * feeRate;
+    // 使用正确的字段名
+    const rechargeFee = amount * (card.cardType.rechargeFeePercent / 100);
+    const fee = amount * rechargeFee;
     const totalCost = amount + fee;
 
     const user = await db.user.findUnique({ where: { id: payload.userId } });
