@@ -26,7 +26,6 @@ export default function DashboardPage() {
       return;
     }
 
-    // 直接获取用户信息
     fetch('/api/auth/me', {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -47,10 +46,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <p className="text-xl">加载中...</p>
-          <p className="text-sm text-gray-500 mt-2">正在获取用户信息</p>
-        </div>
+        <p className="text-xl">加载中...</p>
       </div>
     );
   }
