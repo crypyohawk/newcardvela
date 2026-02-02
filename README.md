@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # CardVela
 
 部署要点：
@@ -19,3 +20,7 @@
 
 回滚：
 - 在服务器：`git checkout <commit>` → 重建并重启。
+=======
+# newcardvela
+新仓库
+>>>>>>> 2f2bb744d23aad9520549693c8413c7e075f21fa
