@@ -43,6 +43,14 @@ function clearLoginAttempts(identifier: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    // 添加 CORS 头
+    const headers = {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    };
+
     const body = await request.json();
     const { email, password } = body;
 
@@ -89,10 +97,22 @@ export async function POST(request: NextRequest) {
         role: user.role,
         balance: user.balance,
       },
-    });
+    }, { headers });
 
   } catch (error: any) {
     console.error('登录失败:', error);
     return NextResponse.json({ error: '登录失败' }, { status: 500 });
   }
+}
+
+// 处理 OPTIONS 请求
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
 }
