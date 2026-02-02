@@ -15,19 +15,27 @@ export function useAuth() {
   const router = useRouter();
 
   useEffect(() => {
+    let isMounted = true;
+    const controller = new AbortController();
+
     const checkAuth = async () => {
       const token = localStorage.getItem('token');
       
       if (!token) {
-        setLoading(false);
-        router.push('/login');
+        if (isMounted) {
+          setLoading(false);
+          router.push('/login');
+        }
         return;
       }
 
       try {
         const res = await fetch('/api/auth/me', {
           headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
         });
+
+        if (!isMounted) return;
 
         const data = await res.json();
         
@@ -40,16 +48,24 @@ export function useAuth() {
 
         setUser(data.user);
         setLoading(false);
-      } catch (error) {
-        console.error('验证失败:', error);
-        localStorage.removeItem('token');
-        setLoading(false);
-        router.push('/login');
+      } catch (error: any) {
+        if (error.name === 'AbortError') return;
+        if (isMounted) {
+          console.error('验证失败:', error);
+          localStorage.removeItem('token');
+          setLoading(false);
+          router.push('/login');
+        }
       }
     };
 
     checkAuth();
-  }, []); // 空依赖数组，只在组件挂载时执行一次
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [router]);
 
   const logout = () => {
     localStorage.removeItem('token');
