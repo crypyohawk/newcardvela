@@ -1,19 +1,20 @@
 import { Resend } from 'resend';
 
-const resend = process.env.RESEND_API_KEY 
-  ? new Resend(process.env.RESEND_API_KEY) 
-  : null;
+// 生产环境下强制要求配置 RESEND_API_KEY，未配置则抛出错误
+if (!process.env.RESEND_API_KEY) {
+  throw new Error('生产环境必须配置 RESEND_API_KEY 环境变量');
+}
 
+// 生产环境直接初始化 Resend 实例（不再为 null）
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+/**
+ * 发送验证码邮件（生产环境版本）
+ * @param userEmail 收件人邮箱
+ * @param code 验证码
+ * @returns 发送结果
+ */
 export async function sendVerificationCode(userEmail: string, code: string) {
-  // 开发模式或没有 API Key 时打印到控制台
-  if (!resend || process.env.NODE_ENV === 'development') {
-    console.log(`\n${'='.repeat(50)}`);
-    console.log(`[验证码邮件] 发送至: ${userEmail}`);
-    console.log(`验证码: ${code}`);
-    console.log(`${'='.repeat(50)}\n`);
-    return { success: true, id: 'dev_' + Date.now() };
-  }
-
   try {
     const { data, error } = await resend.emails.send({
       from: 'CardVela <noreply@cardvela.com>',
@@ -36,14 +37,15 @@ export async function sendVerificationCode(userEmail: string, code: string) {
     });
 
     if (error) {
-      console.error('Resend 发送失败:', error);
-      throw new Error(error.message);
+      console.error('[生产环境] Resend 发送失败:', error);
+      throw new Error(`邮件发送失败: ${error.message}`);
     }
 
-    console.log('邮件发送成功:', data);
+    console.log('[生产环境] 邮件发送成功:', data);
     return { success: true, id: data?.id };
   } catch (error: any) {
-    console.error('邮件发送错误:', error);
-    throw error;
+    console.error('[生产环境] 邮件发送错误:', error);
+    // 生产环境可根据业务需求调整错误返回逻辑（比如统一返回格式）
+    return { success: false, error: error.message };
   }
 }
