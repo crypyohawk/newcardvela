@@ -12,52 +12,42 @@ interface User {
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    console.log('useAuth: 检查 token', token);
+    const checkAuth = async () => {
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        setLoading(false);
+        router.push('/login');
+        return;
+      }
 
-    if (!token) {
-      console.log('useAuth: 没有 token，跳转到登录');
-      setLoading(false);
-      router.push('/login');
-      return;
-    }
-
-    // 获取用户信息
-    const fetchUser = async () => {
       try {
         const res = await fetch('/api/auth/me', {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        console.log('useAuth: API 响应状态', res.status);
-
         if (!res.ok) {
-          throw new Error('获取用户信息失败');
+          localStorage.removeItem('token');
+          router.push('/login');
+          return;
         }
 
         const data = await res.json();
-        console.log('useAuth: 用户数据', data);
         setUser(data.user);
-        setLoading(false);
-      } catch (err: any) {
-        console.error('useAuth: 错误', err);
-        setError(err.message);
-        setLoading(false);
+      } catch (error) {
+        console.error('验证失败:', error);
+        localStorage.removeItem('token');
         router.push('/login');
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchUser();
+    checkAuth();
   }, [router]);
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    router.push('/login');
-  };
-
-  return { user, loading, error, logout };
+  return { user, loading };
 }
