@@ -84,12 +84,15 @@ export async function POST(request: NextRequest) {
     recordSend(emailLower);
 
     // 使用统一的邮件发送函数
-    await sendVerificationCode(emailLower, code);
+    console.log('[send-code] 准备发送验证码至:', emailLower);
+    const result = await sendVerificationCode(emailLower, code);
+    console.log('[send-code] 发送结果:', result);
 
     return NextResponse.json({ success: true, message: '验证码已发送' });
 
   } catch (error: any) {
-    console.error('发送验证码失败:', error);
+    console.error('[send-code] 发送验证码失败:', error.message);
+    console.error('[send-code] 错误详情:', error);
     return NextResponse.json({ error: '发送失败，请稍后再试' }, { status: 500 });
   }
 }
