@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useAuth } from '../../src/hooks/useAuth';
@@ -534,21 +532,15 @@ export default function DashboardPage() {
                 <span className="font-bold text-lg ml-2">${user.balance.toFixed(2)}</span>
               </div>
               <button
-                onClick={() => setShowAccountWithdraw(true)}
-                className="bg-slate-600 px-3 py-2 rounded-r-lg hover:bg-slate-500 transition text-sm font-semibold"
+                onClick={() => {
+                  localStorage.removeItem('token');
+                  router.push('/login');
+                }}
+                className="text-gray-400 hover:text-white"
               >
-                提现
+                退出
               </button>
             </div>
-            <button
-              onClick={() => {
-                localStorage.removeItem('token');
-                router.push('/login');
-              }}
-              className="text-gray-400 hover:text-white"
-            >
-              退出
-            </button>
           </div>
         </div>
       </nav>
