@@ -2,27 +2,18 @@ export const dynamic = 'force-dynamic';
 
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 export default function DashboardPage() {
-  const [isReady, setIsReady] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    
     if (!token) {
       router.push('/login');
-      return;
     }
-    
-    setIsReady(true);
   }, [router]);
-
-  if (!isReady) {
-    return <div className="flex items-center justify-center min-h-screen">加载中...</div>;
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
