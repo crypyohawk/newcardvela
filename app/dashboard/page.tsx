@@ -521,7 +521,7 @@ export default function DashboardPage() {
           <Link href="/" className="text-xl font-bold">CardVela</Link>
           <div className="flex items-center gap-4">
             <span className="text-gray-300">欢迎, {user.username}</span>
-            {user.role === 'admin' || user.role === 'ADMIN' && (
+            {(user.role === 'admin' || user.role === 'ADMIN') && (
               <Link href="/admin" className="text-purple-400 hover:text-purple-300 font-semibold">
                 管理后台
               </Link>
