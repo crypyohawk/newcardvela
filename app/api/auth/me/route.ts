@@ -13,14 +13,28 @@ export async function GET(request: NextRequest) {
 
     const token = authHeader.substring(7);
     
-    // 简单的 token 解析（实际应该验证 JWT）
-    // 这里暂时假设 token 是有效的，后续改进
+    // 验证 JWT
+    const payload = jwt.verify(token, JWT_SECRET) as { userId: string };
     
-    // 从请求中获取用户 ID（假设从 token 中提取）
-    // 这里需要解析 JWT，暂时返回错误
-    
-    return NextResponse.json({ error: '需要实现 JWT 验证' }, { status: 401 });
+    // 获取用户信息
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+        balance: true,
+      },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: '用户不存在' }, { status: 404 });
+    }
+
+    return NextResponse.json({ user });
   } catch (error: any) {
-    return NextResponse.json({ error: '获取用户信息失败' }, { status: 500 });
+    console.error('获取用户信息失败:', error);
+    return NextResponse.json({ error: '无效的令牌' }, { status: 401 });
   }
 }
