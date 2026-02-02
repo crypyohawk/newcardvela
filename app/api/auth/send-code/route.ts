@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../src/lib/db';
 import { setCode } from '../../../../src/lib/verificationCodes';
+import { sendVerificationCode } from '../../../../src/lib/email';
 
 // 发送限流
 const sendAttempts = new Map<string, { count: number; lastSend: number }>();
@@ -82,33 +83,8 @@ export async function POST(request: NextRequest) {
     setCode(emailLower, code);
     recordSend(emailLower);
 
-    // 生产环境使用 Resend 发送
-    if (process.env.NODE_ENV === 'production' && process.env.RESEND_API_KEY) {
-      const { Resend } = await import('resend');
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      
-      await resend.emails.send({
-        from: process.env.EMAIL_FROM || 'CardVela <noreply@CardVela.com>',
-        to: emailLower,
-        subject: 'CardVela 验证码',
-        html: `
-          <div style="font-family: sans-serif; padding: 20px;">
-            <h2>CardVela 验证码</h2>
-            <p>您的验证码是：</p>
-            <div style="font-size: 32px; font-weight: bold; color: #3b82f6; padding: 20px; background: #f1f5f9; border-radius: 8px; text-align: center;">
-              ${code}
-            </div>
-            <p style="color: #666; margin-top: 20px;">验证码5分钟内有效，请勿泄露给他人。</p>
-          </div>
-        `,
-      });
-    } else {
-      // 开发环境显示在终端
-      console.log('\n==================================================');
-      console.log(`[验证码] 发送至: ${emailLower}`);
-      console.log(`验证码: ${code}`);
-      console.log('==================================================\n');
-    }
+    // 使用统一的邮件发送函数
+    await sendVerificationCode(emailLower, code);
 
     return NextResponse.json({ success: true, message: '验证码已发送' });
 
