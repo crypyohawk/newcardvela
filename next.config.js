@@ -10,6 +10,9 @@ const nextConfig = {
       },
     ],
   },
+  experimental: {
+    allowedDevOrigins: ['13.229.100.153', 'localhost', '127.0.0.1'],
+  },
 };
 
 module.exports = nextConfig;
