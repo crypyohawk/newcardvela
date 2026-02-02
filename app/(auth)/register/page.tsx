@@ -35,14 +35,16 @@ function RegisterContent() {
       const data = await res.json();
       if (!res.ok) {
         setMessage({ type: 'error', text: data.error || '发送失败' });
+        setCodeLoading(false);
         return;
       }
 
       setMessage({ type: 'success', text: '验证码已发送' });
       setCodeSent(true);
+      setCodeLoading(false);
     } catch (error: any) {
+      console.error('发送验证码错误:', error);
       setMessage({ type: 'error', text: error.message || '发送失败' });
-    } finally {
       setCodeLoading(false);
     }
   };
@@ -68,6 +70,7 @@ function RegisterContent() {
       });
 
       const data = await res.json();
+      console.log('注册响应:', { status: res.status, data });
 
       if (!res.ok) {
         setMessage({ type: 'error', text: data.error || '注册失败' });
@@ -75,17 +78,15 @@ function RegisterContent() {
         return;
       }
 
-      // 保存 token
       if (data.token) {
         localStorage.setItem('token', data.token);
+        console.log('Token 已保存');
       }
 
       setMessage({ type: 'success', text: '注册成功！正在跳转...' });
-
-      // 延迟跳转
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 1000);
+      
+      // 立即跳转，不等待延迟
+      router.push('/dashboard');
     } catch (error: any) {
       console.error('注册错误:', error);
       setMessage({ type: 'error', text: error.message || '注册失败' });
@@ -165,7 +166,7 @@ function RegisterContent() {
 
 export default function RegisterPage() {
   return (
-    <Suspense fallback={<div>加载中...</div>}>
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">加载中...</div>}>
       <RegisterContent />
     </Suspense>
   );
