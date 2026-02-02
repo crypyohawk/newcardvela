@@ -1,118 +1,89 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { db } from '../../../../src/lib/db';
-import { generateToken } from '../../../../src/lib/auth';
+import jwt from 'jsonwebtoken';
+import { prisma } from '../../../../src/lib/prisma';
 
-// 登录失败限制
-const loginAttempts = new Map<string, { count: number; lockedUntil: number }>();
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-function checkLoginLimit(identifier: string): { allowed: boolean; waitTime?: number } {
+// 防暴力破解：记录每个 IP 的登录失败次数
+const loginAttempts = new Map<string, { count: number; resetTime: number }>();
+
+function isLoginRateLimited(ip: string): boolean {
   const now = Date.now();
-  const record = loginAttempts.get(identifier);
-  
-  if (!record) return { allowed: true };
-  
-  if (record.lockedUntil > now) {
-    return { 
-      allowed: false, 
-      waitTime: Math.ceil((record.lockedUntil - now) / 60000) 
-    };
+  const record = loginAttempts.get(ip);
+
+  if (!record || now > record.resetTime) {
+    loginAttempts.set(ip, { count: 0, resetTime: now + 3600000 }); // 1小时
+    return false;
   }
-  
-  return { allowed: true };
-}
 
-function recordLoginFailure(identifier: string) {
-  const now = Date.now();
-  const record = loginAttempts.get(identifier) || { count: 0, lockedUntil: 0 };
-  
-  record.count++;
-  
-  // 5次失败后锁定15分钟
   if (record.count >= 5) {
-    record.lockedUntil = now + 15 * 60 * 1000;
-    record.count = 0;
+    return true; // 超过5次失败，拒绝登录
   }
-  
-  loginAttempts.set(identifier, record);
+
+  return false;
 }
 
-function clearLoginAttempts(identifier: string) {
-  loginAttempts.delete(identifier);
+function incrementLoginAttempt(ip: string): void {
+  const record = loginAttempts.get(ip);
+  if (record) {
+    record.count++;
+  }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // 添加 CORS 头
-    const headers = {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    };
+    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+
+    // 检查是否被限流
+    if (isLoginRateLimited(ip)) {
+      return NextResponse.json({ error: '登录尝试次数过多，请1小时后再试' }, { status: 429 });
+    }
 
     const body = await request.json();
     const { email, password } = body;
 
     if (!email || !password) {
-      return NextResponse.json({ error: '请填写邮箱和密码' }, { status: 400 });
+      return NextResponse.json({ error: '邮箱和密码不能为空' }, { status: 400 });
     }
 
-    const emailLower = email.toLowerCase();
-    
-    // 检查是否被锁定
-    const limitCheck = checkLoginLimit(emailLower);
-    if (!limitCheck.allowed) {
-      return NextResponse.json({ 
-        error: `登录失败次数过多，请${limitCheck.waitTime}分钟后再试` 
-      }, { status: 429 });
-    }
-
-    const user = await db.user.findUnique({
-      where: { email: emailLower },
+    // 查询用户
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
     });
 
     if (!user) {
-      recordLoginFailure(emailLower);
+      incrementLoginAttempt(ip);
       return NextResponse.json({ error: '邮箱或密码错误' }, { status: 401 });
     }
 
-    const isValid = await bcrypt.compare(password, user.password);
-    if (!isValid) {
-      recordLoginFailure(emailLower);
+    // 比对密码
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      incrementLoginAttempt(ip);
       return NextResponse.json({ error: '邮箱或密码错误' }, { status: 401 });
     }
 
-    // 登录成功，清除失败记录
-    clearLoginAttempts(emailLower);
+    // 密码正确，重置该 IP 的失败次数
+    loginAttempts.delete(ip);
 
-    const token = generateToken({ userId: user.id });
+    // 生成 JWT token
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
 
     return NextResponse.json({
       token,
       user: {
         id: user.id,
-        username: user.username,
         email: user.email,
+        username: user.username,
         role: user.role,
         balance: user.balance,
       },
-    }, { headers });
+    });
 
   } catch (error: any) {
     console.error('登录失败:', error);
     return NextResponse.json({ error: '登录失败' }, { status: 500 });
   }
-}
-
-// 处理 OPTIONS 请求
-export async function OPTIONS(request: NextRequest) {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    },
-  });
 }
