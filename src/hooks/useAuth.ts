@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface User {
@@ -13,13 +13,8 @@ export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const initialized = useRef(false);
 
   useEffect(() => {
-    // 防止重复执行
-    if (initialized.current) return;
-    initialized.current = true;
-
     const checkAuth = async () => {
       const token = localStorage.getItem('token');
       
@@ -54,7 +49,7 @@ export function useAuth() {
     };
 
     checkAuth();
-  }, [router]);
+  }, []); // 空依赖数组，只在组件挂载时执行一次
 
   const logout = () => {
     localStorage.removeItem('token');
