@@ -29,20 +29,22 @@ export function useAuth() {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        if (!res.ok) {
+        const data = await res.json();
+        
+        if (!res.ok || !data.user) {
           localStorage.removeItem('token');
+          setLoading(false);
           router.push('/login');
           return;
         }
 
-        const data = await res.json();
         setUser(data.user);
+        setLoading(false);
       } catch (error) {
         console.error('验证失败:', error);
         localStorage.removeItem('token');
-        router.push('/login');
-      } finally {
         setLoading(false);
+        router.push('/login');
       }
     };
 
