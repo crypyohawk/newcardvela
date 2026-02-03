@@ -104,14 +104,13 @@ export default function DashboardPage() {
   }>>([]);
   const [agreedToNotices, setAgreedToNotices] = useState(false);
 
-  const [withdrawConfig, setWithdrawConfig] = useState({
-    accountMinAmount: 2,
-    accountMaxAmount: 500,
-    accountFeePercent: 5,
-    accountFeeMin: 2,
-    cardFeePercent: 1,
-    cardFeeMin: 1,
-  });
+  // 固定提现配置（不从后台读取）
+  const withdrawConfig = {
+    accountMinAmount: 10,      // 最低提现 10 USD
+    accountMaxAmount: 500,     // 最高提现 500 USD
+    accountFeePercent: 5,      // 5%
+    accountFeeMin: 2,          // 最低手续费 2 USD
+  };
 
   useEffect(() => {
     if (!loading && !user) {
@@ -147,10 +146,6 @@ export default function DashboardPage() {
         setReferralInfo(prev => prev ? { ...prev, settings: configData.referral } : null);
       }
       
-      // 获取提现配置
-      if (configData.withdrawConfig) {
-        setWithdrawConfig(configData.withdrawConfig);
-      }
     } catch (error) {
       console.error('加载数据失败:', error);
     }
@@ -517,16 +512,18 @@ export default function DashboardPage() {
   const [showOpenCardConfirm, setShowOpenCardConfirm] = useState(false);
   const [selectedCardType, setSelectedCardType] = useState<CardType | null>(null);
 
-  // 计算账户提现手续费 - 移到 return 之前
+  // 计算账户提现手续费（5%，最低2u）
   const calculateAccountWithdrawFee = (amount: number): number => {
-    const percentFee = amount * (withdrawConfig.accountFeePercent / 100);
-    return Math.max(percentFee, withdrawConfig.accountFeeMin);
+    const percentFee = amount * 0.05;  // 5%
+    return Math.max(percentFee, 2);     // 最低 2 USD
   };
 
-  // 计算卡片提现手续费 - 移到 return 之前
+  // 计算卡片提现到账户手续费（阶梯收费）
   const calculateCardWithdrawFee = (amount: number): number => {
-    const percentFee = amount * (withdrawConfig.cardFeePercent / 100);
-    return Math.max(percentFee, withdrawConfig.cardFeeMin);
+    if (amount < 50) return 1;          // 低于50扣1
+    if (amount < 100) return 2;         // 50-100扣2
+    if (amount < 200) return 4;         // 100-200扣4
+    return 10;                          // 超过200扣10
   };
 
   if (loading) {
