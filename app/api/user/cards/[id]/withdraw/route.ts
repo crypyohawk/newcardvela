@@ -66,24 +66,29 @@ export async function POST(
     }
 
     // 更新本地数据库
-    // 减少卡余额
+    // 减少卡余额（扣除全额）
     await db.userCard.update({
       where: { id: card.id },
       data: { balance: { decrement: amount } },
     });
 
-    // 增加用户账户余额
+    // 计算手续费（2%）
+    const feePercent = 2;
+    const fee = amount * feePercent / 100;
+    const actualAmount = amount - fee;
+
+    // 增加用户账户余额（扣除手续费后）
     await db.user.update({
       where: { id: payload.userId },
-      data: { balance: { increment: amount } },
+      data: { balance: { increment: actualAmount } },
     });
 
-    // 记录交易
+    // 记录交易（不包含 fee 字段）
     await db.transaction.create({
       data: {
         userId: payload.userId,
         type: 'card_withdraw',
-        amount: amount,
+        amount: actualAmount,
         status: 'completed',
       },
     });

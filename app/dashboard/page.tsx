@@ -1277,7 +1277,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex justify-between font-bold">
                         <span>账户获得：</span>
-                        <span className="text-green-400">+${parseFloat(cardRechargeAmount).toFixed(2)}</span>
+                        <span className="text-green-400">+${(parseFloat(cardRechargeAmount) * (1 - withdrawConfig.cardFeePercent / 100)).toFixed(2)}</span>
                       </div>
                     </>
                   )}
