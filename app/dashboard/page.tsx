@@ -554,7 +554,7 @@ export default function DashboardPage() {
         )}
 
         {/* 快捷操作 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <button
             onClick={() => setActiveTab('cards')}
             className={`p-4 rounded-xl text-left transition ${activeTab === 'cards' ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'}`}
@@ -578,6 +578,14 @@ export default function DashboardPage() {
             <div className="text-2xl mb-2">💰</div>
             <div className="font-semibold">充值</div>
             <div className="text-sm text-gray-400">账户余额充值</div>
+          </button>
+          <button
+            onClick={() => setShowAccountWithdraw(true)}
+            className="p-4 rounded-xl text-left transition bg-slate-800 hover:bg-slate-700"
+          >
+            <div className="text-2xl mb-2">💸</div>
+            <div className="font-semibold">提现</div>
+            <div className="text-sm text-gray-400">账户余额提现</div>
           </button>
           <button
             onClick={() => setActiveTab('referral')}
