@@ -520,12 +520,12 @@ export default function DashboardPage() {
     return Math.max(percentFee, 2);     // 最低 2 USD
   };
 
-  // 计算卡片提现到账户手续费（阶梯收费）
+  // 计算卡片提现手续费（阶梯收费）
   const calculateCardWithdrawFee = (amount: number): number => {
-    if (amount < 50) return 1;          // 低于50扣1
-    if (amount < 100) return 2;         // 50-100扣2
-    if (amount < 200) return 4;         // 100-200扣4
-    return 10;                          // 超过200扣10
+    if (amount < 50) return 1;      // 低于50扣1
+    if (amount < 100) return 2;     // 50-100扣2
+    if (amount < 200) return 4;     // 100-200扣4
+    return 10;                      // 超过200扣10
   };
 
   if (loading) {
@@ -1277,7 +1277,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex justify-between font-bold">
                         <span>账户获得：</span>
-                        <span className="text-green-400">+${(parseFloat(cardRechargeAmount) * (1 - withdrawConfig.cardFeePercent / 100)).toFixed(2)}</span>
+                        <span className="text-green-400">+${(parseFloat(cardRechargeAmount) - calculateCardWithdrawFee(parseFloat(cardRechargeAmount))).toFixed(2)}</span>
                       </div>
                     </>
                   )}

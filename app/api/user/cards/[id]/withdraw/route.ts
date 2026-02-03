@@ -65,6 +65,23 @@ export async function POST(
       return NextResponse.json({ error: `提现失败: ${err.message}` }, { status: 502 });
     }
 
+    // 计算阶梯手续费
+    const calculateFee = (amt: number): number => {
+      if (amt < 50) return 1;
+      if (amt < 100) return 2;
+      if (amt < 200) return 4;
+      return 10;
+    };
+
+    const fee = calculateFee(amount);
+
+    // 检查提现金额是否大于手续费
+    if (amount <= fee) {
+      return NextResponse.json({ error: `提现金额需大于手续费 $${fee}` }, { status: 400 });
+    }
+
+    const actualAmount = amount - fee;
+
     // 更新本地数据库
     // 减少卡余额（扣除全额）
     await db.userCard.update({
@@ -72,18 +89,13 @@ export async function POST(
       data: { balance: { decrement: amount } },
     });
 
-    // 计算手续费（2%）
-    const feePercent = 2;
-    const fee = amount * feePercent / 100;
-    const actualAmount = amount - fee;
-
     // 增加用户账户余额（扣除手续费后）
     await db.user.update({
       where: { id: payload.userId },
       data: { balance: { increment: actualAmount } },
     });
 
-    // 记录交易（不包含 fee 字段）
+    // 记录交易
     await db.transaction.create({
       data: {
         userId: payload.userId,
