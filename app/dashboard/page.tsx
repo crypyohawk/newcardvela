@@ -1318,10 +1318,10 @@ export default function DashboardPage() {
                       setWithdrawAmount(val);
                     }
                   }}
-                  placeholder="最低 $8，最高 $500"
+                  placeholder="最低 $2，最高 $500"
                   className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3"
                 />
-                <p className="text-gray-500 text-xs mt-1">最低提现 $8，单次最高 $500</p>
+                <p className="text-gray-500 text-xs mt-1">最低提现 $2，单次最高 $500，手续费 5%（最低 $2）</p>
               </div>
 
               <div>
@@ -1431,15 +1431,15 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* 费用计算 */}
-              {withdrawAmount && parseFloat(withdrawAmount) >= 8 && (
+              {/* 费用计算 - 修改最低金额判断为 2 */}
+              {withdrawAmount && parseFloat(withdrawAmount) >= 2 && (
                 <div className="bg-slate-700/50 border border-slate-600 p-4 rounded-lg space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-400">提现金额：</span>
                     <span>${parseFloat(withdrawAmount).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">手续费：</span>
+                    <span className="text-gray-400">手续费（5%，最低$2）：</span>
                     <span className="text-red-400">-${calculateWithdrawFee(parseFloat(withdrawAmount)).toFixed(2)}</span>
                   </div>
                   <div className="border-t border-slate-600 pt-2 flex justify-between font-bold">
@@ -1449,9 +1449,9 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {withdrawAmount && parseFloat(withdrawAmount) > 0 && parseFloat(withdrawAmount) < 8 && (
+              {withdrawAmount && parseFloat(withdrawAmount) > 0 && parseFloat(withdrawAmount) < 2 && (
                 <div className="bg-red-900/30 border border-red-700 p-3 rounded-lg text-red-400 text-sm">
-                  ⚠️ 最低提现金额为 $8
+                  ⚠️ 最低提现金额为 $2
                 </div>
               )}
             </div>
@@ -1470,7 +1470,7 @@ export default function DashboardPage() {
               </button>
               <button
                 onClick={handleAccountWithdraw}
-                disabled={submitting || !withdrawAmount || parseFloat(withdrawAmount) < 8 || !withdrawMethod || !withdrawAddress}
+                disabled={submitting || !withdrawAmount || parseFloat(withdrawAmount) < 2 || !withdrawMethod || !withdrawAddress}
                 className="flex-1 bg-blue-600 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
                 {submitting ? '处理中...' : '提交申请'}
@@ -1559,14 +1559,8 @@ export default function DashboardPage() {
   );
 }
 
-// 计算提现手续费的函数
+// 计算提现手续费的函数 - 修改为 5% + 最低 2U
 const calculateWithdrawFee = (amount: number): number => {
-  if (amount <= 10) return 1;
-  if (amount <= 20) return 1;
-  if (amount <= 50) return 2;
-  if (amount <= 100) return 4;
-  if (amount <= 200) return 6;
-  if (amount <= 300) return 8;
-  if (amount <= 500) return 10;
-  return 10; // 最高手续费
+  const fee = amount * 0.05;
+  return Math.max(fee, 2);
 };
