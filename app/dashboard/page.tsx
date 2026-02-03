@@ -110,6 +110,8 @@ export default function DashboardPage() {
     accountMaxAmount: 500,     // 最高提现 500 USD
     accountFeePercent: 5,      // 5%
     accountFeeMin: 2,          // 最低手续费 2 USD
+    cardFeePercent: 2,         // 卡充值手续费 2%
+    cardFeeMin: 1,             // 卡充值最低 1 USD
   };
 
   useEffect(() => {
