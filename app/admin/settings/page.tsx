@@ -9,6 +9,14 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // 添加状态
+  const [accountWithdrawMinAmount, setAccountWithdrawMinAmount] = useState(2);
+  const [accountWithdrawMaxAmount, setAccountWithdrawMaxAmount] = useState(500);
+  const [accountWithdrawFeePercent, setAccountWithdrawFeePercent] = useState(5);
+  const [accountWithdrawFeeMin, setAccountWithdrawFeeMin] = useState(2);
+  const [cardWithdrawFeePercent, setCardWithdrawFeePercent] = useState(1);
+  const [cardWithdrawFeeMin, setCardWithdrawFeeMin] = useState(1);
+
   useEffect(() => {
     fetchConfigs();
   }, []);
@@ -23,6 +31,13 @@ export default function AdminSettingsPage() {
       if (data.configs) {
         setConfigs(data.configs);
       }
+      // 在 UI 中设置
+      setAccountWithdrawMinAmount(data.accountWithdrawMinAmount ?? 2);
+      setAccountWithdrawMaxAmount(data.accountWithdrawMaxAmount ?? 500);
+      setAccountWithdrawFeePercent(data.accountWithdrawFeePercent ?? 5);
+      setAccountWithdrawFeeMin(data.accountWithdrawFeeMin ?? 2);
+      setCardWithdrawFeePercent(data.cardWithdrawFeePercent ?? 1);
+      setCardWithdrawFeeMin(data.cardWithdrawFeeMin ?? 1);
     } catch (error) {
       console.error('获取配置失败:', error);
     } finally {
@@ -62,6 +77,39 @@ export default function AdminSettingsPage() {
       await saveConfig(key, base64);
     };
     reader.readAsDataURL(file);
+  };
+
+  const saveWithdrawSettings = async () => {
+    setSaving(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/admin/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          key: 'withdraw_settings',
+          value: {
+            accountWithdrawMinAmount,
+            accountWithdrawMaxAmount,
+            accountWithdrawFeePercent,
+            accountWithdrawFeeMin,
+            cardWithdrawFeePercent,
+            cardWithdrawFeeMin,
+          },
+        }),
+      });
+      
+      if (!res.ok) throw new Error('保存提现配置失败');
+      
+      setMessage({ type: 'success', text: '保存成功' });
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) {
@@ -273,8 +321,8 @@ export default function AdminSettingsPage() {
               <div className="flex gap-2">
                 <input
                   type="number"
-                  value={configs['withdraw_min_amount'] || '8'}
-                  onChange={(e) => setConfigs(prev => ({ ...prev, withdraw_min_amount: e.target.value }))}
+                  value={accountWithdrawMinAmount}
+                  onChange={(e) => setAccountWithdrawMinAmount(parseFloat(e.target.value) || 0)}
                   className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
                 />
                 <button
@@ -291,8 +339,8 @@ export default function AdminSettingsPage() {
               <div className="flex gap-2">
                 <input
                   type="number"
-                  value={configs['withdraw_max_amount'] || '500'}
-                  onChange={(e) => setConfigs(prev => ({ ...prev, withdraw_max_amount: e.target.value }))}
+                  value={accountWithdrawMaxAmount}
+                  onChange={(e) => setAccountWithdrawMaxAmount(parseFloat(e.target.value) || 0)}
                   className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
                 />
                 <button

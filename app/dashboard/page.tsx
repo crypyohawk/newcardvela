@@ -104,6 +104,15 @@ export default function DashboardPage() {
   }>>([]);
   const [agreedToNotices, setAgreedToNotices] = useState(false);
 
+  const [withdrawConfig, setWithdrawConfig] = useState({
+    accountMinAmount: 2,
+    accountMaxAmount: 500,
+    accountFeePercent: 5,
+    accountFeeMin: 2,
+    cardFeePercent: 1,
+    cardFeeMin: 1,
+  });
+
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
@@ -136,6 +145,11 @@ export default function DashboardPage() {
       // 获取推荐设置
       if (configData.referral) {
         setReferralInfo(prev => prev ? { ...prev, settings: configData.referral } : null);
+      }
+      
+      // 获取提现配置
+      if (configData.withdrawConfig) {
+        setWithdrawConfig(configData.withdrawConfig);
       }
     } catch (error) {
       console.error('加载数据失败:', error);
@@ -502,6 +516,18 @@ export default function DashboardPage() {
   // 新增：开卡确认弹窗状态
   const [showOpenCardConfirm, setShowOpenCardConfirm] = useState(false);
   const [selectedCardType, setSelectedCardType] = useState<CardType | null>(null);
+
+  // 计算账户提现手续费 - 移到 return 之前
+  const calculateAccountWithdrawFee = (amount: number): number => {
+    const percentFee = amount * (withdrawConfig.accountFeePercent / 100);
+    return Math.max(percentFee, withdrawConfig.accountFeeMin);
+  };
+
+  // 计算卡片提现手续费 - 移到 return 之前
+  const calculateCardWithdrawFee = (amount: number): number => {
+    const percentFee = amount * (withdrawConfig.cardFeePercent / 100);
+    return Math.max(percentFee, withdrawConfig.cardFeeMin);
+  };
 
   if (loading) {
     return (
@@ -1310,18 +1336,20 @@ export default function DashboardPage() {
                   onChange={(e) => {
                     const val = e.target.value;
                     const amount = parseFloat(val) || 0;
-                    if (amount > 500) {
-                      setWithdrawAmount('500');
+                    if (amount > withdrawConfig.accountMaxAmount) {
+                      setWithdrawAmount(withdrawConfig.accountMaxAmount.toString());
                     } else if (user && amount > user.balance) {
                       setWithdrawAmount(user.balance.toString());
                     } else {
                       setWithdrawAmount(val);
                     }
                   }}
-                  placeholder="最低 $2，最高 $500"
+                  placeholder={`最低 $${withdrawConfig.accountMinAmount}，最高 $${withdrawConfig.accountMaxAmount}`}
                   className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3"
                 />
-                <p className="text-gray-500 text-xs mt-1">最低提现 $2，单次最高 $500，手续费 5%（最低 $2）</p>
+                <p className="text-gray-500 text-xs mt-1">
+                  最低提现 ${withdrawConfig.accountMinAmount}，单次最高 ${withdrawConfig.accountMaxAmount}
+                </p>
               </div>
 
               <div>
@@ -1432,26 +1460,20 @@ export default function DashboardPage() {
               )}
 
               {/* 费用计算 - 修改最低金额判断为 2 */}
-              {withdrawAmount && parseFloat(withdrawAmount) >= 2 && (
-                <div className="bg-slate-700/50 border border-slate-600 p-4 rounded-lg space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">提现金额：</span>
-                    <span>${parseFloat(withdrawAmount).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">手续费（5%，最低$2）：</span>
-                    <span className="text-red-400">-${calculateWithdrawFee(parseFloat(withdrawAmount)).toFixed(2)}</span>
-                  </div>
-                  <div className="border-t border-slate-600 pt-2 flex justify-between font-bold">
-                    <span>实际到账：</span>
-                    <span className="text-green-400">${(parseFloat(withdrawAmount) - calculateWithdrawFee(parseFloat(withdrawAmount))).toFixed(2)}</span>
+              {withdrawAmount && parseFloat(withdrawAmount) >= withdrawConfig.accountMinAmount && (
+                <div className="bg-green-900/30 border border-green-700 p-4 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-300">扣除手续费到账金额：</span>
+                    <span className="text-green-400 font-bold text-xl">
+                      ${(parseFloat(withdrawAmount) - calculateAccountWithdrawFee(parseFloat(withdrawAmount))).toFixed(2)}
+                    </span>
                   </div>
                 </div>
               )}
 
-              {withdrawAmount && parseFloat(withdrawAmount) > 0 && parseFloat(withdrawAmount) < 2 && (
+              {withdrawAmount && parseFloat(withdrawAmount) > 0 && parseFloat(withdrawAmount) < withdrawConfig.accountMinAmount && (
                 <div className="bg-red-900/30 border border-red-700 p-3 rounded-lg text-red-400 text-sm">
-                  ⚠️ 最低提现金额为 $2
+                  ⚠️ 最低提现金额为 ${withdrawConfig.accountMinAmount}
                 </div>
               )}
             </div>
@@ -1470,7 +1492,7 @@ export default function DashboardPage() {
               </button>
               <button
                 onClick={handleAccountWithdraw}
-                disabled={submitting || !withdrawAmount || parseFloat(withdrawAmount) < 2 || !withdrawMethod || !withdrawAddress}
+                disabled={submitting || !withdrawAmount || parseFloat(withdrawAmount) < withdrawConfig.accountMinAmount || !withdrawMethod || !withdrawAddress}
                 className="flex-1 bg-blue-600 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
                 {submitting ? '处理中...' : '提交申请'}
@@ -1558,9 +1580,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-// 计算提现手续费的函数 - 修改为 5% + 最低 2U
-const calculateWithdrawFee = (amount: number): number => {
-  const fee = amount * 0.05;
-  return Math.max(fee, 2);
-};

@@ -18,24 +18,38 @@ export async function GET() {
     });
 
     // 获取所有系统配置
-    const systemConfigs = await prisma.systemConfig.findMany({
-      where: {
-        key: { in: ['referral_enabled', 'referral_prompt_text', 'referral_reward_amount', 'billing_examples'] }
-      }
-    });
+    const systemConfigs = await prisma.systemConfig.findMany();
 
     const configMap: Record<string, string> = {};
     systemConfigs.forEach(s => { configMap[s.key] = s.value; });
 
+    // 解析 billingExamples
+    let billingExamples: any[] = [];
+    try {
+      if (configMap['billing_examples']) {
+        billingExamples = JSON.parse(configMap['billing_examples']);
+      }
+    } catch (e) {
+      billingExamples = [];
+    }
+
     return NextResponse.json({
       cardTypes,
       notices: notices.map(n => n.content),
+      billingExamples: Array.isArray(billingExamples) ? billingExamples : [],
       referral: {
         enabled: configMap['referral_enabled'] === 'true',
-        promptText: configMap['referral_prompt_text'] || '',
-        rewardAmount: parseFloat(configMap['referral_reward_amount'] || '5')
+        promptText: configMap['referral_prompt_text'] || '邀请好友注册并开卡，双方各得奖励！',
+        rewardAmount: parseFloat(configMap['referral_reward_amount'] || '5'),
       },
-      billingExamples: configMap['billing_examples'] ? JSON.parse(configMap['billing_examples']) : []
+      withdrawConfig: {
+        accountMinAmount: parseFloat(configMap['account_withdraw_min'] || '2'),
+        accountMaxAmount: parseFloat(configMap['account_withdraw_max'] || '500'),
+        accountFeePercent: parseFloat(configMap['account_withdraw_fee_percent'] || '5'),
+        accountFeeMin: parseFloat(configMap['account_withdraw_fee_min'] || '2'),
+        cardFeePercent: parseFloat(configMap['card_withdraw_fee_percent'] || '1'),
+        cardFeeMin: parseFloat(configMap['card_withdraw_fee_min'] || '1'),
+      },
     });
   } catch (error) {
     console.error('获取配置失败:', error);
@@ -43,7 +57,15 @@ export async function GET() {
       cardTypes: [], 
       notices: [], 
       referral: { enabled: false, promptText: '', rewardAmount: 5 },
-      billingExamples: []
+      billingExamples: [],
+      withdrawConfig: {
+        accountMinAmount: 2,
+        accountMaxAmount: 500,
+        accountFeePercent: 5,
+        accountFeeMin: 2,
+        cardFeePercent: 1,
+        cardFeeMin: 1,
+      },
     });
   }
 }
