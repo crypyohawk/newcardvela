@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
     configs.forEach(c => { configMap[c.key] = c.value; });
 
     return NextResponse.json({
+      configs: configMap,
       support_email: configMap['support_email'] || '',
     });
   } catch (error) {
@@ -51,7 +52,18 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    // 保存每个配置项
+    // 如果是 { key, value } 格式（单个配置项）
+    if (body.key && typeof body.key === 'string') {
+      const valueStr = typeof body.value === 'string' ? body.value : JSON.stringify(body.value);
+      await prisma.systemConfig.upsert({
+        where: { key: body.key },
+        update: { value: valueStr },
+        create: { key: body.key, value: valueStr },
+      });
+      return NextResponse.json({ success: true });
+    }
+    
+    // 如果是批量配置格式
     for (const [key, value] of Object.entries(body)) {
       if (typeof value === 'string') {
         await prisma.systemConfig.upsert({
