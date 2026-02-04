@@ -5,6 +5,7 @@ import Link from 'next/link';
 
 export default function HomePage() {
   const [referralPrompt, setReferralPrompt] = useState<{ enabled: boolean; promptText: string } | null>(null);
+  const [supportEmail, setSupportEmail] = useState('');
 
   useEffect(() => {
     fetch('/api/config')
@@ -13,6 +14,7 @@ export default function HomePage() {
         if (data.referral) {
           setReferralPrompt(data.referral);
         }
+        if (data.supportEmail) setSupportEmail(data.supportEmail);
       })
       .catch(() => {});
   }, []);

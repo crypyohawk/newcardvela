@@ -33,11 +33,15 @@ export async function GET() {
       billingExamples = [];
     }
 
+    // 获取客服邮箱
+    const supportEmailConfig = await prisma.systemConfig.findUnique({
+      where: { key: 'support_email' }
+    });
+
     return NextResponse.json({
       cardTypes,
       notices: notices.map(n => n.content),
       billingExamples: Array.isArray(billingExamples) ? billingExamples : [],
-      supportEmail: configMap['support_email'] || '',
       referral: {
         enabled: configMap['referral_enabled'] === 'true',
         promptText: configMap['referral_prompt_text'] || '邀请好友注册并开卡，双方各得奖励！',
@@ -51,6 +55,7 @@ export async function GET() {
         cardFeePercent: parseFloat(configMap['card_withdraw_fee_percent'] || '1'),
         cardFeeMin: parseFloat(configMap['card_withdraw_fee_min'] || '1'),
       },
+      supportEmail: supportEmailConfig?.value || '',
     });
   } catch (error) {
     console.error('获取配置失败:', error);
