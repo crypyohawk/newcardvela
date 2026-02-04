@@ -1531,7 +1531,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 开卡确认弹窗 - 添加到文件末尾 */}
+      {/* 开卡确认弹窗 */}
       {showOpenCardConfirm && selectedCardType && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-slate-800 p-6 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
@@ -1560,7 +1560,7 @@ export default function DashboardPage() {
                 </label>
               </div>
             )}
-
+      
             <p className="text-gray-300 mb-4">
               确认开通 <span className="text-blue-400 font-semibold">{selectedCardType.name}</span> 虚拟卡？
             </p>
@@ -1579,7 +1579,7 @@ export default function DashboardPage() {
                 <span className="text-yellow-400">${(user!.balance - selectedCardType.openFee).toFixed(2)}</span>
               </div>
             </div>
-
+      
             <div className="flex gap-3">
               <button
                 onClick={() => { 
@@ -1606,19 +1606,7 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-
-      {/* 客服联系方式 - 固定在页面右下角 */}
-      {supportEmail && (
-        <div className="fixed bottom-4 right-4 z-40">
-          <a
-            href={`mailto:${supportEmail}`}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-full shadow-lg transition"
-          >
-            <span className="text-xl">📧</span>
-            <span className="text-sm font-medium">联系客服</span>
-          </a>
-        </div>
-      )}
     </div>
   );
 }
+
