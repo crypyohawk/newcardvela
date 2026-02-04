@@ -489,7 +489,7 @@ export default function AdminPage() {
     }
   };
 
-  const handleRefundAction = async (refundId: string, action: 'return' | 'reject') => {
+  const handleRefundAction = async (refundId: string, action: 'deduct' | 'approve' | 'reject', deductFee?: number) => {
     try {
       const res = await fetch('/api/admin/refunds', {
         method: 'POST',
@@ -500,14 +500,21 @@ export default function AdminPage() {
         body: JSON.stringify({ 
           refundId, 
           action,
-          returnAmount: returnAmount ? parseFloat(returnAmount) : undefined,
+          deductFee: deductFee,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
       setMessage({ type: 'success', text: data.message || '操作成功' });
-      setReturnAmount('');
+      
+      // 清除该记录的输入
+      setDeductFees(prev => {
+        const newFees = { ...prev };
+        delete newFees[refundId];
+        return newFees;
+      });
+      
       fetchRefunds();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
@@ -515,6 +522,8 @@ export default function AdminPage() {
   };
 
   const [returnAmount, setReturnAmount] = useState<string>('');
+  // 添加退款手续费输入状态
+  const [deductFees, setDeductFees] = useState<Record<string, string>>({});
 
   if (loading) {
     return (
@@ -1100,80 +1109,133 @@ export default function AdminPage() {
         {/* 退款管理 */}
         {activeTab === 'refunds' && (
           <div className="bg-slate-800 rounded-xl p-6">
-            <h2 className="text-xl font-bold mb-6">退款管理（卡消费退款）</h2>
+            <h2 className="text-xl font-bold mb-6">退款管理</h2>
             <p className="text-gray-400 text-sm mb-4">
-              当用户卡片收到退款 ≥ $20 时，系统自动从卡上扣除并冻结。用户发邮件申请后，可手动返还。
+              💡 说明：退款金额已由上游直接退到用户卡内，这里处理我们的手续费扣除
             </p>
             {refunds.length === 0 ? (
               <p className="text-gray-400 text-center py-8">暂无退款记录</p>
             ) : (
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-gray-400 border-b border-slate-700">
-                    <th className="pb-3">用户</th>
-                    <th className="pb-3">退款金额</th>
-                    <th className="pb-3">交易ID</th>
-                    <th className="pb-3">状态</th>
-                    <th className="pb-3">时间</th>
-                    <th className="pb-3">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {refunds.map(refund => (
-                    <tr key={refund.id} className="border-b border-slate-700">
-                      <td className="py-4">
-                        <div>{refund.user?.username || '未知'}</div>
-                        <div className="text-sm text-gray-400">{refund.user?.email}</div>
-                      </td>
-                      <td className="py-4 text-yellow-400 font-bold">${refund.amount}</td>
-                      <td className="py-4 text-xs font-mono text-gray-400">
-                        {refund.txHash?.slice(0, 20)}...
-                      </td>
-                      <td className="py-4">
-                        <span className={`px-2 py-1 rounded text-xs ${
-                          refund.status === 'completed' ? 'bg-green-600' :
-                          refund.status === 'pending' ? 'bg-yellow-600' :
-                          'bg-red-600'
-                        }`}>
-                          {refund.status === 'completed' ? '已返还' :
-                           refund.status === 'pending' ? '待处理' :
-                           '已拒绝'}
-                        </span>
-                      </td>
-                      <td className="py-4 text-gray-400 text-sm">
-                        {new Date(refund.createdAt).toLocaleString()}
-                      </td>
-                      <td className="py-4">
-                        {refund.status === 'pending' && (
-                          <div className="flex gap-2 items-center">
-                            <input
-                              type="number"
-                              placeholder="返还金额"
-                              className="w-24 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm"
-                              onChange={(e) => setReturnAmount(e.target.value)}
-                            />
-                            <button
-                              onClick={() => handleRefundAction(refund.id, 'return')}
-                              className="bg-green-600 px-3 py-1 rounded text-sm hover:bg-green-700"
-                            >
-                              返还
-                            </button>
-                            <button
-                              onClick={() => handleRefundAction(refund.id, 'reject')}
-                              className="bg-red-600 px-3 py-1 rounded text-sm hover:bg-red-700"
-                            >
-                              拒绝
-                            </button>
-                          </div>
-                        )}
-                        {refund.status === 'completed' && refund.paymentProof && (
-                          <span className="text-green-400 text-sm">{refund.paymentProof}</span>
-                        )}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-left text-gray-400 border-b border-slate-700">
+                      <th className="pb-3">用户</th>
+                      <th className="pb-3">退款金额</th>
+                      <th className="pb-3">应扣手续费</th>
+                      <th className="pb-3">用户实得</th>
+                      <th className="pb-3">卡片信息</th>
+                      <th className="pb-3">状态</th>
+                      <th className="pb-3">时间</th>
+                      <th className="pb-3">操作</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {refunds.map((refund: any) => (
+                      <tr key={refund.id} className="border-b border-slate-700">
+                        <td className="py-4">
+                          <div>{refund.user?.username || '未知'}</div>
+                          <div className="text-sm text-gray-400">{refund.user?.email}</div>
+                        </td>
+                        <td className="py-4 text-green-400 font-bold">
+                          ${refund.amount}
+                        </td>
+                        <td className="py-4 text-red-400">
+                          -${refund.calculatedFee?.toFixed(2) || '0.00'}
+                          <div className="text-xs text-gray-500">
+                            {refund.amount >= (refund.feeConfig?.largeRefundThreshold || 20) 
+                              ? `(${refund.feeConfig?.refundFeePercent || 5}% 最低$${refund.feeConfig?.refundFeeMin || 3})`
+                              : `(小额固定$${refund.feeConfig?.smallRefundFee || 3})`
+                            }
+                          </div>
+                        </td>
+                        <td className="py-4 text-blue-400 font-bold">
+                          ${refund.netAmount?.toFixed(2) || refund.amount}
+                        </td>
+                        <td className="py-4 text-xs">
+                          {refund.cardInfo?.gsalaryCardId ? (
+                            <span className="text-gray-400">
+                              {refund.cardInfo.gsalaryCardId.slice(0, 8)}...
+                            </span>
+                          ) : (
+                            <span className="text-yellow-400">无卡片信息</span>
+                          )}
+                        </td>
+                        <td className="py-4">
+                          <span className={`px-2 py-1 rounded text-xs ${
+                            refund.status === 'completed' ? 'bg-green-600' :
+                            refund.status === 'pending' ? 'bg-yellow-600' :
+                            'bg-red-600'
+                          }`}>
+                            {refund.status === 'completed' ? '已处理' :
+                             refund.status === 'pending' ? '待处理' : '异常'}
+                          </span>
+                        </td>
+                        <td className="py-4 text-gray-400 text-sm">
+                          {new Date(refund.createdAt).toLocaleString()}
+                        </td>
+                        <td className="py-4">
+                          {refund.status === 'pending' && (
+                            <div className="flex flex-col gap-2">
+                              <div className="flex gap-2 items-center">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  placeholder={`${refund.calculatedFee?.toFixed(2) || '0'}`}
+                                  value={deductFees[refund.id] || ''}
+                                  className="w-20 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm"
+                                  onChange={(e) => setDeductFees(prev => ({ 
+                                    ...prev, 
+                                    [refund.id]: e.target.value 
+                                  }))}
+                                />
+                                <button
+                                  onClick={() => handleRefundAction(refund.id, 'deduct', parseFloat(deductFees[refund.id] || refund.calculatedFee || '0'))}
+                                  className="bg-orange-600 px-2 py-1 rounded text-xs hover:bg-orange-700"
+                                  title="从卡片扣除手续费"
+                                >
+                                  扣费
+                                </button>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleRefundAction(refund.id, 'approve')}
+                                  className="bg-green-600 px-2 py-1 rounded text-xs hover:bg-green-700"
+                                  title="不扣费直接通过"
+                                >
+                                  通过
+                                </button>
+                                <button
+                                  onClick={() => handleRefundAction(refund.id, 'reject')}
+                                  className="bg-red-600 px-2 py-1 rounded text-xs hover:bg-red-700"
+                                  title="标记为异常"
+                                >
+                                  异常
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          {refund.status === 'completed' && refund.paymentProof && (
+                            <div className="text-xs text-gray-400">
+                              {(() => {
+                                try {
+                                  const proof = JSON.parse(refund.paymentProof);
+                                  if (proof.deductedFee) {
+                                    return `已扣 $${proof.deductedFee}`;
+                                  }
+                                  return '已处理';
+                                } catch {
+                                  return '已处理';
+                                }
+                              })()}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}
