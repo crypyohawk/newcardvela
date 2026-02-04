@@ -132,6 +132,32 @@ export default function AdminSettingsPage() {
           </div>
         )}
 
+        {/* 客服联系方式配置 - 添加在最前面 */}
+        <div className="bg-slate-800 rounded-xl p-6 mb-6">
+          <h2 className="text-xl font-bold mb-4">📧 客服联系方式</h2>
+          <p className="text-gray-400 text-sm mb-4">配置客服邮箱，用户在仪表盘页面可以看到</p>
+          
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">客服邮箱</label>
+            <div className="flex gap-2">
+              <input
+                type="email"
+                value={configs['support_email'] || ''}
+                onChange={(e) => setConfigs(prev => ({ ...prev, support_email: e.target.value }))}
+                placeholder="support@cardvela.com"
+                className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+              />
+              <button
+                onClick={() => saveConfig('support_email', configs['support_email'] || '')}
+                disabled={saving}
+                className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* USDT 收款地址配置 */}
         <div className="bg-slate-800 rounded-xl p-6 mb-6">
           <h2 className="text-xl font-bold mb-4">💵 USDT 收款地址</h2>

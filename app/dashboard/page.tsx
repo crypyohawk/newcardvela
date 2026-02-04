@@ -45,6 +45,15 @@ interface ReferralInfo {
   referrals: any[];
 }
 
+interface WithdrawConfig {
+  accountMinAmount: number;
+  accountMaxAmount: number;
+  accountFeePercent: number;
+  accountFeeMin: number;
+  cardFeePercent: number;
+  cardFeeMin: number;
+}
+
 export default function DashboardPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -105,14 +114,17 @@ export default function DashboardPage() {
   const [agreedToNotices, setAgreedToNotices] = useState(false);
 
   // 固定提现配置（不从后台读取）
-  const withdrawConfig = {
-    accountMinAmount: 10,      // 最低提现 10 USD
-    accountMaxAmount: 500,     // 最高提现 500 USD
-    accountFeePercent: 5,      // 5%
-    accountFeeMin: 2,          // 最低手续费 2 USD
-    cardFeePercent: 2,         // 卡充值手续费 2%
-    cardFeeMin: 1,             // 卡充值最低 1 USD
-  };
+    const [withdrawConfig, setWithdrawConfig] = useState<WithdrawConfig>({
+      accountMinAmount: 2,
+      accountMaxAmount: 500,
+      accountFeePercent: 5,
+      accountFeeMin: 2,
+      cardFeePercent: 1,
+      cardFeeMin: 1,
+    });
+
+  // 添加客服邮箱状态
+  const [supportEmail, setSupportEmail] = useState('');
 
   useEffect(() => {
     if (!loading && !user) {
@@ -143,14 +155,19 @@ export default function DashboardPage() {
       setBillingExamples(configData.billingExamples || []);
       setUserCards(cardsData.cards || []);
       
-      // 获取客服邮箱
-      if (configData.supportEmail) {
-        setSupportEmail(configData.supportEmail);
-      }
-      
       // 获取推荐设置
       if (configData.referral) {
         setReferralInfo(prev => prev ? { ...prev, settings: configData.referral } : null);
+      }
+      
+      // 获取提现配置
+      if (configData.withdrawConfig) {
+        setWithdrawConfig(configData.withdrawConfig);
+      }
+
+      // 获取客服邮箱
+      if (configData.supportEmail) {
+        setSupportEmail(configData.supportEmail);
       }
       
     } catch (error) {
@@ -532,8 +549,6 @@ export default function DashboardPage() {
     if (amount < 200) return 4;     // 100-200扣4
     return 10;                      // 超过200扣10
   };
-
-  const [supportEmail, setSupportEmail] = useState('');
 
   if (loading) {
     return (
@@ -1581,6 +1596,19 @@ export default function DashboardPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 客服联系方式 - 固定在页面右下角 */}
+      {supportEmail && (
+        <div className="fixed bottom-4 right-4 z-40">
+          <a
+            href={`mailto:${supportEmail}`}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-full shadow-lg transition"
+          >
+            <span className="text-xl">📧</span>
+            <span className="text-sm font-medium">联系客服</span>
+          </a>
         </div>
       )}
     </div>
