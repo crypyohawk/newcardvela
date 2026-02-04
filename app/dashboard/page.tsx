@@ -565,7 +565,14 @@ export default function DashboardPage() {
       {/* 导航栏 */}
       <nav className="bg-slate-800 border-b border-slate-700">
         <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
-          <Link href="/" className="text-xl font-bold">CardVela</Link>
+          <div className="flex items-center gap-4">
+            <Link href="/" className="text-xl font-bold">CardVela</Link>
+            {supportEmail && (
+              <span className="text-gray-400 text-sm">
+                客服邮箱：<a href={`mailto:${supportEmail}`} className="text-blue-400 hover:text-blue-300">{supportEmail}</a>
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-4">
             <span className="text-gray-300">欢迎, {user.username}</span>
             {(user.role === 'admin' || user.role === 'ADMIN') && (
