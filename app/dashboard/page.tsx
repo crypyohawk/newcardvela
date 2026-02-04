@@ -1169,6 +1169,31 @@ export default function DashboardPage() {
             )}
           </div>
         )}
+
+        {/* 客服支持 - 添加在页面底部 */}
+        {supportEmail && (
+          <div className="mt-8 bg-slate-800 rounded-xl p-6">
+            <h2 className="text-lg font-bold mb-4">📧 客服支持</h2>
+            <div className="flex items-center gap-4">
+              <span className="text-gray-400">如有问题请联系：</span>
+              <a 
+                href={`mailto:${supportEmail}`} 
+                className="text-blue-400 hover:text-blue-300 font-medium"
+              >
+                {supportEmail}
+              </a>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(supportEmail);
+                  setMessage({ type: 'success', text: '客服邮箱已复制！' });
+                }}
+                className="bg-slate-700 px-3 py-1 rounded text-sm hover:bg-slate-600"
+              >
+                复制
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 卡充值/提现弹窗 */}

@@ -37,22 +37,19 @@ export async function GET() {
       cardTypes,
       notices: notices.map(n => n.content),
       billingExamples: Array.isArray(billingExamples) ? billingExamples : [],
+      supportEmail: configMap['support_email'] || '',  // 添加这行
       referral: {
         enabled: configMap['referral_enabled'] === 'true',
         promptText: configMap['referral_prompt_text'] || '邀请好友注册并开卡，双方各得奖励！',
         rewardAmount: parseFloat(configMap['referral_reward_amount'] || '5'),
       },
-      // 添加客服邮箱
-      supportEmail: configMap['support_email'] || '',
       withdrawConfig: {
-        // 账户提现配置 - 使用固定值，不从数据库读取
-        accountMinAmount: 10,  // 最低 10 USD
-        accountMaxAmount: 500,
-        accountFeePercent: 5,
-        accountFeeMin: 2,
-        // 卡片提现配置 - 使用固定值
-        cardFeePercent: 2,  // 2%
-        cardFeeMin: 1,
+        accountMinAmount: parseFloat(configMap['account_withdraw_min'] || '2'),
+        accountMaxAmount: parseFloat(configMap['account_withdraw_max'] || '500'),
+        accountFeePercent: parseFloat(configMap['account_withdraw_fee_percent'] || '5'),
+        accountFeeMin: parseFloat(configMap['account_withdraw_fee_min'] || '2'),
+        cardFeePercent: parseFloat(configMap['card_withdraw_fee_percent'] || '1'),
+        cardFeeMin: parseFloat(configMap['card_withdraw_fee_min'] || '1'),
       },
     });
   } catch (error) {
@@ -62,12 +59,13 @@ export async function GET() {
       notices: [], 
       referral: { enabled: false, promptText: '', rewardAmount: 5 },
       billingExamples: [],
+      supportEmail: '',
       withdrawConfig: {
-        accountMinAmount: 10,
+        accountMinAmount: 2,
         accountMaxAmount: 500,
         accountFeePercent: 5,
         accountFeeMin: 2,
-        cardFeePercent: 2,
+        cardFeePercent: 1,
         cardFeeMin: 1,
       },
     });
