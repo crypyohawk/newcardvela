@@ -117,6 +117,7 @@ export default function AdminPage() {
       return;
     }
     fetchData();
+    fetchSystemConfig();
   }, [router]);
 
   const fetchData = async () => {
@@ -313,6 +314,7 @@ export default function AdminPage() {
   // 添加客服邮箱状态
   const [supportEmail, setSupportEmail] = useState('');
 
+  // 获取推荐设置
   const fetchReferralSettings = async () => {
     try {
       const res = await fetch('/api/admin/referral-settings', {
@@ -320,37 +322,63 @@ export default function AdminPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.referralSettings) setReferralSettings(data.referralSettings);
+        if (data.settings) {
+          setReferralSettings({
+            enabled: data.settings.enabled ?? false,
+            rewardAmount: String(data.settings.rewardAmount ?? 5),
+            promptText: data.settings.promptText || '推荐好友注册开卡，即可获得 $5 奖励！'
+          });
+        }
       }
     } catch (error) {
-      console.error('获取推广设置失败:', error);
+      console.error('获取推荐设置失败:', error);
     }
   };
 
+  // 保存推荐设置
   const saveReferralSettings = async () => {
     try {
       const res = await fetch('/api/admin/referral-settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getToken()}`
+          'Authorization': `Bearer ${getToken()}`,
         },
-        body: JSON.stringify(referralSettings)
+        body: JSON.stringify({
+          enabled: referralSettings.enabled,
+          rewardAmount: parseFloat(referralSettings.rewardAmount) || 5,
+          promptText: referralSettings.promptText,
+        }),
       });
       if (res.ok) {
-        setMessage({ type: 'success', text: '推广设置保存成功' });
+        setMessage({ type: 'success', text: '推荐设置已保存' });
       } else {
-        const data = await res.json();
-        setMessage({ type: 'error', text: data.error || '保存失败' });
+        setMessage({ type: 'error', text: '保存失败' });
       }
     } catch (error) {
       setMessage({ type: 'error', text: '保存失败' });
     }
   };
 
+  // 获取系统配置（包括客服邮箱）
+  const fetchSystemConfig = async () => {
+    try {
+      const res = await fetch('/api/admin/config', {
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.support_email) setSupportEmail(data.support_email);
+      }
+    } catch (error) {
+      console.error('获取系统配置失败:', error);
+    }
+  };
+
   useEffect(() => {
     fetchNotices();
     fetchReferralSettings();
+    fetchSystemConfig();
   }, []);
 
   // 打开编辑弹窗
