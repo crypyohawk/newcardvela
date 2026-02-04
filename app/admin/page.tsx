@@ -983,18 +983,45 @@ export default function AdminPage() {
                 </thead>
                 <tbody>
                   {withdrawOrders.map(order => {
-                    // 计算手续费
-                    const calculateFee = (amt: number): number => {
-                      if (amt <= 10) return 1;
-                      if (amt <= 20) return 1;
-                      if (amt <= 50) return 2;
-                      if (amt <= 100) return 4;
-                      if (amt <= 200) return 6;
-                      if (amt <= 300) return 8;
-                      return 10;
-                    };
-                    const fee = calculateFee(order.amount);
-                    const actualAmount = order.amount - fee;
+                    // 从订单的 txHash 中解析保存的手续费和实际到账金额
+                    let fee = 0;
+                    let actualAmount = order.amount;
+                    
+                    try {
+                      if (order.txHash) {
+                        const txData = JSON.parse(order.txHash);
+                        if (txData.fee !== undefined && txData.actualAmount !== undefined) {
+                          fee = txData.fee;
+                          actualAmount = txData.actualAmount;
+                        } else {
+                          // 兼容旧数据：使用 5% 最低 $2 的规则计算
+                          const percentFee = order.amount * 0.05;
+                          fee = Math.max(percentFee, 2);
+                          actualAmount = order.amount - fee;
+                        }
+                      } else {
+                        // 没有 txHash 的情况，使用默认计算
+                        const percentFee = order.amount * 0.05;
+                        fee = Math.max(percentFee, 2);
+                        actualAmount = order.amount - fee;
+                      }
+                    } catch (e) {
+                      // JSON 解析失败，说明 txHash 是旧格式（直接是地址字符串）
+                      const percentFee = order.amount * 0.05;
+                      fee = Math.max(percentFee, 2);
+                      actualAmount = order.amount - fee;
+                    }
+
+                    // 解析收款地址
+                    let withdrawAddress = '';
+                    try {
+                      if (order.txHash) {
+                        const txData = JSON.parse(order.txHash);
+                        withdrawAddress = txData.address || order.txHash;
+                      }
+                    } catch (e) {
+                      withdrawAddress = order.txHash || '';
+                    }
 
                     return (
                       <tr key={order.id} className="border-b border-slate-700">
@@ -1003,24 +1030,24 @@ export default function AdminPage() {
                           <div className="text-sm text-gray-400">{order.user?.email}</div>
                         </td>
                         <td className="py-4 text-orange-400 font-bold">${order.amount}</td>
-                        <td className="py-4 text-red-400">-${fee}</td>
-                        <td className="py-4 text-green-400 font-bold">${actualAmount}</td>
+                        <td className="py-4 text-red-400">-${fee.toFixed(2)}</td>
+                        <td className="py-4 text-green-400 font-bold">${actualAmount.toFixed(2)}</td>
                         <td className="py-4">
                           <span className="px-2 py-1 rounded text-xs bg-purple-600">
                             {order.paymentMethod?.toUpperCase() || '未知'}
                           </span>
                         </td>
                         <td className="py-4">
-                          {order.txHash?.startsWith('data:image') ? (
+                          {withdrawAddress?.startsWith('data:image') ? (
                             <button
-                              onClick={() => setSelectedOrder(order)}
+                              onClick={() => setSelectedOrder({...order, txHash: withdrawAddress})}
                               className="text-blue-400 hover:text-blue-300 text-sm"
                             >
                               查看收款码
                             </button>
-                          ) : order.txHash ? (
+                          ) : withdrawAddress ? (
                             <button
-                              onClick={() => setSelectedOrder(order)}
+                              onClick={() => setSelectedOrder({...order, txHash: withdrawAddress})}
                               className="text-blue-400 hover:text-blue-300 text-sm"
                             >
                               查看地址

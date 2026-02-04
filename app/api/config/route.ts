@@ -47,13 +47,14 @@ export async function GET() {
         promptText: configMap['referral_prompt_text'] || '邀请好友注册并开卡，双方各得奖励！',
         rewardAmount: parseFloat(configMap['referral_reward_amount'] || '5'),
       },
+      // 统一使用 withdraw_ 前缀，与后端提现API和管理后台一致
       withdrawConfig: {
-        accountMinAmount: parseFloat(configMap['account_withdraw_min'] || '2'),
-        accountMaxAmount: parseFloat(configMap['account_withdraw_max'] || '500'),
-        accountFeePercent: parseFloat(configMap['account_withdraw_fee_percent'] || '5'),
-        accountFeeMin: parseFloat(configMap['account_withdraw_fee_min'] || '2'),
+        accountMinAmount: parseFloat(configMap['withdraw_min_amount'] || '10'),
+        accountMaxAmount: parseFloat(configMap['withdraw_max_amount'] || '500'),
+        accountFeePercent: parseFloat(configMap['withdraw_fee_percent'] || '5'),  // 5%
+        accountFeeMin: parseFloat(configMap['withdraw_fee_min'] || '2'),           // 最低$2
         cardFeePercent: parseFloat(configMap['card_withdraw_fee_percent'] || '1'),
-        cardFeeMin: parseFloat(configMap['card_withdraw_fee_min'] || '1'),
+        cardFeeMin: parseFloat(configMap['card_withdraw_fee'] || '1.5'),
       },
       supportEmail: supportEmailConfig?.value || '',
     });
@@ -66,12 +67,12 @@ export async function GET() {
       billingExamples: [],
       supportEmail: '',
       withdrawConfig: {
-        accountMinAmount: 2,
+        accountMinAmount: 10,
         accountMaxAmount: 500,
         accountFeePercent: 5,
         accountFeeMin: 2,
         cardFeePercent: 1,
-        cardFeeMin: 1,
+        cardFeeMin: 1.5,
       },
     });
   }

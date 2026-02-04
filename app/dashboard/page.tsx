@@ -536,10 +536,11 @@ export default function DashboardPage() {
   const [showOpenCardConfirm, setShowOpenCardConfirm] = useState(false);
   const [selectedCardType, setSelectedCardType] = useState<CardType | null>(null);
 
-  // 计算账户提现手续费（5%，最低2u）
+  // 计算账户提现手续费（从配置读取）
   const calculateAccountWithdrawFee = (amount: number): number => {
-    const percentFee = amount * 0.05;  // 5%
-    return Math.max(percentFee, 2);     // 最低 2 USD
+    const feePercent = withdrawConfig.accountFeePercent / 100;  // 5% -> 0.05
+    const percentFee = amount * feePercent;
+    return Math.max(percentFee, withdrawConfig.accountFeeMin);
   };
 
   // 计算卡片提现手续费（阶梯收费）

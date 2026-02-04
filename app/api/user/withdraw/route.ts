@@ -2,18 +2,35 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../src/lib/auth';
 
-// 固定提现配置
-const WITHDRAW_CONFIG = {
-  minAmount: 10,      // 最低提现 10 USD
-  maxAmount: 500,     // 最高提现 500 USD
-  feePercent: 0.05,   // 5%
-  feeMin: 2,          // 最低手续费 2 USD
-};
+// 从数据库获取提现配置
+async function getWithdrawConfig() {
+  const configs = await db.systemConfig.findMany({
+    where: {
+      key: {
+        in: ['withdraw_min_amount', 'withdraw_max_amount', 'withdraw_fee_percent', 'withdraw_fee_min']
+      }
+    }
+  });
 
-// 计算账户提现手续费（5%，最低2u）
-function calculateWithdrawFee(amount: number): number {
-  const percentFee = amount * WITHDRAW_CONFIG.feePercent;
-  return Math.max(percentFee, WITHDRAW_CONFIG.feeMin);
+  const configMap: Record<string, string> = {};
+  configs.forEach(c => { configMap[c.key] = c.value; });
+
+  // 处理手续费百分比 - 数据库存的是百分比数字(如5)，需要转为小数(0.05)
+  const feePercentRaw = parseFloat(configMap['withdraw_fee_percent'] || '5');
+  const feePercent = feePercentRaw > 1 ? feePercentRaw / 100 : feePercentRaw;
+
+  return {
+    minAmount: parseFloat(configMap['withdraw_min_amount'] || '10'),
+    maxAmount: parseFloat(configMap['withdraw_max_amount'] || '500'),
+    feePercent: feePercent,  // 5% -> 0.05
+    feeMin: parseFloat(configMap['withdraw_fee_min'] || '2'),
+  };
+}
+
+// 计算账户提现手续费
+function calculateWithdrawFee(amount: number, config: { feePercent: number; feeMin: number }): number {
+  const percentFee = amount * config.feePercent;
+  return Math.max(percentFee, config.feeMin);
 }
 
 export async function POST(request: NextRequest) {
@@ -30,6 +47,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { amount, method, address } = body;
+
+    // 从数据库获取配置
+    const WITHDRAW_CONFIG = await getWithdrawConfig();
 
     // 验证提现金额
     if (!amount || amount < WITHDRAW_CONFIG.minAmount) {
@@ -49,15 +69,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '用户不存在' }, { status: 404 });
     }
 
-    // 计算手续费（5%，最低2u）
-    const fee = calculateWithdrawFee(amount);
+    // 计算手续费
+    const fee = calculateWithdrawFee(amount, WITHDRAW_CONFIG);
     const actualAmount = amount - fee;
 
     if (user.balance < amount) {
       return NextResponse.json({ error: '余额不足' }, { status: 400 });
     }
 
-    // 创建提现订单
+    // 创建提现订单 - 保存手续费和实际到账金额
     const order = await db.transaction.create({
       data: {
         userId: payload.userId,
@@ -65,7 +85,11 @@ export async function POST(request: NextRequest) {
         amount: amount,
         status: 'pending',
         paymentMethod: method,
-        txHash: address,
+        txHash: JSON.stringify({
+          address: address,
+          fee: fee,
+          actualAmount: actualAmount,
+        }),
       },
     });
 
