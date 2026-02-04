@@ -143,6 +143,11 @@ export default function DashboardPage() {
       setBillingExamples(configData.billingExamples || []);
       setUserCards(cardsData.cards || []);
       
+      // 获取客服邮箱
+      if (configData.supportEmail) {
+        setSupportEmail(configData.supportEmail);
+      }
+      
       // 获取推荐设置
       if (configData.referral) {
         setReferralInfo(prev => prev ? { ...prev, settings: configData.referral } : null);
@@ -527,6 +532,8 @@ export default function DashboardPage() {
     if (amount < 200) return 4;     // 100-200扣4
     return 10;                      // 超过200扣10
   };
+
+  const [supportEmail, setSupportEmail] = useState('');
 
   if (loading) {
     return (

@@ -42,6 +42,8 @@ export async function GET() {
         promptText: configMap['referral_prompt_text'] || '邀请好友注册并开卡，双方各得奖励！',
         rewardAmount: parseFloat(configMap['referral_reward_amount'] || '5'),
       },
+      // 添加客服邮箱
+      supportEmail: configMap['support_email'] || '',
       withdrawConfig: {
         // 账户提现配置 - 使用固定值，不从数据库读取
         accountMinAmount: 10,  // 最低 10 USD
