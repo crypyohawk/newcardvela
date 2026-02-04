@@ -37,7 +37,7 @@ export async function GET() {
       cardTypes,
       notices: notices.map(n => n.content),
       billingExamples: Array.isArray(billingExamples) ? billingExamples : [],
-      supportEmail: configMap['support_email'] || '',  // 添加这行
+      supportEmail: configMap['support_email'] || '',
       referral: {
         enabled: configMap['referral_enabled'] === 'true',
         promptText: configMap['referral_prompt_text'] || '邀请好友注册并开卡，双方各得奖励！',

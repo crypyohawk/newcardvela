@@ -310,6 +310,9 @@ export default function AdminPage() {
     promptText: '推荐好友注册开卡，即可获得 $5 奖励！'
   });
 
+  // 添加客服邮箱状态
+  const [supportEmail, setSupportEmail] = useState('');
+
   const fetchReferralSettings = async () => {
     try {
       const res = await fetch('/api/admin/referral-settings', {
@@ -1178,6 +1181,40 @@ export default function AdminPage() {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* 客服邮箱设置 */}
+            <div className="bg-slate-800 rounded-xl p-6 mb-6">
+              <h3 className="text-lg font-bold mb-4">📧 客服设置</h3>
+              <div className="mb-4">
+                <label className="block text-sm text-gray-400 mb-2">客服邮箱</label>
+                <input
+                  type="email"
+                  value={supportEmail}
+                  onChange={(e) => setSupportEmail(e.target.value)}
+                  placeholder="support@example.com"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3"
+                />
+                <p className="text-gray-500 text-xs mt-1">用户可通过此邮箱联系客服</p>
+              </div>
+              <button
+                onClick={async () => {
+                  const token = localStorage.getItem('token');
+                  const res = await fetch('/api/admin/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ support_email: supportEmail }),
+                  });
+                  if (res.ok) {
+                    setMessage({ type: 'success', text: '客服邮箱已保存' });
+                  } else {
+                    setMessage({ type: 'error', text: '保存失败' });
+                  }
+                }}
+                className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700"
+              >
+                保存客服邮箱
+              </button>
             </div>
           </div>
         )}
