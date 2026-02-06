@@ -34,6 +34,7 @@ interface CardType {
   crossBorderFeePercent: number;
   crossBorderFeeMin: number;
   chargebackFee: number;
+  description: string | null;  // 新增
   isActive: boolean;
   createdAt: string;
 }
@@ -77,6 +78,7 @@ export default function CardTypesPage() {
     crossBorderFeePercent: 1,
     crossBorderFeeMin: 0,
     chargebackFee: 15,
+    description: '',  // 新增
     isActive: true,
   });
 
@@ -137,6 +139,7 @@ export default function CardTypesPage() {
         crossBorderFeePercent: card.crossBorderFeePercent || 1,
         crossBorderFeeMin: card.crossBorderFeeMin || 0,
         chargebackFee: card.chargebackFee || 15,
+        description: card.description || '',  // 新增
         isActive: card.isActive,
       });
     } else {
@@ -168,6 +171,7 @@ export default function CardTypesPage() {
         crossBorderFeePercent: 1,
         crossBorderFeeMin: 0,
         chargebackFee: 15,
+        description: '',  // 新增
         isActive: true,
       });
     }
@@ -384,6 +388,18 @@ export default function CardTypesPage() {
                       <label className="block text-sm text-gray-400 mb-1">显示退款费</label>
                       <input type="text" value={formData.displayRefundFee || ''} onChange={(e) => setFormData({ ...formData, displayRefundFee: e.target.value })} placeholder="如 $2" className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2" />
                     </div>
+                  </div>
+                  
+                  {/* 产品说明 - 新增 */}
+                  <div className="mt-4">
+                    <label className="block text-sm text-gray-400 mb-1">产品说明</label>
+                    <textarea
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      rows={3}
+                      placeholder="例如：Valid for 24 months. Good use to pay on FaceBook, Google, Amazon, PayPal, Shopify, Walmart, Alibaba, AliExpress, etc."
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                    />
                   </div>
                 </div>
               )}

@@ -20,7 +20,7 @@ interface CardType {
   monthlyFee: number;
   rechargeFeePercent: number;
   rechargeFeeMin: number;
-  description: string | null;  // 新增
+  description: string | null;  // 确保有这行
 }
 
 interface UserCard {
@@ -859,6 +859,16 @@ export default function DashboardPage() {
                         </div>
                       )}
                     </div>
+                    
+                    {/* 产品说明 - 新增 */}
+                    {card.description && (
+                      <div className="mt-4 pt-4 border-t border-white/20">
+                        <p className="text-xs text-gray-200 leading-relaxed">
+                          <span className="text-gray-300 font-medium">产品说明：</span><br/>
+                          {card.description}
+                        </p>
+                      </div>
+                    )}
                     
                     <button 
                       onClick={() => handleOpenCard(card)}
