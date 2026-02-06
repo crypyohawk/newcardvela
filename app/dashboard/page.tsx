@@ -20,6 +20,7 @@ interface CardType {
   monthlyFee: number;
   rechargeFeePercent: number;
   rechargeFeeMin: number;
+  description: string | null;  // 新增
 }
 
 interface UserCard {

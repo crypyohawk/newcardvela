@@ -11,9 +11,20 @@ interface CardType {
   issuer: string;
   openFee: number;
   monthlyFee: number;
-  rechargeFee: number;
-  transactionFee: number;
+  rechargeFeePercent: number;
+  rechargeFeeMin: number;
+  transactionFeePercent: number;
+  refundFee: number;
+  authFee: number;
+  displayOpenFee: number | null;
+  displayMonthlyFee: number | null;
+  displayRechargeFee: string | null;
+  displayTransactionFee: string | null;
+  displayRefundFee: string | null;
+  displayAuthFee: string | null;
+  description: string | null;
   isActive: boolean;
+  createdAt: string;
 }
 
 interface User {
@@ -95,14 +106,24 @@ export default function AdminPage() {
   // 添加/编辑卡片类型表单
   const [showAddCard, setShowAddCard] = useState(false);
   const [editingCard, setEditingCard] = useState<CardType | null>(null);
-  const [newCard, setNewCard] = useState({
-    name: '',
-    cardBin: '',
-    issuer: '美国',
-    openFee: 2,
-    monthlyFee: 0.1,
-    rechargeFee: 2,
-    transactionFee: 0,
+  const [newCardType, setNewCardType] = useState({
+    name: '', 
+    cardBin: '', 
+    issuer: '美国', 
+    openFee: 0, 
+    monthlyFee: 0, 
+    rechargeFeePercent: 0,
+    rechargeFeeMin: 0,
+    transactionFeePercent: 0,
+    refundFee: 0,
+    authFee: 0,
+    displayOpenFee: '',
+    displayMonthlyFee: '',
+    displayRechargeFee: '',
+    displayTransactionFee: '',
+    displayRefundFee: '',
+    displayAuthFee: '',
+    description: '',
   });
 
   // 查看凭证弹窗状态
@@ -384,14 +405,24 @@ export default function AdminPage() {
   // 打开编辑弹窗
   const handleEditCard = (card: CardType) => {
     setEditingCard(card);
-    setNewCard({
+    setNewCardType({
       name: card.name,
       cardBin: card.cardBin,
       issuer: card.issuer,
       openFee: card.openFee,
       monthlyFee: card.monthlyFee,
-      rechargeFee: card.rechargeFee,
-      transactionFee: card.transactionFee,
+      rechargeFeePercent: card.rechargeFeePercent,
+      rechargeFeeMin: card.rechargeFeeMin,
+      transactionFeePercent: card.transactionFeePercent,
+      refundFee: card.refundFee,
+      authFee: card.authFee,
+      displayOpenFee: card.displayOpenFee?.toString() || '',
+      displayMonthlyFee: card.displayMonthlyFee?.toString() || '',
+      displayRechargeFee: card.displayRechargeFee || '',
+      displayTransactionFee: card.displayTransactionFee || '',
+      displayRefundFee: card.displayRefundFee || '',
+      displayAuthFee: card.displayAuthFee || '',
+      description: card.description || '',
     });
     setShowAddCard(true);
   };
@@ -410,7 +441,7 @@ export default function AdminPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getToken()}`,
         },
-        body: JSON.stringify(newCard),
+        body: JSON.stringify(newCardType),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -418,7 +449,25 @@ export default function AdminPage() {
       setMessage({ type: 'success', text: editingCard ? '修改成功' : '添加成功' });
       setShowAddCard(false);
       setEditingCard(null);
-      setNewCard({ name: '', cardBin: '', issuer: '美国', openFee: 2, monthlyFee: 0.1, rechargeFee: 2, transactionFee: 0 });
+      setNewCardType({ 
+        name: '', 
+        cardBin: '', 
+        issuer: '美国', 
+        openFee: 0, 
+        monthlyFee: 0, 
+        rechargeFeePercent: 0,
+        rechargeFeeMin: 0,
+        transactionFeePercent: 0,
+        refundFee: 0,
+        authFee: 0,
+        displayOpenFee: '',
+        displayMonthlyFee: '',
+        displayRechargeFee: '',
+        displayTransactionFee: '',
+        displayRefundFee: '',
+        displayAuthFee: '',
+        description: '',
+      });
       fetchCardTypes();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
@@ -429,7 +478,25 @@ export default function AdminPage() {
   const handleCloseCardModal = () => {
     setShowAddCard(false);
     setEditingCard(null);
-    setNewCard({ name: '', cardBin: '', issuer: '美国', openFee: 2, monthlyFee: 0.1, rechargeFee: 2, transactionFee: 0 });
+    setNewCardType({ 
+      name: '', 
+      cardBin: '', 
+      issuer: '美国', 
+      openFee: 0, 
+      monthlyFee: 0, 
+      rechargeFeePercent: 0,
+      rechargeFeeMin: 0,
+      transactionFeePercent: 0,
+      refundFee: 0,
+      authFee: 0,
+      displayOpenFee: '',
+      displayMonthlyFee: '',
+      displayRechargeFee: '',
+      displayTransactionFee: '',
+      displayRefundFee: '',
+      displayAuthFee: '',
+      description: '',
+    });
   };
 
   // 删除卡片类型
@@ -1072,8 +1139,7 @@ export default function AdminPage() {
                             'bg-red-600'
                           }`}>
                             {order.status === 'completed' ? '已完成' :
-                             order.status === 'pending' ? '待审核' :
-                             '已拒绝'}
+                             order.status === 'pending' ? '待审核' : '已拒绝'}
                           </span>
                         </td>
                         <td className="py-4 text-gray-400 text-sm">
