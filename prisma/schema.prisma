@@ -195,6 +195,9 @@ model CardType {
   // 拒付费
   chargebackFee         Float    @default(15)
   
+  // 产品说明
+  description           String?  @db.Text
+  
   // 状态
   isActive              Boolean  @default(true)
   

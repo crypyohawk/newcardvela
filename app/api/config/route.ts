@@ -8,7 +8,23 @@ export async function GET() {
     // 获取启用的卡片类型
     const cardTypes = await prisma.cardType.findMany({
       where: { isActive: true },
-      orderBy: { createdAt: 'desc' }
+      select: {
+        id: true,
+        name: true,
+        cardBin: true,
+        issuer: true,
+        displayOpenFee: true,
+        displayMonthlyFee: true,
+        displayRechargeFee: true,
+        displayTransactionFee: true,
+        displayRefundFee: true,
+        displayAuthFee: true,
+        openFee: true,
+        monthlyFee: true,
+        rechargeFeePercent: true,
+        rechargeFeeMin: true,
+        description: true,  // 添加这行
+      }
     });
 
     // 获取开卡须知
