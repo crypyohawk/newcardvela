@@ -54,7 +54,7 @@ export default function HomePage() {
               CardVela
             </span>
             <br />
-            <span className="text-3xl md:text-4xl text-gray-300">专业虚拟卡管理平台</span>
+            <span className="text-3xl md:text-4xl text-gray-300">专注海外支付跨境支付</span>
           </h1>
           <p className="text-xl text-gray-400 mb-10 max-w-2xl mx-auto">
             安全、便捷、高效的虚拟信用卡服务，支持全球主流支付场景，助您轻松管理国际支付
