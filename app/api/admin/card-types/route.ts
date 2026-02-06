@@ -41,6 +41,8 @@ export async function POST(request: NextRequest) {
         displayTransactionFee: body.displayTransactionFee,
         displayRefundFee: body.displayRefundFee,
         displayAuthFee: body.displayAuthFee,
+        // 产品说明
+        description: body.description || null,
         // 实际运行
         openFee: body.openFee || 2,
         monthlyFee: body.monthlyFee || 0.1,
