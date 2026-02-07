@@ -691,48 +691,81 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {userCards.map(card => (
-                  <div 
-                    key={card.id} 
-                    className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-4"
-                  >
+                {userCards.map(card => {
+                  const isVisa = card.cardType?.name?.toUpperCase().includes('VISA');
+                  const isMaster = card.cardType?.name?.toUpperCase().includes('MASTER');
+                  
+                  return (
                     <div 
-                      className="cursor-pointer hover:opacity-90 transition"
-                      onClick={() => { setSelectedCard(card); setShowCardDetail(true); setCardDetail(null); setCodeSent(false); setVerifyCode(''); }}
+                      key={card.id} 
+                      className={`rounded-xl p-4 ${
+                        isMaster 
+                          ? 'bg-gradient-to-br from-orange-500 to-red-600' 
+                          : 'bg-gradient-to-br from-blue-600 to-blue-800'
+                      }`}
                     >
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <span className="text-blue-200 text-sm">{card.cardType?.issuer || '美国'}</span>
-                          <h3 className="font-bold">{card.cardType?.name || 'VISA'}</h3>
+                      <div 
+                        className="cursor-pointer hover:opacity-90 transition"
+                        onClick={() => { setSelectedCard(card); setShowCardDetail(true); setCardDetail(null); setCodeSent(false); setVerifyCode(''); }}
+                      >
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <span className={`text-sm ${isMaster ? 'text-orange-200' : 'text-blue-200'}`}>{card.cardType?.issuer || '美国'}</span>
+                            <h3 className="font-bold">{card.cardType?.name || 'VISA'}</h3>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {/* 卡组织图标 */}
+                            <div className="w-10 h-6 flex items-center justify-center">
+                              {isVisa ? (
+                                <svg viewBox="0 0 48 32" className="w-full h-full">
+                                  <rect fill="#1A1F71" width="48" height="32" rx="4"/>
+                                  <text x="24" y="20" textAnchor="middle" fill="#FFFFFF" fontSize="12" fontWeight="bold" fontStyle="italic">VISA</text>
+                                </svg>
+                              ) : isMaster ? (
+                                <svg viewBox="0 0 48 32" className="w-full h-full">
+                                  <rect fill="#000000" width="48" height="32" rx="4"/>
+                                  <circle cx="18" cy="16" r="10" fill="#EB001B"/>
+                                  <circle cx="30" cy="16" r="10" fill="#F79E1B"/>
+                                  <path d="M24 8.5a10 10 0 000 15" fill="#FF5F00"/>
+                                </svg>
+                              ) : (
+                                <div className="bg-white/20 rounded px-2 py-1 text-xs font-bold">CARD</div>
+                              )}
+                            </div>
+                            <span className={`px-2 py-1 rounded text-xs ${card.status === 'active' ? 'bg-green-500' : 'bg-gray-500'}`}>
+                              {card.status === 'active' ? '正常' : card.status}
+                            </span>
+                          </div>
                         </div>
-                        <span className={`px-2 py-1 rounded text-xs ${card.status === 'active' ? 'bg-green-500' : 'bg-gray-500'}`}>
-                          {card.status === 'active' ? '正常' : card.status}
-                        </span>
+                        <div className="text-lg font-mono mb-2">**** **** **** {card.cardNoLast4 || '****'}</div>
+                        <div className={`text-center mt-2 text-xs ${isMaster ? 'text-orange-200' : 'text-blue-200'}`}>点击查看卡片详情</div>
                       </div>
-                      <div className="text-lg font-mono mb-2">**** **** **** {card.cardNoLast4 || '****'}</div>
-                      <div className="text-center mt-2 text-blue-200 text-xs">点击查看卡片详情</div>
-                    </div>
-                    
-                    {/* 余额区域 - 单独的点击事件 */}
-                    <div 
-                      className="mt-3 pt-3 border-t border-blue-500/30 cursor-pointer hover:bg-blue-700/30 rounded-lg p-2 -mx-2 transition"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedCardForRecharge(card);
-                        setCardAction('recharge');
-                        setCardRechargeAmount('');
-                      }}
-                    >
-                      <div className="flex justify-between items-center">
-                        <span className="text-blue-200">余额</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-lg">${card.balance.toFixed(2)}</span>
-                          <span className="text-xs bg-blue-500/50 px-2 py-1 rounded">充值/提现</span>
+                      
+                      {/* 余额区域 */}
+                      <div 
+                        className={`mt-3 pt-3 border-t cursor-pointer rounded-lg p-2 -mx-2 transition ${
+                          isMaster 
+                            ? 'border-orange-400/30 hover:bg-orange-600/30' 
+                            : 'border-blue-500/30 hover:bg-blue-700/30'
+                        }`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedCardForRecharge(card);
+                          setCardAction('recharge');
+                          setCardRechargeAmount('');
+                        }}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className={isMaster ? 'text-orange-200' : 'text-blue-200'}>余额</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-lg">${card.balance.toFixed(2)}</span>
+                            <span className={`text-xs px-2 py-1 rounded ${isMaster ? 'bg-orange-500/50' : 'bg-blue-500/50'}`}>充值/提现</span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
