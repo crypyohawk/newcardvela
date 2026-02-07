@@ -852,7 +852,7 @@ export default function DashboardPage() {
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <span className="text-xs opacity-70">{card.issuer}发行</span>
-                        <h3 className="text-lg font-bold">{card.name} 虚拟卡</h3>
+                        <h3 className="text-lg font-bold">{card.name}</h3>
                       </div>
                       {/* 卡组织图标 */}
                       <div className="w-12 h-8 flex items-center justify-center">
@@ -1622,7 +1622,7 @@ export default function DashboardPage() {
             )}
       
             <p className="text-gray-300 mb-4">
-              确认开通 <span className="text-blue-400 font-semibold">{selectedCardType.name}</span> 虚拟卡？
+              确认开通 <span className="text-blue-400 font-semibold">{selectedCardType.name}</span> ？
             </p>
             
             <div className="bg-slate-700 rounded-lg p-4 mb-4 space-y-2">
