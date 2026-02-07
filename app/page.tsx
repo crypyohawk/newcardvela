@@ -46,9 +46,6 @@ export default function HomePage() {
       {/* Hero 区域 */}
       <div className="max-w-7xl mx-auto px-4 py-20">
         <div className="text-center mb-16">
-          <div className="inline-block mb-6 px-4 py-2 bg-blue-600/20 rounded-full border border-blue-500/30">
-            <span className="text-blue-400 text-sm font-medium">🚀 全新虚拟卡平台上线</span>
-          </div>
           <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
             <span className="bg-gradient-to-r from-white via-blue-100 to-white bg-clip-text text-transparent">
               CardVela
