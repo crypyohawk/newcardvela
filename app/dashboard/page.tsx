@@ -568,7 +568,7 @@ export default function DashboardPage() {
       <nav className="bg-slate-800 border-b border-slate-700">
         <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <Link href="/" className="text-xl font-bold">CardVela</Link>
+            <Link href="/" className="text-xl font-bold">CardVela卡维拉</Link>
             {supportEmail && (
               <span className="text-gray-400 text-sm">
                 客服邮箱：<a href={`mailto:${supportEmail}`} className="text-blue-400 hover:text-blue-300">{supportEmail}</a>
@@ -812,68 +812,84 @@ export default function DashboardPage() {
             {cardTypes.length === 0 ? (
               <div className="bg-slate-800 rounded-xl p-6 text-center text-gray-400">暂无可用卡片类型</div>
             ) : (
-              <div className="grid md:grid-cols-2 gap-6">
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {cardTypes.map(card => (
-                  <div key={card.id} className={`rounded-2xl p-6 ${card.name.includes('VISA') ? 'bg-gradient-to-br from-blue-600 to-blue-800' : 'bg-gradient-to-br from-orange-500 to-red-600'}`}>
-                    <div className="flex justify-between items-start mb-4">
+                  <div key={card.id} className={`rounded-xl p-5 ${card.name.toUpperCase().includes('VISA') ? 'bg-gradient-to-br from-blue-600 to-blue-800' : 'bg-gradient-to-br from-orange-500 to-red-600'}`}>
+                    {/* 卡头部 - 发行地区和卡组织图标 */}
+                    <div className="flex justify-between items-start mb-3">
                       <div>
-                        <span className="text-sm opacity-80">{card.issuer}发行</span>
-                        <h3 className="text-xl font-bold">{card.name} 虚拟卡</h3>
+                        <span className="text-xs opacity-70">{card.issuer}发行</span>
+                        <h3 className="text-lg font-bold">{card.name} 虚拟卡</h3>
+                      </div>
+                      {/* 卡组织图标 */}
+                      <div className="w-12 h-8 flex items-center justify-center">
+                        {card.name.toUpperCase().includes('VISA') ? (
+                          <svg viewBox="0 0 48 32" className="w-full h-full">
+                            <rect fill="#1A1F71" width="48" height="32" rx="4"/>
+                            <text x="24" y="20" textAnchor="middle" fill="#FFFFFF" fontSize="12" fontWeight="bold" fontStyle="italic">VISA</text>
+                          </svg>
+                        ) : card.name.toUpperCase().includes('MASTER') ? (
+                          <svg viewBox="0 0 48 32" className="w-full h-full">
+                            <rect fill="#000000" width="48" height="32" rx="4"/>
+                            <circle cx="18" cy="16" r="10" fill="#EB001B"/>
+                            <circle cx="30" cy="16" r="10" fill="#F79E1B"/>
+                            <path d="M24 8.5a10 10 0 000 15" fill="#FF5F00"/>
+                          </svg>
+                        ) : (
+                          <div className="bg-white/20 rounded px-2 py-1 text-xs font-bold">CARD</div>
+                        )}
                       </div>
                     </div>
                     
-                    {/* 费用信息 - 使用 display 字段 */}
-                    <div className="space-y-2 text-sm mb-4 opacity-90">
+                    {/* 费用信息 - 紧凑布局 */}
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mb-3">
                       <div className="flex justify-between">
-                        <span>开卡费:</span>
-                        <span className="font-semibold">${card.displayOpenFee ?? card.openFee}</span>
+                        <span className="opacity-70">开卡费:</span>
+                        <span className="font-medium">${card.displayOpenFee ?? card.openFee}</span>
                       </div>
                       {(card.displayMonthlyFee !== null && card.displayMonthlyFee !== undefined) && (
                         <div className="flex justify-between">
-                          <span>月费:</span>
+                          <span className="opacity-70">月费:</span>
                           <span>${card.displayMonthlyFee}</span>
                         </div>
                       )}
                       {card.displayRechargeFee && (
                         <div className="flex justify-between">
-                          <span>充值费:</span>
+                          <span className="opacity-70">充值费:</span>
                           <span>{card.displayRechargeFee}</span>
                         </div>
                       )}
                       {card.displayTransactionFee && (
                         <div className="flex justify-between">
-                          <span>交易费:</span>
+                          <span className="opacity-70">交易费:</span>
                           <span>{card.displayTransactionFee}</span>
                         </div>
                       )}
                       {card.displayAuthFee && (
                         <div className="flex justify-between">
-                          <span>授权费:</span>
+                          <span className="opacity-70">授权费:</span>
                           <span>{card.displayAuthFee}</span>
                         </div>
                       )}
                       {card.displayRefundFee && (
                         <div className="flex justify-between">
-                          <span>退款费:</span>
+                          <span className="opacity-70">退款费:</span>
                           <span>{card.displayRefundFee}</span>
                         </div>
                       )}
                     </div>
                     
-                    {/* 产品说明 - 新增 */}
+                    {/* 产品说明 */}
                     {card.description && (
-                      <div className="mt-4 pt-4 border-t border-white/20">
-                        <p className="text-xs text-gray-200 leading-relaxed">
-                          <span className="text-gray-300 font-medium">产品说明：</span><br/>
-                          {card.description}
-                        </p>
+                      <div className="text-xs opacity-80 mb-3 leading-relaxed border-t border-white/20 pt-2">
+                        {card.description}
                       </div>
                     )}
                     
                     <button 
                       onClick={() => handleOpenCard(card)}
                       disabled={openingCard === card.id}
-                      className="w-full bg-white text-slate-800 py-3 rounded-lg font-semibold hover:bg-gray-100 disabled:opacity-50"
+                      className="w-full bg-white text-slate-800 py-2.5 rounded-lg font-semibold hover:bg-gray-100 disabled:opacity-50 text-sm"
                     >
                       {openingCard === card.id ? '开卡中...' : '开通此卡'}
                     </button>
@@ -882,7 +898,7 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* 订阅服务时的持卡人信息填写推荐 - 显示在卡片类型下方 */}
+            {/* 订阅服务时的持卡人信息填写推荐 */}
             {billingExamples.length > 0 && (
               <div className="bg-blue-900/30 border border-blue-700 rounded-xl p-5 mt-6">
                 <h3 className="font-bold text-blue-300 mb-4">📋 订阅服务时的持卡人信息填写推荐：</h3>
