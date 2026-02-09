@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '../../../../src/lib/db';
-import { verifyAdmin, adminError } from '../../../../src/lib/adminAuth';
+import { prisma } from '../../../../src/lib/prisma';
+import { verifyAdmin } from '../../../../src/lib/adminAuth';
 
 // 获取所有用户
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
-  if (!admin) return adminError();
+  if (!admin) {
+    return NextResponse.json({ error: '无权限' }, { status: 401 });
+  }
 
   try {
-    const users = await db.user.findMany({
+    const users = await prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
     });
     return NextResponse.json({ users });
@@ -17,8 +19,43 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// 用户操作
+// 更新用户角色
+export async function PUT(request: NextRequest) {
+  const admin = await verifyAdmin(request);
+  if (!admin) {
+    return NextResponse.json({ error: '无权限' }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const { userId, role } = body;
+
+    if (!userId || !role) {
+      return NextResponse.json({ error: '参数不完整' }, { status: 400 });
+    }
+
+    if (!['user', 'agent'].includes(role)) {
+      return NextResponse.json({ error: '无效的角色' }, { status: 400 });
+    }
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { role },
+    });
+
+    return NextResponse.json({ success: true, user });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// 用户操作（余额调整）
 export async function POST(request: NextRequest) {
+  const admin = await verifyAdmin(request);
+  if (!admin) {
+    return NextResponse.json({ error: '无权限' }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const { action, userId, amount } = body;
@@ -28,13 +65,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: '参数不完整' }, { status: 400 });
       }
 
-      const user = await db.user.update({
+      const user = await prisma.user.update({
         where: { id: userId },
         data: { balance: { increment: amount } },
       });
 
       // 记录交易
-      await db.transaction.create({
+      await prisma.transaction.create({
         data: {
           userId,
           type: amount > 0 ? 'deposit' : 'withdraw',

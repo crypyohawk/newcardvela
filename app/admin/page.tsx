@@ -588,6 +588,27 @@ export default function AdminPage() {
     }
   };
 
+  // 设置用户角色（添加在这里，组件内部）
+  const handleSetUserRole = async (userId: string, newRole: string) => {
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ userId, role: newRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setMessage({ type: 'success', text: newRole === 'agent' ? '已设为代理商' : '已取消代理商' });
+      fetchUsers();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
   const [returnAmount, setReturnAmount] = useState<string>('');
   // 添加退款手续费输入状态
   const [deductFees, setDeductFees] = useState<Record<string, string>>({});
@@ -923,6 +944,7 @@ export default function AdminPage() {
                     <th className="pb-3">余额</th>
                     <th className="pb-3">角色</th>
                     <th className="pb-3">注册时间</th>
+                    <th className="pb-3">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -932,11 +954,31 @@ export default function AdminPage() {
                       <td className="py-4">{user.email}</td>
                       <td className="py-4 text-green-400">${user.balance.toFixed(2)}</td>
                       <td className="py-4">
-                        <span className={`px-2 py-1 rounded text-xs ${user.role === 'admin' ? 'bg-purple-600' : 'bg-gray-600'}`}>
-                          {user.role}
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          user.role === 'admin' ? 'bg-purple-600' : 
+                          user.role === 'agent' ? 'bg-orange-600' : 
+                          'bg-gray-600'
+                        }`}>
+                          {user.role === 'admin' ? '管理员' : 
+                           user.role === 'agent' ? '代理商' : 
+                           '普通用户'}
                         </span>
                       </td>
                       <td className="py-4 text-gray-400">{new Date(user.createdAt).toLocaleDateString()}</td>
+                      <td className="py-4">
+                        {user.role !== 'admin' && (
+                          <button
+                            onClick={() => handleSetUserRole(user.id, user.role === 'agent' ? 'user' : 'agent')}
+                            className={`px-3 py-1 rounded text-xs ${
+                              user.role === 'agent' 
+                                ? 'bg-gray-600 hover:bg-gray-500' 
+                                : 'bg-orange-600 hover:bg-orange-700'
+                            }`}
+                          >
+                            {user.role === 'agent' ? '取消代理' : '设为代理'}
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1460,3 +1502,7 @@ export default function AdminPage() {
     </div>
   );
 }
+
+
+
+

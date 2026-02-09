@@ -140,10 +140,13 @@ export default function DashboardPage() {
 
   const fetchData = async () => {
     try {
+      const token = localStorage.getItem('token');
       const [configRes, cardsRes] = await Promise.all([
-        fetch('/api/config'),
+        fetch('/api/config', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
         fetch('/api/user/cards', {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+          headers: { 'Authorization': `Bearer ${token}` }
         })
       ]);
       

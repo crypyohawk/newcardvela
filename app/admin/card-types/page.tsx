@@ -37,6 +37,7 @@ interface CardType {
   description: string | null;  // 新增
   isActive: boolean;
   createdAt: string;
+  targetRole: string;  // 新增这一行
 }
 
 export default function CardTypesPage() {
@@ -79,6 +80,7 @@ export default function CardTypesPage() {
     crossBorderFeeMin: 0,
     chargebackFee: 15,
     description: '',  // 新增
+    targetRole: 'user',  // 新增这一行
     isActive: true,
   });
 
@@ -139,7 +141,8 @@ export default function CardTypesPage() {
         crossBorderFeePercent: card.crossBorderFeePercent || 1,
         crossBorderFeeMin: card.crossBorderFeeMin || 0,
         chargebackFee: card.chargebackFee || 15,
-        description: card.description || '',  // 新增
+        description: card.description || '',
+        targetRole: card.targetRole || 'user',  // 新增这一行
         isActive: card.isActive,
       });
     } else {
@@ -172,6 +175,7 @@ export default function CardTypesPage() {
         crossBorderFeeMin: 0,
         chargebackFee: 15,
         description: '',  // 新增
+        targetRole: 'user',  // 新增这一行
         isActive: true,
       });
     }
@@ -284,6 +288,7 @@ export default function CardTypesPage() {
                     <th className="pb-3">发行地</th>
                     <th className="pb-3">显示开卡费</th>
                     <th className="pb-3">实际开卡费</th>
+                    <th className="pb-3">适用对象</th>  {/* 新增 */}
                     <th className="pb-3">状态</th>
                     <th className="pb-3">操作</th>
                   </tr>
@@ -296,6 +301,11 @@ export default function CardTypesPage() {
                       <td className="py-4">{card.issuer}</td>
                       <td className="py-4 text-blue-400">${card.displayOpenFee ?? card.openFee}</td>
                       <td className="py-4 text-green-400">${card.openFee}</td>
+                      <td className="py-4">
+                        <span className={`px-2 py-1 rounded text-xs ${card.targetRole === 'agent' ? 'bg-purple-600' : 'bg-blue-600'}`}>
+                          {card.targetRole === 'agent' ? '代理商' : '普通用户'}
+                        </span>
+                      </td>
                       <td className="py-4">
                         <button
                           onClick={() => handleToggleStatus(card)}
@@ -346,6 +356,19 @@ export default function CardTypesPage() {
                     <option value="英国">英国</option>
                   </select>
                 </div>
+              </div>
+
+              {/* 适用对象 */}
+              <div className="mb-4">
+                <label className="block text-sm text-gray-400 mb-1">适用对象</label>
+                <select 
+                  value={formData.targetRole} 
+                  onChange={(e) => setFormData({ ...formData, targetRole: e.target.value })} 
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                >
+                  <option value="user">普通用户</option>
+                  <option value="agent">代理商</option>
+                </select>
               </div>
 
               {/* 切换标签 */}

@@ -1,13 +1,39 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '../../../src/lib/prisma';
+import jwt from 'jsonwebtoken';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    // 获取启用的卡片类型
+    // 获取用户角色（如果已登录）
+    let userRole = 'user';
+    const authHeader = request.headers.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.substring(7);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+        if (decoded?.userId) {
+          const user = await prisma.user.findUnique({
+            where: { id: decoded.userId },
+            select: { role: true }
+          });
+          if (user?.role) {
+            userRole = user.role;
+          }
+        }
+      } catch (e) {
+        // token 无效，使用默认角色
+      }
+    }
+
+    // 根据用户角色过滤卡片类型
+    // admin 可以看到所有，普通用户看 user，代理商看 agent
     const cardTypes = await prisma.cardType.findMany({
-      where: { isActive: true },
+      where: { 
+        isActive: true,
+        targetRole: userRole === 'admin' ? undefined : userRole
+      },
       select: {
         id: true,
         name: true,
@@ -23,7 +49,8 @@ export async function GET() {
         monthlyFee: true,
         rechargeFeePercent: true,
         rechargeFeeMin: true,
-        description: true,  // 添加这行
+        description: true,
+        targetRole: true,  // 新增
       }
     });
 
@@ -63,12 +90,11 @@ export async function GET() {
         promptText: configMap['referral_prompt_text'] || '邀请好友注册并开卡，双方各得奖励！',
         rewardAmount: parseFloat(configMap['referral_reward_amount'] || '5'),
       },
-      // 统一使用 withdraw_ 前缀，与后端提现API和管理后台一致
       withdrawConfig: {
         accountMinAmount: parseFloat(configMap['withdraw_min_amount'] || '10'),
         accountMaxAmount: parseFloat(configMap['withdraw_max_amount'] || '500'),
-        accountFeePercent: parseFloat(configMap['withdraw_fee_percent'] || '5'),  // 5%
-        accountFeeMin: parseFloat(configMap['withdraw_fee_min'] || '2'),           // 最低$2
+        accountFeePercent: parseFloat(configMap['withdraw_fee_percent'] || '5'),
+        accountFeeMin: parseFloat(configMap['withdraw_fee_min'] || '2'),
         cardFeePercent: parseFloat(configMap['card_withdraw_fee_percent'] || '1'),
         cardFeeMin: parseFloat(configMap['card_withdraw_fee'] || '1.5'),
       },
