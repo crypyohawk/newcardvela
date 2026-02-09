@@ -49,6 +49,7 @@ export default function CardTypesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingCard, setEditingCard] = useState<CardType | null>(null);
   const [activeSection, setActiveSection] = useState<'display' | 'actual'>('display');
+  const [submitting, setSubmitting] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -189,6 +190,19 @@ export default function CardTypesPage() {
   };
 
   const handleSubmit = async () => {
+    if (submitting) return;
+    
+    // 基本验证
+    if (!formData.name.trim()) {
+      setMessage({ type: 'error', text: '请填写卡片名称' });
+      return;
+    }
+    if (!formData.cardBin.trim()) {
+      setMessage({ type: 'error', text: '请填写卡产品编号' });
+      return;
+    }
+
+    setSubmitting(true);
     try {
       const url = editingCard
         ? `/api/admin/card-types/${editingCard.id}`
@@ -212,6 +226,8 @@ export default function CardTypesPage() {
       fetchCardTypes();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -544,9 +560,12 @@ export default function CardTypesPage() {
                 <label htmlFor="isActive" className="text-sm text-gray-400">启用此卡片类型</label>
               </div>
 
+              {/* 在弹窗底部按钮处 */}
               <div className="flex gap-3 mt-6">
                 <button onClick={handleCloseModal} className="flex-1 bg-slate-600 py-2 rounded-lg hover:bg-slate-500">取消</button>
-                <button onClick={handleSubmit} className="flex-1 bg-blue-600 py-2 rounded-lg hover:bg-blue-700">{editingCard ? '保存' : '添加'}</button>
+                <button onClick={handleSubmit} disabled={submitting} className="flex-1 bg-blue-600 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                  {submitting ? '提交中...' : editingCard ? '保存' : '添加'}
+                </button>
               </div>
             </div>
           </div>

@@ -16,6 +16,21 @@ export async function PUT(
     const body = await request.json();
     const { id } = params;
 
+    // 检查 cardBin + targetRole 组合是否与其他记录冲突
+    if (body.cardBin) {
+      const existing = await prisma.cardType.findFirst({
+        where: {
+          cardBin: body.cardBin,
+          targetRole: body.targetRole || 'user',
+          id: { not: id },
+        },
+      });
+      if (existing) {
+        const roleName = (body.targetRole || 'user') === 'agent' ? '代理商' : '普通用户';
+        return NextResponse.json({ error: `卡产品编号 "${body.cardBin}" 的${roleName}版本已被其他卡片类型使用` }, { status: 400 });
+      }
+    }
+
     const cardType = await prisma.cardType.update({
       where: { id },
       data: {

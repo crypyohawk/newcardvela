@@ -148,7 +148,7 @@ model SystemSettings {
 model CardType {
   id                    String   @id @default(cuid())
   name                  String
-  cardBin               String   @unique
+  cardBin               String   // 移除了单字段@unique约束
   issuer                String   @default("美国")
   
   // ========== 用户端显示费率（仅展示） ==========
@@ -210,6 +210,9 @@ model CardType {
   // 关联 - 添加反向关联
   cards                 Card[]
   userCards             UserCard[]
+
+  // 核心修改：添加复合唯一约束（cardBin + targetRole）
+  @@unique([cardBin, targetRole])
 }
 
 model OpenCardNotice {

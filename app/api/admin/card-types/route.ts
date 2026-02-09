@@ -29,6 +29,18 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    // 检查 cardBin + targetRole 组合是否已存在
+    const existing = await prisma.cardType.findFirst({
+      where: {
+        cardBin: body.cardBin,
+        targetRole: body.targetRole || 'user',
+      },
+    });
+    if (existing) {
+      const roleName = (body.targetRole || 'user') === 'agent' ? '代理商' : '普通用户';
+      return NextResponse.json({ error: `卡产品编号 "${body.cardBin}" 的${roleName}版本已存在` }, { status: 400 });
+    }
+
     const cardType = await prisma.cardType.create({
       data: {
         name: body.name,
