@@ -130,19 +130,19 @@ model SystemConfig {
 
 model SystemSettings {
   id                      String   @id @default(cuid())
-  // ...existing fields...
   
   // 账户提现配置
-  accountWithdrawMinAmount    Float    @default(2)      // 账户提现最低金额
-  accountWithdrawMaxAmount    Float    @default(500)    // 账户提现最高金额
-  accountWithdrawFeePercent   Float    @default(5)      // 账户提现手续费百分比
-  accountWithdrawFeeMin       Float    @default(2)      // 账户提现最低手续费
+  accountWithdrawMinAmount    Float    @default(2)
+  accountWithdrawMaxAmount    Float    @default(500)
+  accountWithdrawFeePercent   Float    @default(5)
+  accountWithdrawFeeMin       Float    @default(2)
   
   // 卡片提现配置
-  cardWithdrawFeePercent      Float    @default(1)      // 卡片提现手续费百分比
-  cardWithdrawFeeMin          Float    @default(1)      // 卡片提现最低手续费
+  cardWithdrawFeePercent      Float    @default(1)
+  cardWithdrawFeeMin          Float    @default(1)
   
-  // ...existing code...
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 }
 
 model CardType {
