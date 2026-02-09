@@ -602,10 +602,45 @@ export default function DashboardPage() {
       </nav>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* 消息提示 */}
+        {/* 消息弹窗 */}
         {message && (
-          <div className={`mb-6 p-4 rounded-lg ${message.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
-            {message.text}
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+            <div className={`mx-4 p-6 rounded-xl shadow-2xl max-w-sm w-full ${message.type === 'success' ? 'bg-green-600' : 'bg-slate-800 border border-red-500'}`}>
+              <div className="text-center">
+                {/* 图标 */}
+                <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${message.type === 'success' ? 'bg-green-500' : 'bg-red-500/20'}`}>
+                  {message.type === 'success' ? (
+                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  )}
+                </div>
+                
+                {/* 标题 */}
+                <h3 className={`text-xl font-bold mb-2 ${message.type === 'success' ? 'text-white' : 'text-red-400'}`}>
+                  {message.type === 'success' ? '操作成功' : '操作失败'}
+                </h3>
+                
+                {/* 消息内容 */}
+                <p className="text-gray-300 mb-6">{message.text}</p>
+                
+                {/* 确认按钮 */}
+                <button 
+                  onClick={() => setMessage(null)}
+                  className={`w-full py-3 rounded-lg font-semibold transition ${
+                    message.type === 'success' 
+                      ? 'bg-white text-green-600 hover:bg-gray-100' 
+                      : 'bg-red-500 text-white hover:bg-red-600'
+                  }`}
+                >
+                  我知道了
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
