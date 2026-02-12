@@ -23,17 +23,74 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '请输入有效的充值金额' }, { status: 400 });
     }
 
-    // 5分钟内最多提交2次充值
+    // 阶梯式频率限制
+    // 检查5分钟内的订单数
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-    const recentOrders = await db.transaction.count({
+    const recentOrders5min = await db.transaction.count({
       where: {
         userId: payload.userId,
         type: 'recharge',
         createdAt: { gte: fiveMinutesAgo },
       },
     });
-    if (recentOrders >= 2) {
-      return NextResponse.json({ error: '操作过于频繁，请5分钟后再试（每5分钟最多提交2次充值）' }, { status: 429 });
+
+    if (recentOrders5min >= 2) {
+      // 已触发5分钟限制，检查是否是累犯
+      // 统计1小时内被限制后仍然尝试的次数（1小时内总订单数）
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const recentOrders1h = await db.transaction.count({
+        where: {
+          userId: payload.userId,
+          type: 'recharge',
+          createdAt: { gte: oneHourAgo },
+        },
+      });
+
+      if (recentOrders1h >= 10) {
+        // 第3级：1小时内超过10次，锁定1小时
+        const lastOrder = await db.transaction.findFirst({
+          where: { userId: payload.userId, type: 'recharge' },
+          orderBy: { createdAt: 'desc' },
+        });
+        const timeSinceLast = lastOrder ? Date.now() - new Date(lastOrder.createdAt).getTime() : 0;
+        const waitMinutes = Math.ceil((60 * 60 * 1000 - timeSinceLast) / 60000);
+        return NextResponse.json({ 
+          error: `操作过于频繁，账户已被临时限制充值，请${waitMinutes}分钟后再试` 
+        }, { status: 429 });
+      }
+
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+      const recentOrders30min = await db.transaction.count({
+        where: {
+          userId: payload.userId,
+          type: 'recharge',
+          createdAt: { gte: thirtyMinutesAgo },
+        },
+      });
+
+      if (recentOrders30min >= 6) {
+        // 第2级：30分钟内超过6次，等待30分钟
+        const lastOrder = await db.transaction.findFirst({
+          where: { userId: payload.userId, type: 'recharge' },
+          orderBy: { createdAt: 'desc' },
+        });
+        const timeSinceLast = lastOrder ? Date.now() - new Date(lastOrder.createdAt).getTime() : 0;
+        const waitMinutes = Math.ceil((30 * 60 * 1000 - timeSinceLast) / 60000);
+        return NextResponse.json({ 
+          error: `操作频繁，请${waitMinutes}分钟后再试` 
+        }, { status: 429 });
+      }
+
+      // 第1级：5分钟内超过2次，等待5分钟
+      const lastOrder = await db.transaction.findFirst({
+        where: { userId: payload.userId, type: 'recharge' },
+        orderBy: { createdAt: 'desc' },
+      });
+      const timeSinceLast = lastOrder ? Date.now() - new Date(lastOrder.createdAt).getTime() : 0;
+      const waitMinutes = Math.ceil((5 * 60 * 1000 - timeSinceLast) / 60000);
+      return NextResponse.json({ 
+        error: `请勿频繁操作，请${waitMinutes}分钟后再试` 
+      }, { status: 429 });
     }
 
     // 检查是否首次充值

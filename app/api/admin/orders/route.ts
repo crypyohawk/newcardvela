@@ -5,11 +5,14 @@ import { verifyAdmin, adminError } from '../../../../src/lib/adminAuth';
 // 获取所有充值订单
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
-  if (!admin) return adminError();
+  if (!admin) return adminError('未授权');
 
   try {
     const orders = await db.transaction.findMany({
-      where: { type: 'recharge' },
+      where: { 
+        type: 'recharge',
+        status: { not: 'pending' },  // 不显示未提交凭证的订单
+      },
       include: {
         user: { select: { id: true, username: true, email: true } },
       },
@@ -24,7 +27,7 @@ export async function GET(request: NextRequest) {
 // 订单操作（确认/拒绝）
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin(request);
-  if (!admin) return adminError();
+  if (!admin) return adminError('未授权');
 
   try {
     const body = await request.json();
