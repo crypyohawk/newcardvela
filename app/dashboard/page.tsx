@@ -1148,7 +1148,7 @@ export default function DashboardPage() {
                 {/* 所有支付方式都必须上传截图 */}
                 <div className="mb-4">
                   <label className="block text-sm text-gray-400 mb-2">
-                    上传付款截图 <span className="text-red-400">*必填</span>
+                    上传付款截图 {paymentInfo?.type === 'usdt' ? '（选填）' : <span className="text-red-400">*必填</span>}
                   </label>
                   <input
                     type="file"
@@ -1172,7 +1172,9 @@ export default function DashboardPage() {
                       <>
                         <div className="text-2xl mb-1">📷</div>
                         <div className="text-gray-400 text-sm">点击上传付款截图</div>
-                        <div className="text-red-400 text-xs mt-1">提交前必须上传付款截图</div>
+                        {paymentInfo?.type !== 'usdt' && (
+                          <div className="text-red-400 text-xs mt-1">提交前必须上传付款截图</div>
+                        )}
                       </>
                     )}
                   </label>
@@ -1193,10 +1195,10 @@ export default function DashboardPage() {
                   </button>
                   <button 
                     onClick={handleSubmitPayment} 
-                    disabled={submitting || !paymentProof}
+                    disabled={submitting || (paymentInfo?.type !== 'usdt' && !paymentProof) || (paymentInfo?.type === 'usdt' && !txHash && !paymentProof)}
                     className="flex-1 bg-green-600 py-3 rounded-lg disabled:opacity-50 hover:bg-green-700"
                   >
-                    {submitting ? '提交中...' : !paymentProof ? '请先上传截图' : '我已支付'}
+                    {submitting ? '提交中...' : (paymentInfo?.type !== 'usdt' && !paymentProof) ? '请先上传截图' : '我已支付'}
                   </button>
                 </div>
               </div>

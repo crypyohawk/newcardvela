@@ -27,6 +27,11 @@ export async function PUT(
       return NextResponse.json({ error: '请上传付款截图后再提交' }, { status: 400 });
     }
 
+    // 微信/支付宝必须上传截图，USDT可以提交哈希或截图
+    if (!paymentProof && !txHash) {
+      return NextResponse.json({ error: '请上传付款截图或填写交易哈希' }, { status: 400 });
+    }
+
     const order = await db.transaction.findFirst({
       where: { 
         id: params.id, 
