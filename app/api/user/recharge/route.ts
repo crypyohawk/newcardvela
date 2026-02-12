@@ -23,6 +23,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '请输入有效的充值金额' }, { status: 400 });
     }
 
+    // 5分钟内最多提交2次充值
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const recentOrders = await db.transaction.count({
+      where: {
+        userId: payload.userId,
+        type: 'recharge',
+        createdAt: { gte: fiveMinutesAgo },
+      },
+    });
+    if (recentOrders >= 2) {
+      return NextResponse.json({ error: '操作过于频繁，请5分钟后再试（每5分钟最多提交2次充值）' }, { status: 429 });
+    }
+
     // 检查是否首次充值
     const previousRecharge = await db.transaction.findFirst({
       where: { 

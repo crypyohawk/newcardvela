@@ -1145,32 +1145,38 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                {/* 微信/支付宝上传截图 */}
-                {(paymentInfo?.type === 'wechat' || paymentInfo?.type === 'alipay') && (
-                  <div className="mb-4">
-                    <label className="block text-sm text-gray-400 mb-2">上传支付截图</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                      id="payment-proof"
-                    />
-                    <label
-                      htmlFor="payment-proof"
-                      className="block bg-slate-700 border-2 border-dashed border-slate-600 rounded-lg p-4 text-center cursor-pointer hover:border-blue-500"
-                    >
-                      {paymentProof ? (
+                {/* 所有支付方式都必须上传截图 */}
+                <div className="mb-4">
+                  <label className="block text-sm text-gray-400 mb-2">
+                    上传付款截图 <span className="text-red-400">*必填</span>
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                    id="payment-proof"
+                  />
+                  <label
+                    htmlFor="payment-proof"
+                    className={`block bg-slate-700 border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-blue-500 ${
+                      paymentProof ? 'border-green-500' : 'border-slate-600'
+                    }`}
+                  >
+                    {paymentProof ? (
+                      <div>
                         <img src={paymentProof} alt="支付截图" className="max-h-40 mx-auto rounded" />
-                      ) : (
-                        <>
-                          <div className="text-2xl mb-1">📷</div>
-                          <div className="text-gray-400 text-sm">点击上传支付截图</div>
-                        </>
-                      )}
-                    </label>
-                  </div>
-                )}
+                        <p className="text-green-400 text-sm mt-2">✅ 已上传，点击更换</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-2xl mb-1">📷</div>
+                        <div className="text-gray-400 text-sm">点击上传付款截图</div>
+                        <div className="text-red-400 text-xs mt-1">提交前必须上传付款截图</div>
+                      </>
+                    )}
+                  </label>
+                </div>
 
                 <div className="flex gap-3">
                   <button 
@@ -1187,14 +1193,10 @@ export default function DashboardPage() {
                   </button>
                   <button 
                     onClick={handleSubmitPayment} 
-                    disabled={
-                      submitting || 
-                      (paymentInfo?.type === 'usdt' && !txHash) || 
-                      ((paymentInfo?.type === 'wechat' || paymentInfo?.type === 'alipay') && !paymentProof)
-                    } 
+                    disabled={submitting || !paymentProof}
                     className="flex-1 bg-green-600 py-3 rounded-lg disabled:opacity-50 hover:bg-green-700"
                   >
-                    {submitting ? '提交中...' : '我已支付'}
+                    {submitting ? '提交中...' : !paymentProof ? '请先上传截图' : '我已支付'}
                   </button>
                 </div>
               </div>

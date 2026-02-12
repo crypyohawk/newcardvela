@@ -22,6 +22,11 @@ export async function PUT(
 
     console.log('[提交支付凭证]', { orderId: params.id, txHash: !!txHash, paymentProof: !!paymentProof });
 
+    // 必须上传付款截图
+    if (!paymentProof) {
+      return NextResponse.json({ error: '请上传付款截图后再提交' }, { status: 400 });
+    }
+
     const order = await db.transaction.findFirst({
       where: { 
         id: params.id, 
@@ -35,13 +40,13 @@ export async function PUT(
       return NextResponse.json({ error: '订单不存在或已处理' }, { status: 404 });
     }
 
-    // 更新订单 - 添加 txHash 保存
+    // 更新订单
     await db.transaction.update({
       where: { id: params.id },
       data: { 
         status: 'processing',
         txHash: txHash || undefined,
-        paymentProof: paymentProof || undefined,
+        paymentProof: paymentProof,
       },
     });
 
