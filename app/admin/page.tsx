@@ -1446,11 +1446,19 @@ export default function AdminPage() {
 
         {/* 凭证查看弹窗 */}
         {selectedOrder && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-slate-800 p-6 rounded-xl w-full max-w-lg">
-              <h3 className="text-lg font-bold mb-4">
-                {selectedOrder.type === 'withdraw' ? '收款信息' : '支付凭证'}
-              </h3>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedOrder(null)}>
+            <div className="bg-slate-800 p-6 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold">
+                  {selectedOrder.type === 'withdraw' ? '收款信息' : '支付凭证'}
+                </h3>
+                <button
+                  onClick={() => setSelectedOrder(null)}
+                  className="text-gray-400 hover:text-white text-2xl leading-none px-2"
+                >
+                  ✕
+                </button>
+              </div>
               
               {selectedOrder.txHash && !selectedOrder.txHash.startsWith('data:image') && (
                 <div className="mb-4">
@@ -1480,7 +1488,7 @@ export default function AdminPage() {
                   <img 
                     src={selectedOrder.paymentProof} 
                     alt="支付截图" 
-                    className="max-w-full rounded-lg"
+                    className="max-w-full max-h-96 mx-auto rounded-lg"
                   />
                 </div>
               )}
