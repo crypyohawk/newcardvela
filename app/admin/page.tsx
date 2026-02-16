@@ -1447,7 +1447,7 @@ export default function AdminPage() {
         {/* 凭证查看弹窗 */}
         {selectedOrder && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedOrder(null)}>
-            <div className="bg-slate-800 p-6 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-slate-800 p-6 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold">
                   {selectedOrder.type === 'withdraw' ? '收款信息' : '支付凭证'}
@@ -1474,22 +1474,28 @@ export default function AdminPage() {
               {selectedOrder.txHash?.startsWith('data:image') && (
                 <div className="mb-4">
                   <label className="block text-sm text-gray-400 mb-2">收款码</label>
-                  <img 
-                    src={selectedOrder.txHash} 
-                    alt="收款码" 
-                    className="max-w-full max-h-80 mx-auto rounded-lg"
-                  />
+                  <a href={selectedOrder.txHash} target="_blank" rel="noopener noreferrer" title="点击新窗口查看原图">
+                    <img 
+                      src={selectedOrder.txHash} 
+                      alt="收款码" 
+                      className="w-full rounded-lg cursor-zoom-in hover:opacity-90"
+                    />
+                  </a>
+                  <p className="text-center text-gray-500 text-xs mt-1">点击图片可在新窗口查看原图</p>
                 </div>
               )}
               
               {selectedOrder.paymentProof && (
                 <div className="mb-4">
                   <label className="block text-sm text-gray-400 mb-2">支付截图</label>
-                  <img 
-                    src={selectedOrder.paymentProof} 
-                    alt="支付截图" 
-                    className="max-w-full max-h-96 mx-auto rounded-lg"
-                  />
+                  <a href={selectedOrder.paymentProof} target="_blank" rel="noopener noreferrer" title="点击新窗口查看原图">
+                    <img 
+                      src={selectedOrder.paymentProof} 
+                      alt="支付截图" 
+                      className="w-full rounded-lg cursor-zoom-in hover:opacity-90"
+                    />
+                  </a>
+                  <p className="text-center text-gray-500 text-xs mt-1">点击图片可在新窗口查看原图</p>
                 </div>
               )}
 
