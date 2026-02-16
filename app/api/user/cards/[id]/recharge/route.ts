@@ -25,7 +25,7 @@ export async function POST(
       return NextResponse.json({ error: '充值金额无效' }, { status: 400 });
     }
 
-    // 获取卡片类型信息时，确保包含 rechargeFee
+    // 获取卡片类型信息
     const card = await db.userCard.findUnique({
       where: { id: params.id },
       include: { 
@@ -34,7 +34,8 @@ export async function POST(
             id: true,
             name: true,
             openFee: true,
-            rechargeFeePercent: true,  // 使用正确的字段名
+            rechargeFeePercent: true,
+            rechargeFeeMin: true,
           }
         } 
       },
@@ -55,51 +56,56 @@ export async function POST(
 
       if (cardInfo.status !== 'ACTIVE') {
         return NextResponse.json(
-          {
-            error: `卡片状态为 ${cardInfo.status}，只有 ACTIVE 状态的卡才能充值`,
-          },
+          { error: `卡片状态为 ${cardInfo.status}，只有 ACTIVE 状态的卡才能充值` },
           { status: 400 }
         );
       }
     } catch (err: any) {
       console.error('查询卡状态失败:', err);
-      // 继续尝试充值
     }
 
-    // 使用正确的字段名
-    const rechargeFee = amount * (card.cardType.rechargeFeePercent / 100);
-    const fee = amount * rechargeFee;
-    const totalCost = amount + fee;
+    // 计算手续费：从充值金额中扣除
+    const feePercent = card.cardType.rechargeFeePercent || 2;
+    const feeMin = card.cardType.rechargeFeeMin || 0.5;
+    const percentFee = amount * (feePercent / 100);
+    const fee = Math.max(percentFee, feeMin);
+    const cardReceive = amount - fee; // 卡实际到账金额
 
-    const user = await db.user.findUnique({ where: { id: payload.userId } });
-    if (!user || user.balance < totalCost) {
+    if (cardReceive <= 0) {
       return NextResponse.json(
-        {
-          error: `账户余额不足，需要 $${totalCost.toFixed(2)}（含手续费）`,
-        },
+        { error: `充值金额太小，扣除手续费$${fee.toFixed(2)}后无法到账` },
         { status: 400 }
       );
     }
 
-    // 调用上游充值接口（金额单位：元，不是分！）
+    // 检查余额：账户扣除 = 用户输入金额
+    const user = await db.user.findUnique({ where: { id: payload.userId } });
+    if (!user || user.balance < amount) {
+      return NextResponse.json(
+        { error: `账户余额不足，需要 $${amount.toFixed(2)}，当前余额 $${user?.balance.toFixed(2) || '0.00'}` },
+        { status: 400 }
+      );
+    }
+
+    // 调用上游充值接口：充入的是扣除手续费后的金额
     try {
-      const result = await rechargeCard(card.gsalaryCardId, amount);  // 直接传元
-      console.log('[充值结果]', result);
+      const result = await rechargeCard(card.gsalaryCardId, cardReceive);
+      console.log('[充值结果]', { amount, fee, cardReceive, result });
     } catch (err: any) {
       console.error('上游充值失败:', err);
       return NextResponse.json({ error: `充值失败: ${err.message}` }, { status: 502 });
     }
 
-    // 扣除用户平台账户余额
+    // 扣除用户账户余额 = 用户输入的金额
     await db.user.update({
       where: { id: payload.userId },
-      data: { balance: { decrement: totalCost } },
+      data: { balance: { decrement: amount } },
     });
 
-    // 增加卡余额
+    // 增加卡余额 = 扣除手续费后的金额
     await db.userCard.update({
       where: { id: card.id },
-      data: { balance: { increment: amount } },
+      data: { balance: { increment: cardReceive } },
     });
 
     // 记录交易
@@ -107,14 +113,21 @@ export async function POST(
       data: {
         userId: payload.userId,
         type: 'card_recharge',
-        amount: -totalCost,
+        amount: -amount,
         status: 'completed',
+        txHash: JSON.stringify({
+          cardId: card.id,
+          inputAmount: amount,
+          fee: fee,
+          feePercent: feePercent,
+          cardReceive: cardReceive,
+        }),
       },
     });
 
     return NextResponse.json({
       success: true,
-      message: '充值成功',
+      message: `充值成功！扣除手续费$${fee.toFixed(2)}，卡实际到账$${cardReceive.toFixed(2)}`,
     });
   } catch (error: any) {
     console.error('卡充值失败:', error);

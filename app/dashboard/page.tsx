@@ -1379,39 +1379,56 @@ export default function DashboardPage() {
               {cardRechargeAmount && parseFloat(cardRechargeAmount) > 0 && (
                 <div className="bg-blue-900/30 border border-blue-700 p-4 rounded-lg space-y-2">
                   {cardAction === 'recharge' ? (
-                    <>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">充值金额：</span>
-                        <span>${parseFloat(cardRechargeAmount).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">手续费（{selectedCardForRecharge?.cardType?.rechargeFeePercent || 2}%）：</span>
-                        <span className="text-red-400">-${(parseFloat(cardRechargeAmount) * (selectedCardForRecharge?.cardType?.rechargeFeePercent || 2) / 100).toFixed(2)}</span>
-                      </div>
-                      <div className="border-t border-blue-700 pt-2 flex justify-between font-bold">
-                        <span>账户扣除：</span>
-                        <span className="text-orange-400">${(parseFloat(cardRechargeAmount) * (1 + (selectedCardForRecharge?.cardType?.rechargeFeePercent || 2) / 100)).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between font-bold">
-                        <span>卡获得：</span>
-                        <span className="text-green-400">${parseFloat(cardRechargeAmount).toFixed(2)}</span>
-                      </div>
-                    </>
+                    (() => {
+                      const amount = parseFloat(cardRechargeAmount);
+                      const feePercent = selectedCardForRecharge?.cardType?.rechargeFeePercent || 2;
+                      const feeMin = selectedCardForRecharge?.cardType?.rechargeFeeMin || 0.5;
+                      const percentFee = amount * feePercent / 100;
+                      const fee = Math.max(percentFee, feeMin);
+                      const cardReceive = Math.max(amount - fee, 0);
+                      return (
+                        <>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">充值金额：</span>
+                            <span>${amount.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">手续费（{feePercent}%，最低${feeMin}）：</span>
+                            <span className="text-red-400">-${fee.toFixed(2)}</span>
+                          </div>
+                          <div className="border-t border-blue-700 pt-2 flex justify-between font-bold">
+                            <span>账户扣除：</span>
+                            <span className="text-orange-400">${amount.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between font-bold">
+                            <span>卡实际到账：</span>
+                            <span className="text-green-400">${cardReceive.toFixed(2)}</span>
+                          </div>
+                        </>
+                      );
+                    })()
                   ) : (
-                    <>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">提现金额：</span>
-                        <span>${parseFloat(cardRechargeAmount).toFixed(2)}</span>
-                      </div>
-                      <div className="border-t border-blue-700 pt-2 flex justify-between font-bold">
-                        <span>卡扣除：</span>
-                        <span className="text-red-400">-${parseFloat(cardRechargeAmount).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between font-bold">
-                        <span>账户获得：</span>
-                        <span className="text-green-400">+${(parseFloat(cardRechargeAmount) - calculateCardWithdrawFee(parseFloat(cardRechargeAmount))).toFixed(2)}</span>
-                      </div>
-                    </>
+                    (() => {
+                      const amount = parseFloat(cardRechargeAmount);
+                      const fee = calculateCardWithdrawFee(amount);
+                      const accountReceive = Math.max(amount - fee, 0);
+                      return (
+                        <>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">提现金额：</span>
+                            <span>${amount.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">手续费：</span>
+                            <span className="text-red-400">-${fee.toFixed(2)}</span>
+                          </div>
+                          <div className="border-t border-blue-700 pt-2 flex justify-between font-bold">
+                            <span>账户实际到账：</span>
+                            <span className="text-green-400">${accountReceive.toFixed(2)}</span>
+                          </div>
+                        </>
+                      );
+                    })()
                   )}
                 </div>
               )}
