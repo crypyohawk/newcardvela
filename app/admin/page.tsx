@@ -34,6 +34,9 @@ interface User {
   balance: number;
   role: string;
   createdAt: string;
+  _count?: {
+    userCards: number;
+  };
 }
 
 interface Order {
@@ -69,6 +72,7 @@ export default function AdminPage() {
   // 数据状态
   const [cardTypes, setCardTypes] = useState<CardType[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [userStats, setUserStats] = useState({ totalUsers: 0, totalBalance: 0, totalCards: 0 });
   const [orders, setOrders] = useState<Order[]>([]);
   const [withdrawOrders, setWithdrawOrders] = useState<Order[]>([]);
   const [refunds, setRefunds] = useState<Order[]>([]);
@@ -166,6 +170,7 @@ export default function AdminPage() {
       });
       const data = await res.json();
       if (data.users) setUsers(data.users);
+      if (data.stats) setUserStats(data.stats);
     } catch (error) {
       console.error('获取用户列表失败:', error);
     }
@@ -933,6 +938,23 @@ export default function AdminPage() {
         {activeTab === 'users' && (
           <div className="bg-slate-800 rounded-xl p-6">
             <h2 className="text-xl font-bold mb-6">用户管理</h2>
+
+            {/* 统计栏 */}
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="bg-slate-700 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold text-blue-400">{userStats.totalUsers}</div>
+                <div className="text-sm text-gray-400 mt-1">👥 总用户数</div>
+              </div>
+              <div className="bg-slate-700 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold text-green-400">${userStats.totalBalance.toFixed(2)}</div>
+                <div className="text-sm text-gray-400 mt-1">💰 总账户余额</div>
+              </div>
+              <div className="bg-slate-700 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold text-yellow-400">{userStats.totalCards}</div>
+                <div className="text-sm text-gray-400 mt-1">💳 总开卡数量</div>
+              </div>
+            </div>
+
             {users.length === 0 ? (
               <p className="text-gray-400 text-center py-8">暂无用户</p>
             ) : (
@@ -942,6 +964,7 @@ export default function AdminPage() {
                     <th className="pb-3">用户名</th>
                     <th className="pb-3">邮箱</th>
                     <th className="pb-3">余额</th>
+                    <th className="pb-3">开卡数</th>
                     <th className="pb-3">角色</th>
                     <th className="pb-3">注册时间</th>
                     <th className="pb-3">操作</th>
@@ -949,10 +972,22 @@ export default function AdminPage() {
                 </thead>
                 <tbody>
                   {users.map(user => (
-                    <tr key={user.id} className="border-b border-slate-700">
-                      <td className="py-4">{user.username}</td>
+                    <tr key={user.id} className="border-b border-slate-700 hover:bg-slate-700/50">
+                      <td className="py-4">
+                        <Link 
+                          href={`/admin/users/${user.id}`}
+                          className="text-blue-400 hover:text-blue-300 hover:underline font-medium"
+                        >
+                          {user.username}
+                        </Link>
+                      </td>
                       <td className="py-4">{user.email}</td>
                       <td className="py-4 text-green-400">${user.balance.toFixed(2)}</td>
+                      <td className="py-4">
+                        <span className="bg-slate-600 px-2 py-1 rounded text-sm">
+                          {user._count?.userCards || 0} 张
+                        </span>
+                      </td>
                       <td className="py-4">
                         <span className={`px-2 py-1 rounded text-xs ${
                           user.role === 'admin' ? 'bg-purple-600' : 

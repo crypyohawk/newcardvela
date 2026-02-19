@@ -12,8 +12,26 @@ export async function GET(request: NextRequest) {
   try {
     const users = await prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
+      include: {
+        _count: {
+          select: { userCards: true },
+        },
+      },
     });
-    return NextResponse.json({ users });
+
+    // 统计数据
+    const totalUsers = users.length;
+    const totalBalance = users.reduce((sum, u) => sum + u.balance, 0);
+    const totalCards = users.reduce((sum, u) => sum + u._count.userCards, 0);
+
+    return NextResponse.json({ 
+      users,
+      stats: {
+        totalUsers,
+        totalBalance,
+        totalCards,
+      },
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
