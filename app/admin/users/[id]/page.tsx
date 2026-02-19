@@ -14,6 +14,7 @@ interface UserDetail {
   userCards: Array<{
     id: string;
     cardNumber: string;
+    cardNoLast4: string;
     balance: number;
     status: string;
     createdAt: string;

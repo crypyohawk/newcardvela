@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '../../../../../src/lib/prisma';
 import { verifyAdmin, adminError } from '../../../../../src/lib/adminAuth';
+import { getCardDetail } from '../../../../../src/lib/gsalary';
 
 export async function GET(
   request: NextRequest,
@@ -39,6 +40,30 @@ export async function GET(
       return NextResponse.json({ error: '用户不存在' }, { status: 404 });
     }
 
+    // 实时同步上游卡余额（单位：元USD，无需转换）
+    const cardsWithRealBalance = await Promise.all(
+      user.userCards.map(async (card) => {
+        if (card.gsalaryCardId) {
+          try {
+            const cardInfo = await getCardDetail(card.gsalaryCardId);
+            const realBalance = cardInfo.balance || 0; // 上游返回单位是元（USD）
+            // 同步更新本地数据库
+            if (realBalance !== card.balance) {
+              await prisma.userCard.update({
+                where: { id: card.id },
+                data: { balance: realBalance },
+              });
+            }
+            return { ...card, balance: realBalance };
+          } catch (err) {
+            console.error(`同步卡 ${card.id} 余额失败:`, err);
+            return card;
+          }
+        }
+        return card;
+      })
+    );
+
     // 统计数据
     const stats = {
       totalCards: user._count.userCards,
@@ -51,7 +76,10 @@ export async function GET(
         .reduce((sum, t) => sum + Math.abs(t.amount), 0),
     };
 
-    return NextResponse.json({ user, stats });
+    return NextResponse.json({ 
+      user: { ...user, userCards: cardsWithRealBalance },
+      stats,
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
