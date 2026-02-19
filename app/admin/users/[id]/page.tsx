@@ -236,7 +236,7 @@ export default function UserDetailPage() {
                     <tr key={card.id} className="border-b border-slate-700">
                       <td className="py-3">{card.cardType?.name || '-'}</td>
                       <td className="py-3 font-mono text-sm">
-                        {card.cardNumber || card.gsalaryCardId || '-'}
+                        {card.cardNoLast4 ? `**** **** **** ${card.cardNoLast4}` : '-'}
                       </td>
                       <td className="py-3 text-green-400">${card.balance.toFixed(2)}</td>
                       <td className="py-3">{getCardStatusLabel(card.status)}</td>
