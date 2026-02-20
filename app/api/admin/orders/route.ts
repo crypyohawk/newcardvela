@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
         user: { select: { id: true, username: true, email: true } },
       },
       orderBy: { createdAt: 'desc' },
+      take: 200,  // 最多返回200条，避免数据量过大
     });
     return NextResponse.json({ orders });
   } catch (error: any) {

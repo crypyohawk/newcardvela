@@ -15,41 +15,25 @@ export const adminError = (message: string, status: number = 401) => {
 
 // 验证管理员权限
 export async function verifyAdmin(request: NextRequest) {
-  // 支持从 header 或 cookie 获取 token
-  const authHeader = request.headers.get('authorization');
-  let token: string | null = null;
-
-  if (authHeader?.startsWith('Bearer ')) {
-    token = authHeader.split(' ')[1];
-  } else {
-    // 尝试从 cookie 获取
-    token = request.cookies.get('token')?.value || null;
-  }
-
-  if (!token) {
-    console.log('No token found');
-    return null;
-  }
-
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-    console.log('Decoded token:', decoded);
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return null;
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
     });
 
-    console.log('User found:', user?.email, 'Role:', user?.role);
-
-    // 修复：兼容大小写，检查 role 是否为 admin 或 ADMIN
-    if (!user || user.role.toUpperCase() !== 'ADMIN') {
-      console.log('User is not admin');
+    if (!user || user.role !== 'admin') {
       return null;
     }
 
     return user;
   } catch (error) {
-    console.error('Token verification failed:', error);
     return null;
   }
 }

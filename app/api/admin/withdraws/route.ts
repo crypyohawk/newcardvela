@@ -5,7 +5,7 @@ import { verifyAdmin, adminError } from '../../../../src/lib/adminAuth';
 // 获取所有提现订单
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
-  if (!admin) return adminError();
+  if (!admin) return adminError('未授权');
 
   try {
     const orders = await db.transaction.findMany({
@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
         user: { select: { id: true, username: true, email: true } },
       },
       orderBy: { createdAt: 'desc' },
+      take: 200,  // 最多返回200条
     });
     return NextResponse.json({ orders });
   } catch (error: any) {
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
 // 处理提现订单
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin(request);
-  if (!admin) return adminError();
+  if (!admin) return adminError('未授权');
 
   try {
     const body = await request.json();

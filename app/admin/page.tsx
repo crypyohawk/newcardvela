@@ -67,6 +67,7 @@ export default function AdminPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds' | 'referral'>('cards');
   const [loading, setLoading] = useState(true);
+  const [tabLoading, setTabLoading] = useState(false);  // 新增
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // 数据状态
@@ -145,19 +146,23 @@ export default function AdminPage() {
       router.push('/login');
       return;
     }
-    fetchTabData(activeTab);
+    fetchTabData(activeTab, true);
     fetchSystemConfig();
   }, [router]);
 
   // 切换标签时加载对应数据
   useEffect(() => {
     if (!loadedTabs.has(activeTab)) {
-      fetchTabData(activeTab);
+      fetchTabData(activeTab, false);
     }
   }, [activeTab]);
 
-  const fetchTabData = async (tab: string) => {
-    setLoading(true);
+  const fetchTabData = async (tab: string, isInitial: boolean) => {
+    if (isInitial) {
+      setLoading(true);
+    } else {
+      setTabLoading(true);
+    }
     try {
       switch (tab) {
         case 'cards':
@@ -186,7 +191,11 @@ export default function AdminPage() {
     } catch (error) {
       console.error('加载数据失败:', error);
     }
-    setLoading(false);
+    if (isInitial) {
+      setLoading(false);
+    } else {
+      setTabLoading(false);
+    }
   };
 
   const fetchCardTypes = async () => {
@@ -625,7 +634,7 @@ export default function AdminPage() {
     }
   };
 
-  // 设置用户角色（添加在这里，组件内部）
+  // 设置用户角色
   const handleSetUserRole = async (userId: string, newRole: string) => {
     try {
       const res = await fetch('/api/admin/users', {
@@ -673,54 +682,14 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tab 切换 */}
-        <div className="flex gap-2 mb-6 flex-wrap">
-          <button
-            onClick={() => setActiveTab('cards')}
-            className={`px-4 py-2 rounded-lg ${activeTab === 'cards' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
-          >
-            卡片类型
-          </button>
-          <button
-            onClick={() => setActiveTab('notices')}
-            className={`px-4 py-2 rounded-lg ${activeTab === 'notices' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
-          >
-            开卡须知
-          </button>
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`px-4 py-2 rounded-lg ${activeTab === 'users' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
-          >
-            用户管理
-          </button>
-          <button
-            onClick={() => setActiveTab('recharges')}
-            className={`px-4 py-2 rounded-lg ${activeTab === 'recharges' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
-          >
-            充值管理
-          </button>
-          <button
-            onClick={() => setActiveTab('withdraws')}
-            className={`px-4 py-2 rounded-lg ${activeTab === 'withdraws' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
-          >
-            提现管理
-          </button>
-          <button
-            onClick={() => setActiveTab('refunds')}
-            className={`px-4 py-2 rounded-lg ${activeTab === 'refunds' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
-          >
-            退款管理
-          </button>
-          <button
-            onClick={() => setActiveTab('referral')}
-            className={`px-4 py-2 rounded-lg ${activeTab === 'referral' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
-          >
-            推广设置
-          </button>
-        </div>
+        {/* Tab 切换按钮之后，内容区域之前，添加标签加载提示 */}
 
-        {/* 卡片类型管理 - 改为跳转链接 */}
-        {activeTab === 'cards' && (
+        {tabLoading && (
+          <div className="text-center py-12 text-gray-400">加载中...</div>
+        )}
+
+        {/* 卡片类型管理 */}
+        {!tabLoading && activeTab === 'cards' && (
           <div className="bg-slate-800 rounded-xl p-6">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold">卡片类型</h2>
@@ -777,7 +746,7 @@ export default function AdminPage() {
         )}
 
         {/* 开卡须知 */}
-        {activeTab === 'notices' && (
+        {!tabLoading && activeTab === 'notices' && (
           <div className="space-y-6">
             {/* 开卡须知管理 */}
             <div className="bg-slate-800 rounded-xl p-6">
@@ -963,7 +932,7 @@ export default function AdminPage() {
         )}
 
         {/* 用户管理 */}
-        {activeTab === 'users' && (
+        {!tabLoading && activeTab === 'users' && (
           <div className="bg-slate-800 rounded-xl p-6">
             <h2 className="text-xl font-bold mb-6">用户管理</h2>
 
@@ -1100,7 +1069,7 @@ export default function AdminPage() {
         )}
 
         {/* 充值管理（原订单管理） */}
-        {activeTab === 'recharges' && (
+        {!tabLoading && activeTab === 'recharges' && (
           <div className="bg-slate-800 rounded-xl p-6">
             <h2 className="text-xl font-bold mb-6">充值订单管理</h2>
             {orders.length === 0 ? (
@@ -1191,7 +1160,7 @@ export default function AdminPage() {
         )}
 
         {/* 提现管理 */}
-        {activeTab === 'withdraws' && (
+        {!tabLoading && activeTab === 'withdraws' && (
           <div className="bg-slate-800 rounded-xl p-6">
             <h2 className="text-xl font-bold mb-6">提现订单管理</h2>
             {withdrawOrders.length === 0 ? (
@@ -1327,7 +1296,7 @@ export default function AdminPage() {
         )}
 
         {/* 退款管理 */}
-        {activeTab === 'refunds' && (
+        {!tabLoading && activeTab === 'refunds' && (
           <div className="bg-slate-800 rounded-xl p-6">
             <h2 className="text-xl font-bold mb-6">退款管理</h2>
             <p className="text-gray-400 text-sm mb-4">
@@ -1461,7 +1430,7 @@ export default function AdminPage() {
         )}
 
         {/* 推广设置 */}
-        {activeTab === 'referral' && (
+        {!tabLoading && activeTab === 'referral' && (
           <div className="bg-slate-800 rounded-xl p-6">
             <h2 className="text-xl font-bold mb-6">🎁 推广引流设置</h2>
             
@@ -1521,7 +1490,7 @@ export default function AdminPage() {
             </div>
 
             {/* 客服邮箱设置 */}
-            <div className="bg-slate-800 rounded-xl p-6 mb-6">
+            <div className="mt-6">
               <h3 className="text-lg font-bold mb-4">📧 客服设置</h3>
               <div className="mb-4">
                 <label className="block text-sm text-gray-400 mb-2">客服邮箱</label>
