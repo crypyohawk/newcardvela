@@ -682,7 +682,30 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tab 切换按钮之后，内容区域之前，添加标签加载提示 */}
+        {/* Tab 切换 */}
+        <div className="flex gap-2 mb-6 flex-wrap">
+          {[
+            { key: 'cards', label: '💳 卡片管理' },
+            { key: 'notices', label: '📋 开卡须知' },
+            { key: 'users', label: '👥 用户管理' },
+            { key: 'recharges', label: '💰 充值管理' },
+            { key: 'withdraws', label: '📤 提现管理' },
+            { key: 'refunds', label: '↩️ 退款管理' },
+            { key: 'referral', label: '🎁 推广设置' },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key as any)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                activeTab === tab.key
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-700 text-gray-400 hover:bg-slate-600 hover:text-white'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
         {tabLoading && (
           <div className="text-center py-12 text-gray-400">加载中...</div>
