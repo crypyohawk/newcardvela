@@ -164,7 +164,13 @@ export default function UserDetailPage() {
             </div>
             <div>
               <span className="text-gray-400">注册时间：</span>
-              <span>{new Date(user.createdAt).toLocaleDateString()}</span>
+              <span>{new Date(user.createdAt).toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}</span>
             </div>
             <div>
               <span className="text-gray-400">用户ID：</span>

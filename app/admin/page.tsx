@@ -617,6 +617,7 @@ export default function AdminPage() {
   const [returnAmount, setReturnAmount] = useState<string>('');
   // 添加退款手续费输入状态
   const [deductFees, setDeductFees] = useState<Record<string, string>>({});
+  const [userSearch, setUserSearch] = useState('');
 
   if (loading) {
     return (
@@ -955,6 +956,35 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* 搜索栏 */}
+            <div className="mb-4">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="搜索用户名、邮箱..."
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 pl-10 focus:outline-none focus:border-blue-500 transition"
+                />
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {userSearch && (
+                  <button
+                    onClick={() => setUserSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              {userSearch && (
+                <p className="text-sm text-gray-400 mt-2">
+                  找到 {users.filter(u => u.username.toLowerCase().includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase())).length} 个匹配用户
+                </p>
+              )}
+            </div>
+
             {users.length === 0 ? (
               <p className="text-gray-400 text-center py-8">暂无用户</p>
             ) : (
@@ -971,7 +1001,13 @@ export default function AdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map(user => (
+                  {users
+                    .filter(user => {
+                      if (!userSearch) return true;
+                      const keyword = userSearch.toLowerCase();
+                      return user.username.toLowerCase().includes(keyword) || user.email.toLowerCase().includes(keyword);
+                    })
+                    .map(user => (
                     <tr key={user.id} className="border-b border-slate-700 hover:bg-slate-700/50">
                       <td className="py-4">
                         <Link 
@@ -984,9 +1020,15 @@ export default function AdminPage() {
                       <td className="py-4">{user.email}</td>
                       <td className="py-4 text-green-400">${user.balance.toFixed(2)}</td>
                       <td className="py-4">
-                        <span className="bg-slate-600 px-2 py-1 rounded text-sm">
-                          {user._count?.userCards || 0} 张
-                        </span>
+                        {(user._count?.userCards || 0) > 0 ? (
+                          <span className="bg-green-600/20 text-green-400 border border-green-600/30 px-2 py-1 rounded text-sm font-medium">
+                            {user._count?.userCards} 张
+                          </span>
+                        ) : (
+                          <span className="bg-slate-600/50 text-gray-500 px-2 py-1 rounded text-sm">
+                            0 张
+                          </span>
+                        )}
                       </td>
                       <td className="py-4">
                         <span className={`px-2 py-1 rounded text-xs ${
@@ -999,7 +1041,15 @@ export default function AdminPage() {
                            '普通用户'}
                         </span>
                       </td>
-                      <td className="py-4 text-gray-400">{new Date(user.createdAt).toLocaleDateString()}</td>
+                      <td className="py-4 text-gray-400 text-sm">
+                        {new Date(user.createdAt).toLocaleString('zh-CN', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </td>
                       <td className="py-4">
                         {user.role !== 'admin' && (
                           <button
