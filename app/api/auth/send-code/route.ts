@@ -42,24 +42,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, type } = body;
 
-    if (!email) {
-      return NextResponse.json({ error: '请填写邮箱' }, { status: 400 });
+    // 清理隐藏字符
+    const cleanEmail = email?.replace(/[\u200B-\u200D\uFEFF\u00A0\r\n\t]/g, '').trim();
+
+    if (!cleanEmail) {
+      return NextResponse.json({ error: '请输入邮箱' }, { status: 400 });
     }
 
-    // 邮箱格式验证（加强版）
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!emailRegex.test(email)) {
-      return NextResponse.json({ error: '请输入有效的邮箱地址' }, { status: 400 });
-    }
-
-    // 禁止一次性邮箱域名（可选）
-    const disposableDomains = ['tempmail.com', 'guerrillamail.com', '10minutemail.com'];
-    const domain = email.split('@')[1]?.toLowerCase();
-    if (disposableDomains.includes(domain)) {
-      return NextResponse.json({ error: '不支持临时邮箱' }, { status: 400 });
-    }
-
-    const emailLower = email.toLowerCase();
+    const emailLower = cleanEmail.toLowerCase();
 
     const sendCheck = canSendCode(emailLower);
     if (!sendCheck.allowed) {

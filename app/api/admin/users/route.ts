@@ -19,13 +19,35 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    // 清理邮箱中的隐藏字符并返回
+    const cleanUsers = users.map(user => ({
+      ...user,
+      email: user.email.replace(/[\u200B-\u200D\uFEFF\u00A0\r\n\t]/g, '').trim(),
+      username: user.username.replace(/[\u200B-\u200D\uFEFF\u00A0\r\n\t]/g, '').trim(),
+    }));
+
+    // 异步修复数据库中的脏数据
+    Promise.all(
+      users.map(async (user) => {
+        const cleanEmail = user.email.replace(/[\u200B-\u200D\uFEFF\u00A0\r\n\t]/g, '').trim();
+        const cleanUsername = user.username.replace(/[\u200B-\u200D\uFEFF\u00A0\r\n\t]/g, '').trim();
+        if (cleanEmail !== user.email || cleanUsername !== user.username) {
+          console.log(`[数据修复] 用户 ${user.id}: email "${user.email}" -> "${cleanEmail}", username "${user.username}" -> "${cleanUsername}"`);
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { email: cleanEmail, username: cleanUsername },
+          });
+        }
+      })
+    ).catch(err => console.error('[数据修复] 失败:', err));
+
     // 统计数据
-    const totalUsers = users.length;
-    const totalBalance = users.reduce((sum, u) => sum + u.balance, 0);
-    const totalCards = users.reduce((sum, u) => sum + u._count.userCards, 0);
+    const totalUsers = cleanUsers.length;
+    const totalBalance = cleanUsers.reduce((sum, u) => sum + u.balance, 0);
+    const totalCards = cleanUsers.reduce((sum, u) => sum + u._count.userCards, 0);
 
     return NextResponse.json({ 
-      users,
+      users: cleanUsers,
       stats: {
         totalUsers,
         totalBalance,

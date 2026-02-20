@@ -47,22 +47,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { email, username, password, code, referralCode } = body;
+    const { username, email, password, code, referralCode } = await request.json();
 
-    // 验证 - 移除 confirmPassword 的验证（因为前端用验证码方式）
-    if (!email || !username || !password) {
-      return NextResponse.json({ error: '请填写所有必填项' }, { status: 400 });
+    // 清理隐藏字符
+    const cleanEmail = email?.replace(/[\u200B-\u200D\uFEFF\u00A0\r\n\t]/g, '').trim();
+    const cleanUsername = username?.replace(/[\u200B-\u200D\uFEFF\u00A0\r\n\t]/g, '').trim();
+
+    if (!cleanUsername || !cleanEmail || !password || !code) {
+      return NextResponse.json({ error: '请填写所有必填字段' }, { status: 400 });
     }
 
-    if (!code) {
-      return NextResponse.json({ error: '请输入验证码' }, { status: 400 });
-    }
-
-    if (password.length < 6) {
-      return NextResponse.json({ error: '密码至少6位' }, { status: 400 });
-    }
-
-    const emailLower = email.toLowerCase();
+    const emailLower = cleanEmail.toLowerCase();
 
     // 验证验证码
     const { verifyCode } = await import('../../../../src/lib/verificationCodes');
