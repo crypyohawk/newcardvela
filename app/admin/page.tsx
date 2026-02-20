@@ -132,6 +132,10 @@ export default function AdminPage() {
 
   // 查看凭证弹窗状态
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [returnAmount, setReturnAmount] = useState<string>('');
+  const [deductFees, setDeductFees] = useState<Record<string, string>>({});
+  const [userSearch, setUserSearch] = useState('');
+  const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set());
 
   const getToken = () => localStorage.getItem('token');
 
@@ -141,13 +145,47 @@ export default function AdminPage() {
       router.push('/login');
       return;
     }
-    fetchData();
+    fetchTabData(activeTab);
     fetchSystemConfig();
   }, [router]);
 
-  const fetchData = async () => {
+  // 切换标签时加载对应数据
+  useEffect(() => {
+    if (!loadedTabs.has(activeTab)) {
+      fetchTabData(activeTab);
+    }
+  }, [activeTab]);
+
+  const fetchTabData = async (tab: string) => {
     setLoading(true);
-    await Promise.all([fetchCardTypes(), fetchUsers(), fetchOrders(), fetchWithdrawOrders(), fetchRefunds(), fetchNotices()]);
+    try {
+      switch (tab) {
+        case 'cards':
+          await fetchCardTypes();
+          break;
+        case 'notices':
+          await fetchNotices();
+          break;
+        case 'users':
+          await fetchUsers();
+          break;
+        case 'recharges':
+          await fetchOrders();
+          break;
+        case 'withdraws':
+          await fetchWithdrawOrders();
+          break;
+        case 'refunds':
+          await fetchRefunds();
+          break;
+        case 'referral':
+          await fetchReferralSettings();
+          break;
+      }
+      setLoadedTabs(prev => new Set(prev).add(tab));
+    } catch (error) {
+      console.error('加载数据失败:', error);
+    }
     setLoading(false);
   };
 
@@ -401,12 +439,6 @@ export default function AdminPage() {
     }
   };
 
-  useEffect(() => {
-    fetchNotices();
-    fetchReferralSettings();
-    fetchSystemConfig();
-  }, []);
-
   // 打开编辑弹窗
   const handleEditCard = (card: CardType) => {
     setEditingCard(card);
@@ -613,11 +645,6 @@ export default function AdminPage() {
       setMessage({ type: 'error', text: error.message });
     }
   };
-
-  const [returnAmount, setReturnAmount] = useState<string>('');
-  // 添加退款手续费输入状态
-  const [deductFees, setDeductFees] = useState<Record<string, string>>({});
-  const [userSearch, setUserSearch] = useState('');
 
   if (loading) {
     return (
