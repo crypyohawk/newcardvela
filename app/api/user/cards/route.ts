@@ -23,10 +23,20 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    // 同步上游余额（后台静默执行，不影响响应速度）
-    syncCardBalances(cards).catch(err => console.error('同步余额失败:', err));
-
-    return NextResponse.json({ cards });
+    // 同步上游余额（等待完成后再返回最新数据）
+    try {
+      await syncCardBalances(cards);
+      // 重新查询更新后的数据
+      const updatedCards = await db.userCard.findMany({
+        where: { userId: payload.userId },
+        include: { cardType: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      return NextResponse.json({ cards: updatedCards });
+    } catch (syncErr: any) {
+      console.error('同步余额失败，返回本地数据:', syncErr.message);
+      return NextResponse.json({ cards });
+    }
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

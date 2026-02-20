@@ -40,13 +40,13 @@ export async function GET(
       return NextResponse.json({ error: '用户不存在' }, { status: 404 });
     }
 
-    // 实时同步上游卡余额（单位：元USD，无需转换）
+    // 实时同步上游卡余额
     const cardsWithRealBalance = await Promise.all(
       user.userCards.map(async (card) => {
         if (card.gsalaryCardId) {
           try {
             const cardInfo = await getCardDetail(card.gsalaryCardId);
-            const realBalance = cardInfo.balance || 0; // 上游返回单位是元（USD）
+            const realBalance = cardInfo.available_balance ?? cardInfo.balance ?? 0; // 优先用 available_balance
             // 同步更新本地数据库
             if (realBalance !== card.balance) {
               await prisma.userCard.update({
