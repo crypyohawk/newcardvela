@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { username, email, password, code, referralCode } = await request.json();
+    const { username, email, password, code, referralCode } = body;
 
     // 清理隐藏字符
     const cleanEmail = email?.replace(/[\u200B-\u200D\uFEFF\u00A0\r\n\t]/g, '').trim();
