@@ -1098,50 +1098,17 @@ export default function AdminPage() {
             {orders.length === 0 ? (
               <p className="text-gray-400 text-center py-8">暂无订单</p>
             ) : (
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-gray-400 border-b border-slate-700">
-                    <th className="pb-3">用户</th>
-                    <th className="pb-3">金额</th>
-                    <th className="pb-3">支付方式</th>
-                    <th className="pb-3">凭证</th>
-                    <th className="pb-3">状态</th>
-                    <th className="pb-3">时间</th>
-                    <th className="pb-3">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <>
+                {/* 移动端卡片式布局 */}
+                <div className="md:hidden space-y-4">
                   {orders.map(order => (
-                    <tr key={order.id} className="border-b border-slate-700">
-                      <td className="py-4">
-                        <div>{order.user?.username || '未知'}</div>
-                        <div className="text-sm text-gray-400">{order.user?.email}</div>
-                      </td>
-                      <td className="py-4 text-green-400 font-bold">${order.amount}</td>
-                      <td className="py-4">
-                        <span className={`px-2 py-1 rounded text-xs ${
-                          order.paymentMethod === 'usdt' ? 'bg-yellow-600' :
-                          order.paymentMethod === 'wechat' ? 'bg-green-600' :
-                          order.paymentMethod === 'alipay' ? 'bg-blue-600' :
-                          'bg-gray-600'
-                        }`}>
-                          {order.paymentMethod?.toUpperCase() || '未知'}
-                        </span>
-                      </td>
-                      <td className="py-4">
-                        {(order.txHash || order.paymentProof) ? (
-                          <button
-                            onClick={() => setSelectedOrder(order)}
-                            className="text-blue-400 hover:text-blue-300 text-sm"
-                          >
-                            查看凭证
-                          </button>
-                        ) : (
-                          <span className="text-gray-500 text-sm">无</span>
-                        )}
-                      </td>
-                      <td className="py-4">
-                        <span className={`px-2 py-1 rounded text-xs ${
+                    <div key={order.id} className="bg-slate-700 rounded-lg p-4 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="font-medium text-white">{order.user?.username || '未知'}</div>
+                          <div className="text-xs text-gray-400">{order.user?.email}</div>
+                        </div>
+                        <span className={`px-2 py-1 rounded text-xs whitespace-nowrap ${
                           order.status === 'completed' ? 'bg-green-600' :
                           order.status === 'processing' ? 'bg-yellow-600' :
                           order.status === 'pending' ? 'bg-blue-600' :
@@ -1152,32 +1119,149 @@ export default function AdminPage() {
                            order.status === 'pending' ? '待支付' :
                            '已拒绝'}
                         </span>
-                      </td>
-                      <td className="py-4 text-gray-400 text-sm">
-                        {new Date(order.createdAt).toLocaleString()}
-                      </td>
-                      <td className="py-4">
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="bg-slate-600/50 rounded p-2">
+                          <div className="text-gray-400 text-xs mb-1">充值金额</div>
+                          <div className="text-green-400 font-bold">${order.amount}</div>
+                        </div>
+                        <div className="bg-slate-600/50 rounded p-2">
+                          <div className="text-gray-400 text-xs mb-1">支付方式</div>
+                          <span className={`px-2 py-1 rounded text-xs ${
+                            order.paymentMethod === 'usdt' ? 'bg-yellow-600' :
+                            order.paymentMethod === 'wechat' ? 'bg-green-600' :
+                            order.paymentMethod === 'alipay' ? 'bg-blue-600' :
+                            'bg-gray-600'
+                          }`}>
+                            {order.paymentMethod?.toUpperCase() || '未知'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-xs text-gray-400 border-t border-slate-600 pt-2">
+                        {new Date(order.createdAt).toLocaleString('zh-CN', {
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </div>
+
+                      <div className="flex gap-2 flex-wrap">
+                        {(order.txHash || order.paymentProof) && (
+                          <button
+                            onClick={() => setSelectedOrder(order)}
+                            className="flex-1 text-blue-400 hover:text-blue-300 text-xs p-2 bg-slate-600/50 rounded hover:bg-slate-600"
+                          >
+                            查看凭证
+                          </button>
+                        )}
                         {(order.status === 'processing' || order.status === 'pending') && (
-                          <div className="flex gap-2">
+                          <>
                             <button
                               onClick={() => handleOrderAction(order.id, 'confirm')}
-                              className="bg-green-600 px-3 py-1 rounded text-sm hover:bg-green-700"
+                              className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs p-2 rounded"
                             >
                               确认
                             </button>
                             <button
                               onClick={() => handleOrderAction(order.id, 'reject')}
-                              className="bg-red-600 px-3 py-1 rounded text-sm hover:bg-red-700"
+                              className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs p-2 rounded"
                             >
                               拒绝
                             </button>
-                          </div>
+                          </>
                         )}
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+
+                {/* PC端表格 */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-left text-gray-400 border-b border-slate-700">
+                        <th className="pb-3">用户</th>
+                        <th className="pb-3">金额</th>
+                        <th className="pb-3">支付方式</th>
+                        <th className="pb-3">凭证</th>
+                        <th className="pb-3">状态</th>
+                        <th className="pb-3">时间</th>
+                        <th className="pb-3">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orders.map(order => (
+                        <tr key={order.id} className="border-b border-slate-700 hover:bg-slate-700/30">
+                          <td className="py-4">
+                            <div>{order.user?.username || '未知'}</div>
+                            <div className="text-sm text-gray-400">{order.user?.email}</div>
+                          </td>
+                          <td className="py-4 text-green-400 font-bold">${order.amount}</td>
+                          <td className="py-4">
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              order.paymentMethod === 'usdt' ? 'bg-yellow-600' :
+                              order.paymentMethod === 'wechat' ? 'bg-green-600' :
+                              order.paymentMethod === 'alipay' ? 'bg-blue-600' :
+                              'bg-gray-600'
+                            }`}>
+                              {order.paymentMethod?.toUpperCase() || '未知'}
+                            </span>
+                          </td>
+                          <td className="py-4">
+                            {(order.txHash || order.paymentProof) ? (
+                              <button
+                                onClick={() => setSelectedOrder(order)}
+                                className="text-blue-400 hover:text-blue-300 text-sm"
+                              >
+                                查看凭证
+                              </button>
+                            ) : (
+                              <span className="text-gray-500 text-sm">无</span>
+                            )}
+                          </td>
+                          <td className="py-4">
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              order.status === 'completed' ? 'bg-green-600' :
+                              order.status === 'processing' ? 'bg-yellow-600' :
+                              order.status === 'pending' ? 'bg-blue-600' :
+                              'bg-red-600'
+                            }`}>
+                              {order.status === 'completed' ? '已完成' :
+                               order.status === 'processing' ? '待审核' :
+                               order.status === 'pending' ? '待支付' :
+                               '已拒绝'}
+                            </span>
+                          </td>
+                          <td className="py-4 text-gray-400 text-sm">
+                            {new Date(order.createdAt).toLocaleString()}
+                          </td>
+                          <td className="py-4">
+                            {(order.status === 'processing' || order.status === 'pending') && (
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleOrderAction(order.id, 'confirm')}
+                                  className="bg-green-600 px-3 py-1 rounded text-sm hover:bg-green-700"
+                                >
+                                  确认
+                                </button>
+                                <button
+                                  onClick={() => handleOrderAction(order.id, 'reject')}
+                                  className="bg-red-600 px-3 py-1 rounded text-sm hover:bg-red-700"
+                                >
+                                  拒绝
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         )}
