@@ -395,11 +395,11 @@ export default function AdminPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.settings) {
+        if (data.referralSettings) {
           setReferralSettings({
-            enabled: data.settings.enabled ?? false,
-            rewardAmount: String(data.settings.rewardAmount ?? 5),
-            promptText: data.settings.promptText || '推荐好友注册开卡，即可获得 $5 奖励！'
+            enabled: data.referralSettings.enabled ?? false,
+            rewardAmount: String(data.referralSettings.rewardAmount ?? 5),
+            promptText: data.referralSettings.promptText || '推荐好友注册开卡，即可获得 $5 奖励！'
           });
         }
       }
@@ -425,6 +425,7 @@ export default function AdminPage() {
       });
       if (res.ok) {
         setMessage({ type: 'success', text: '推荐设置已保存' });
+        fetchReferralSettings();  // ✅ 加这一行，保存后立即刷新
       } else {
         setMessage({ type: 'error', text: '保存失败' });
       }
