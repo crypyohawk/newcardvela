@@ -23,6 +23,17 @@ a {
   text-decoration: none;
 }
 
+.font-latin {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont,
+               'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* 专门保留中文“卡维拉”的显示 */
+.logo-cn {
+  font-family: '思源黑体', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
 export interface Card {
   id: string;
   cardNumber: string;
