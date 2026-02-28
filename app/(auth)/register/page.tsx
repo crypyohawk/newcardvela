@@ -19,7 +19,7 @@ function RegisterContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // 自动填充推荐码（如果 URL 中有）
+  // Auto fill referral code from URL
   useState(() => {
     const ref = searchParams.get('ref');
     if (ref) setReferralCode(ref);
@@ -27,7 +27,7 @@ function RegisterContent() {
 
   const sendCode = async () => {
     if (!email.trim()) {
-      setMessage({ type: 'error', text: '请输入邮箱地址' });
+      setMessage({ type: 'error', text: 'Please enter your email address.' });
       return;
     }
 
@@ -41,24 +41,24 @@ function RegisterContent() {
 
       const data = await res.json();
       if (!res.ok) {
-        setMessage({ type: 'error', text: data.error || '发送失败' });
+        setMessage({ type: 'error', text: data.error || 'Failed to send.' });
         setCodeLoading(false);
         return;
       }
 
-      setMessage({ type: 'success', text: '验证码已发送' });
+      setMessage({ type: 'success', text: 'Verification code sent.' });
       setCodeSent(true);
       setCodeLoading(false);
     } catch (error: any) {
-      console.error('发送验证码错误:', error);
-      setMessage({ type: 'error', text: error.message || '发送失败' });
+      console.error('Send code error:', error);
+      setMessage({ type: 'error', text: error.message || 'Failed to send.' });
       setCodeLoading(false);
     }
   };
 
   const handleRegister = async () => {
     if (!email || !username || !password || !code) {
-      setMessage({ type: 'error', text: '请填写所有必填项' });
+      setMessage({ type: 'error', text: 'Please fill in all required fields.' });
       return;
     }
 
@@ -77,27 +77,27 @@ function RegisterContent() {
       });
 
       const data = await res.json();
-      console.log('注册响应:', { status: res.status, data });
+      console.log('Register response:', { status: res.status, data });
 
       if (!res.ok) {
-        setMessage({ type: 'error', text: data.error || '注册失败' });
+        setMessage({ type: 'error', text: data.error || 'Registration failed.' });
         setLoading(false);
         return;
       }
 
       if (data.token) {
         localStorage.setItem('token', data.token);
-        console.log('Token 已保存');
+        console.log('Token saved');
       }
 
-      setMessage({ type: 'success', text: '注册成功！正在跳转...' });
+      setMessage({ type: 'success', text: 'Registration successful! Redirecting...' });
       
       setTimeout(() => {
         router.push('/dashboard');
       }, 1500);
     } catch (error: any) {
-      console.error('注册错误:', error);
-      setMessage({ type: 'error', text: error.message || '注册失败' });
+      console.error('Register error:', error);
+      setMessage({ type: 'error', text: error.message || 'Registration failed.' });
       setLoading(false);
     }
   };
@@ -105,7 +105,7 @@ function RegisterContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md">
-        <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">注册账户</h1>
+        <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">Register Account</h1>
 
         {message && (
           <div className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -114,49 +114,49 @@ function RegisterContent() {
         )}
 
         <div className="space-y-4">
-          {/* 邮箱 */}
+          {/* Email */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
               type="email"
-              placeholder="请输入邮箱"
+              placeholder="Enter your email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
-          {/* 用户名 */}
+          {/* Username */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
             <input
               type="text"
-              placeholder="请输入用户名"
+              placeholder="Enter your username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
-          {/* 密码 */}
+          {/* Password */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
             <input
               type="password"
-              placeholder="请输入密码（至少6位）"
+              placeholder="Enter password (min 6 characters)"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
-          {/* 邮箱验证码 */}
+          {/* Email Verification Code */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">邮箱验证码</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email Verification Code</label>
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder="请输入验证码"
+                placeholder="Enter verification code"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -166,35 +166,35 @@ function RegisterContent() {
                 disabled={codeLoading || codeSent}
                 className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 disabled:opacity-50 whitespace-nowrap text-sm"
               >
-                {codeLoading ? '发送中...' : codeSent ? '已发送' : '获取码'}
+                {codeLoading ? 'Sending...' : codeSent ? 'Sent' : 'Get Code'}
               </button>
             </div>
           </div>
 
-          {/* 推荐码 */}
+          {/* Referral Code */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">推荐码（可选）</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Referral Code (optional)</label>
             <input
               type="text"
-              placeholder="请输入推荐码"
+              placeholder="Enter referral code"
               value={referralCode}
               onChange={(e) => setReferralCode(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
-          {/* 注册按钮 */}
+          {/* Register Button */}
           <button
             onClick={handleRegister}
             disabled={loading}
             className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium mt-6"
           >
-            {loading ? '注册中...' : '注册'}
+            {loading ? 'Registering...' : 'Register'}
           </button>
         </div>
 
         <p className="text-center mt-6 text-gray-600">
-          已有账户？<Link href="/login" className="text-blue-600 hover:underline font-medium">登录</Link>
+          Already have an account? <Link href="/login" className="text-blue-600 hover:underline font-medium">Login</Link>
         </p>
       </div>
     </div>
@@ -203,7 +203,7 @@ function RegisterContent() {
 
 export default function RegisterPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">加载中...</div>}>
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
       <RegisterContent />
     </Suspense>
   );

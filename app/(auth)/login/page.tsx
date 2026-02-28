@@ -13,7 +13,7 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      setMessage({ type: 'error', text: '请填写邮箱和密码' });
+      setMessage({ type: 'error', text: 'Please enter email and password.' });
       return;
     }
 
@@ -28,7 +28,7 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setMessage({ type: 'error', text: data.error || '登录失败' });
+        setMessage({ type: 'error', text: data.error || 'Login failed.' });
         setLoading(false);
         return;
       }
@@ -36,7 +36,7 @@ export default function LoginPage() {
       localStorage.setItem('token', data.token);
       router.push('/dashboard');
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || '登录失败' });
+      setMessage({ type: 'error', text: error.message || 'Login failed.' });
       setLoading(false);
     }
   };
@@ -44,7 +44,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md">
-        <h1 className="text-3xl font-bold text-center mb-8">登录</h1>
+        <h1 className="text-3xl font-bold text-center mb-8">Login</h1>
 
         {message && (
           <div className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -55,14 +55,14 @@ export default function LoginPage() {
         <div className="space-y-4">
           <input
             type="email"
-            placeholder="邮箱"
+            placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg"
           />
           <input
             type="password"
-            placeholder="密码"
+            placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg"
@@ -72,12 +72,12 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
-            {loading ? '登录中...' : '登录'}
+            {loading ? 'Logging in...' : 'Login'}
           </button>
         </div>
 
         <p className="text-center mt-4">
-          没有账户？<Link href="/register" className="text-blue-600 hover:underline">注册</Link>
+          Don't have an account? <Link href="/register" className="text-blue-600 hover:underline">Register</Link>
         </p>
       </div>
     </div>
