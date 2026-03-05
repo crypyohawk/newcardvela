@@ -656,6 +656,50 @@ export default function AdminPage() {
     }
   };
 
+  const handleAdjustBalance = async () => {
+    if (!adjustBalanceUser || !adjustAmount) {
+      setMessage({ type: 'error', text: '请输入调整金额' });
+      return;
+    }
+
+    const amount = parseFloat(adjustAmount);
+    if (isNaN(amount)) {
+      setMessage({ type: 'error', text: '金额必须是数字' });
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          action: 'adjustBalance',
+          userId: adjustBalanceUser.id,
+          amount: amount,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setMessage({ 
+        type: 'success', 
+        text: `余额调整成功！${amount > 0 ? '增加' : '扣除'} $${Math.abs(amount).toFixed(2)}` 
+      });
+      setAdjustBalanceUser(null);
+      setAdjustAmount('');
+      fetchUsers();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  const [adjustBalanceUser, setAdjustBalanceUser] = useState<User | null>(null);
+  const [adjustAmount, setAdjustAmount] = useState('');
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
@@ -1072,16 +1116,27 @@ export default function AdminPage() {
                       </td>
                       <td className="py-4">
                         {user.role !== 'admin' && (
-                          <button
-                            onClick={() => handleSetUserRole(user.id, user.role === 'agent' ? 'user' : 'agent')}
-                            className={`px-3 py-1 rounded text-xs ${
-                              user.role === 'agent' 
-                                ? 'bg-gray-600 hover:bg-gray-500' 
-                                : 'bg-orange-600 hover:bg-orange-700'
-                            }`}
-                          >
-                            {user.role === 'agent' ? '取消代理' : '设为代理'}
-                          </button>
+                          <div className="flex gap-2 flex-wrap">
+                            <button
+                              onClick={() => handleSetUserRole(user.id, user.role === 'agent' ? 'user' : 'agent')}
+                              className={`px-3 py-1 rounded text-xs ${
+                                user.role === 'agent' 
+                                  ? 'bg-gray-600 hover:bg-gray-500' 
+                                  : 'bg-orange-600 hover:bg-orange-700'
+                              }`}
+                            >
+                              {user.role === 'agent' ? '取消代理' : '设为代理'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setAdjustBalanceUser(user);
+                                setAdjustAmount('');
+                              }}
+                              className="px-3 py-1 rounded text-xs bg-green-600 hover:bg-green-700"
+                            >
+                              调整余额
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -1698,6 +1753,71 @@ export default function AdminPage() {
               >
                 关闭
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* 调整余额弹窗 */}
+        {adjustBalanceUser && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setAdjustBalanceUser(null)}>
+            <div className="bg-slate-800 p-6 rounded-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold">调整用户余额</h3>
+                <button
+                  onClick={() => setAdjustBalanceUser(null)}
+                  className="text-gray-400 hover:text-white text-2xl leading-none"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-400 mb-2">用户信息</p>
+                  <div className="bg-slate-700 rounded-lg p-3">
+                    <div className="font-medium">{adjustBalanceUser.username}</div>
+                    <div className="text-sm text-gray-400">{adjustBalanceUser.email}</div>
+                    <div className="text-sm text-gray-400 mt-1">
+                      当前余额: <span className="text-green-400 font-bold">${adjustBalanceUser.balance.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">调整金额 (USD)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="正数=增加 负数=扣除"
+                    value={adjustAmount}
+                    onChange={(e) => setAdjustAmount(e.target.value)}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500"
+                    onKeyDown={(e) => e.key === 'Enter' && handleAdjustBalance()}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {adjustAmount ? (
+                      parseFloat(adjustAmount) > 0 
+                        ? `✓ 增加 $${Math.abs(parseFloat(adjustAmount)).toFixed(2)}，新余额: $${(adjustBalanceUser.balance + parseFloat(adjustAmount)).toFixed(2)}`
+                        : `✓ 扣除 $${Math.abs(parseFloat(adjustAmount)).toFixed(2)}，新余额: $${(adjustBalanceUser.balance + parseFloat(adjustAmount)).toFixed(2)}`
+                    ) : '例如: 10 (增加) 或 -5 (扣除)'}
+                  </p>
+                </div>
+
+                <div className="flex gap-2 pt-4">
+                  <button
+                    onClick={handleAdjustBalance}
+                    className="flex-1 bg-blue-600 py-2 rounded-lg hover:bg-blue-700 font-medium"
+                  >
+                    确认调整
+                  </button>
+                  <button
+                    onClick={() => setAdjustBalanceUser(null)}
+                    className="flex-1 bg-slate-600 py-2 rounded-lg hover:bg-slate-500"
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
