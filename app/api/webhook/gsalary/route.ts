@@ -32,7 +32,13 @@ export async function POST(request: NextRequest) {
 
     // 处理卡交易通知
     if (business_type === 'CARD_TRANSACTION') {
-      await handleCardTransaction(data);
+      // ✅ 新增：检查是否是验证码类型的交易（biz_type=VERIFICATION 带 check_code）
+      if (data.biz_type === 'VERIFICATION' && data.check_code) {
+        console.log(`[GSalary Webhook] 检测到 VERIFICATION 交易验证码, card_id: ${data.card_id}, check_code: ${data.check_code}`);
+        await handleVerificationCheckCode(data);
+      } else {
+        await handleCardTransaction(data);
+      }
       return NextResponse.json({ success: true });
     }
 
@@ -50,7 +56,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ==================== 验证码转发 ====================
+// ==================== 验证码转发（OTP类型） ====================
 async function handleOtpForward(businessType: string, data: any) {
   const { card_id, mask_card_number, otp, merchant_name, transaction_amount } = data;
 
@@ -92,6 +98,49 @@ async function handleOtpForward(businessType: string, data: any) {
   });
 
   console.log(`[OTP转发] 成功转发${typeName}给 ${user.email}`);
+}
+
+// ✅ 新增：处理 CARD_TRANSACTION 中 biz_type=VERIFICATION 的验证码
+async function handleVerificationCheckCode(data: any) {
+  const { card_id, check_code, merchant_name, mask_card_number, transaction_amount } = data;
+
+  if (!card_id || !check_code) {
+    console.error('[验证码交易] 缺少 card_id 或 check_code');
+    return;
+  }
+
+  const userCard = await prisma.userCard.findFirst({
+    where: { gsalaryCardId: card_id },
+    include: {
+      user: { select: { id: true, email: true, username: true } },
+    },
+  });
+
+  if (!userCard || !userCard.user) {
+    console.error(`[验证码交易] 未找到对应的用户卡片, card_id: ${card_id}`);
+    return;
+  }
+
+  const user = userCard.user;
+
+  let amountInfo = '';
+  if (transaction_amount && Math.abs(transaction_amount.amount) > 0) {
+    amountInfo = `${Math.abs(transaction_amount.amount)} ${transaction_amount.currency}`;
+  }
+
+  console.log(`[验证码交易] 转发验证码给用户 ${user.username}(${user.email}), 商户: ${merchant_name}, 验证码: ${check_code}`);
+
+  await sendVerificationCodeForward({
+    to: user.email,
+    username: user.username,
+    otp: check_code,
+    typeName: '消费验证码',
+    merchantName: merchant_name || '未知商户',
+    maskedCardNumber: mask_card_number || `****${userCard.cardNoLast4}`,
+    amount: amountInfo,
+  });
+
+  console.log(`[验证码交易] 验证码已成功转发给 ${user.email}`);
 }
 
 // ==================== 卡交易通知 ====================

@@ -8,6 +8,19 @@ export async function GET(request: NextRequest) {
   if (!admin) return adminError('未授权');
 
   try {
+    // 获取汇率配置
+    let exchangeRate = 7.2;
+    try {
+      const rateConfig = await db.systemConfig.findUnique({
+        where: { key: 'recharge_usd_cny_rate' },
+      });
+      if (rateConfig) {
+        exchangeRate = parseFloat(rateConfig.value) || 7.2;
+      }
+    } catch (e) {
+      console.log('获取汇率配置失败，使用默认值 7.2');
+    }
+
     const orders = await db.transaction.findMany({
       where: { 
         type: 'recharge',
@@ -19,7 +32,15 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
       take: 200,  // 最多返回200条，避免数据量过大
     });
-    return NextResponse.json({ orders });
+
+    // 为每个订单添加人民币金额
+    const ordersWithCNY = orders.map(order => ({
+      ...order,
+      cnyAmount: Math.ceil(order.amount * exchangeRate),
+      exchangeRate: exchangeRate,
+    }));
+
+    return NextResponse.json({ orders: ordersWithCNY, exchangeRate });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -38,7 +59,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '订单ID不能为空' }, { status: 400 });
     }
 
-    // 使用 Transaction 模型
     const order = await db.transaction.findUnique({
       where: { id: orderId },
     });
@@ -52,17 +72,17 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: '订单状态不可操作' }, { status: 400 });
       }
 
-      // 更新订单状态
-      await db.transaction.update({
-        where: { id: orderId },
-        data: { status: 'completed' },
-      });
-
-      // 增加用户余额
-      await db.user.update({
-        where: { id: order.userId },
-        data: { balance: { increment: order.amount } },
-      });
+      // ✅ 使用事务确保原子性
+      await db.$transaction([
+        db.transaction.update({
+          where: { id: orderId },
+          data: { status: 'completed' },
+        }),
+        db.user.update({
+          where: { id: order.userId },
+          data: { balance: { increment: order.amount } },
+        }),
+      ]);
 
       console.log('[管理后台] 订单确认成功:', orderId, '金额:', order.amount);
 

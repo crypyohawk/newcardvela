@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
         user: { select: { id: true, username: true, email: true } },
       },
       orderBy: { createdAt: 'desc' },
-      take: 200,  // 最多返回200条
+      take: 200,
     });
     return NextResponse.json({ orders });
   } catch (error: any) {
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { orderId, action } = body;
+    const { orderId, action, txHash, reason } = body; // ✅ 修复：从 body 中解构 txHash 和 reason
 
     const order = await db.transaction.findUnique({
       where: { id: orderId },
@@ -44,7 +44,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'confirm') {
-      // 确认提现 - 订单已经扣款了，只需更新状态
       await db.transaction.update({
         where: { id: orderId },
         data: { status: 'completed' },
@@ -53,17 +52,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: '提现已确认' });
     }
 
-    if (action === 'reject') {
-      // 拒绝提现 - 退还用户余额
-      await db.user.update({
-        where: { id: order.userId },
-        data: { balance: { increment: order.amount } },
-      });
-
+    if (action === 'approve') {
       await db.transaction.update({
         where: { id: orderId },
-        data: { status: 'failed' },
+        data: {
+          status: 'completed',
+          txHash: txHash || order.txHash,
+        },
       });
+
+      return NextResponse.json({ success: true, message: '提现已批准' });
+    }
+
+    if (action === 'reject') {
+      const withdrawAmount = Math.abs(order.amount);
+
+      await db.$transaction([
+        db.user.update({
+          where: { id: order.userId },
+          data: { balance: { increment: withdrawAmount } },
+        }),
+        db.transaction.update({
+          where: { id: orderId },
+          data: {
+            status: 'failed',
+            txHash: JSON.stringify({
+              ...(order.txHash ? JSON.parse(order.txHash) : {}),
+              rejectReason: reason || '管理员拒绝',
+              refunded: true,
+            }),
+          },
+        }),
+      ]);
 
       return NextResponse.json({ success: true, message: '提现已拒绝，余额已退还' });
     }
