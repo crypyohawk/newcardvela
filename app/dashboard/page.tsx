@@ -56,7 +56,7 @@ interface WithdrawConfig {
 }
 
 export default function DashboardPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, refreshUser } = useAuth();
   const router = useRouter();
   const [cardTypes, setCardTypes] = useState<CardType[]>([]);
   const [userCards, setUserCards] = useState<UserCard[]>([]);
@@ -239,6 +239,7 @@ export default function DashboardPage() {
       }
 
       setMessage({ type: 'success', text: '开卡成功！' });
+      await refreshUser();
       fetchData();
       setActiveTab('cards');
 
@@ -441,14 +442,9 @@ export default function DashboardPage() {
       setCardRechargeAmount('');
       setSelectedCardForRecharge(null);
       
-      // 刷新卡片列表和用户信息
-      const [configRes, cardsRes] = await Promise.all([
-        fetch('/api/config'),
-        fetch('/api/user/cards', { headers: { 'Authorization': `Bearer ${token}` } })
-      ]);
-      const configData = await configRes.json();
-      const cardsData = await cardsRes.json();
-      setUserCards(cardsData.cards || []);
+      // 刷新卡片列表和用户余额
+      await refreshUser();
+      fetchData();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
     } finally {
@@ -487,6 +483,7 @@ export default function DashboardPage() {
       setMessage({ type: 'success', text: '提现成功！' });
       setCardRechargeAmount('');
       setSelectedCardForRecharge(null);
+      await refreshUser();
       fetchData();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
@@ -535,6 +532,7 @@ export default function DashboardPage() {
       setWithdrawMethod(null);
       setWithdrawAddress('');
       setShowAccountWithdraw(false);
+      await refreshUser();
       fetchData();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
@@ -611,7 +609,7 @@ export default function DashboardPage() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* 消息弹窗 */}
         {message && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
             <div className={`mx-4 p-6 rounded-xl shadow-2xl max-w-sm w-full ${message.type === 'success' ? 'bg-green-600' : 'bg-slate-800 border border-red-500'}`}>
               <div className="text-center">
                 {/* 图标 */}
