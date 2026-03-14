@@ -33,10 +33,12 @@ export async function GET(request: NextRequest) {
       take: 200,  // 最多返回200条，避免数据量过大
     });
 
-    // 为每个订单添加人民币金额
+    // 为每个订单添加人民币金额（USDT订单不需要汇率转换）
     const ordersWithCNY = orders.map(order => ({
       ...order,
-      cnyAmount: Math.ceil(order.amount * exchangeRate),
+      cnyAmount: order.paymentMethod === 'usdt' 
+        ? null  // USDT 直接按美元计价，不转换CNY
+        : Math.ceil(order.amount * exchangeRate),
       exchangeRate: exchangeRate,
     }));
 

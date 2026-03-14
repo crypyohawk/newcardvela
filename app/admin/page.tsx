@@ -1188,9 +1188,11 @@ export default function AdminPage() {
                         <div className="bg-slate-600/50 rounded p-2">
                           <div className="text-gray-400 text-xs mb-1">充值金额</div>
                           <div className="text-green-400 font-bold">${order.amount}</div>
-                          {order.cnyAmount && (
+                          {order.paymentMethod === 'usdt' ? (
+                            <div className="text-yellow-400 text-xs mt-0.5">{order.amount} USDT</div>
+                          ) : order.cnyAmount ? (
                             <div className="text-yellow-400 text-xs mt-0.5">≈ ¥{order.cnyAmount}</div>
-                          )}
+                          ) : null}
                         </div>
                         <div className="bg-slate-600/50 rounded p-2">
                           <div className="text-gray-400 text-xs mb-1">支付方式</div>
@@ -1253,7 +1255,7 @@ export default function AdminPage() {
                       <tr className="text-left text-gray-400 border-b border-slate-700">
                         <th className="pb-3">用户</th>
                         <th className="pb-3">金额 (USD)</th>
-                        <th className="pb-3">金额 (CNY)</th>
+                        <th className="pb-3">实付金额</th>
                         <th className="pb-3">支付方式</th>
                         <th className="pb-3">凭证</th>
                         <th className="pb-3">状态</th>
@@ -1270,7 +1272,10 @@ export default function AdminPage() {
                           </td>
                           <td className="py-4 text-green-400 font-bold">${order.amount}</td>
                           <td className="py-4 text-yellow-400 font-bold">
-                            ¥{order.cnyAmount || Math.ceil(order.amount * 7.2)}
+                            {order.paymentMethod === 'usdt' 
+                              ? `${order.amount} USDT`
+                              : `¥${order.cnyAmount || Math.ceil(order.amount * 7.2)}`
+                            }
                           </td>
                           <td className="py-4">
                             <span className={`px-2 py-1 rounded text-xs ${
