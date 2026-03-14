@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Suspense } from 'react';
+import { useAuth } from '../../../src/hooks/useAuth';
 
 function RegisterContent() {
   const [email, setEmail] = useState('');
@@ -18,12 +19,13 @@ function RegisterContent() {
   
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { refreshUser } = useAuth();
 
   // Auto fill referral code from URL
-  useState(() => {
+  useEffect(() => {
     const ref = searchParams.get('ref');
     if (ref) setReferralCode(ref);
-  });
+  }, [searchParams]);
 
   const sendCode = async () => {
     if (!email.trim()) {
@@ -87,7 +89,7 @@ function RegisterContent() {
 
       if (data.token) {
         localStorage.setItem('token', data.token);
-        console.log('Token saved');
+        await refreshUser();
       }
 
       setMessage({ type: 'success', text: 'Registration successful! Redirecting...' });

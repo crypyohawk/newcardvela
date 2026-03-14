@@ -72,17 +72,27 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: '订单状态不可操作' }, { status: 400 });
       }
 
-      // ✅ 使用事务确保原子性
-      await db.$transaction([
-        db.transaction.update({
-          where: { id: orderId },
+      // ✅ 原子性状态检查+更新+加余额，防止并发重复确认
+      const result = await db.$transaction(async (tx) => {
+        const updated = await tx.transaction.updateMany({
+          where: {
+            id: orderId,
+            status: { in: ['processing', 'pending'] },
+          },
           data: { status: 'completed' },
-        }),
-        db.user.update({
+        });
+
+        if (updated.count === 0) {
+          throw new Error('ORDER_ALREADY_PROCESSED');
+        }
+
+        await tx.user.update({
           where: { id: order.userId },
           data: { balance: { increment: order.amount } },
-        }),
-      ]);
+        });
+
+        return updated;
+      });
 
       console.log('[管理后台] 订单确认成功:', orderId, '金额:', order.amount);
 
@@ -102,6 +112,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: '未知操作' }, { status: 400 });
   } catch (error: any) {
+    if (error.message === 'ORDER_ALREADY_PROCESSED') {
+      return NextResponse.json({ error: '订单已处理，请勿重复操作' }, { status: 409 });
+    }
     console.error('[管理后台] 订单操作失败:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

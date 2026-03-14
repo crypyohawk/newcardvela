@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useAuth } from '../../../src/hooks/useAuth';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -10,6 +11,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const router = useRouter();
+  const { refreshUser } = useAuth();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -34,6 +36,7 @@ export default function LoginPage() {
       }
 
       localStorage.setItem('token', data.token);
+      await refreshUser();
       router.push('/dashboard');
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'Login failed.' });

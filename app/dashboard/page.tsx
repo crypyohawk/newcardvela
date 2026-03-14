@@ -72,6 +72,7 @@ export default function DashboardPage() {
   const [verifyingCard, setVerifyingCard] = useState(false);
   const [verifyCode, setVerifyCode] = useState('');
   const [codeSent, setCodeSent] = useState(false);
+  const [needFirstRecharge, setNeedFirstRecharge] = useState(false);
 
   // 充值相关
   const [rechargeAmount, setRechargeAmount] = useState('');
@@ -266,7 +267,13 @@ export default function DashboardPage() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) {
+        if (data.code === 'NEED_FIRST_RECHARGE') {
+          setNeedFirstRecharge(true);
+          return;
+        }
+        throw new Error(data.error);
+      }
 
       setCodeSent(true);
       setMessage({ type: 'success', text: '验证码已发送到您的邮箱' });
@@ -547,12 +554,9 @@ export default function DashboardPage() {
     return Math.max(percentFee, withdrawConfig.accountFeeMin);
   };
 
-  // 计算卡片提现手续费（阶梯收费）
+  // 计算卡片提现手续费（固定手续费，从配置读取）
   const calculateCardWithdrawFee = (amount: number): number => {
-    if (amount < 50) return 1;      // 低于50扣1
-    if (amount < 100) return 2;     // 50-100扣2
-    if (amount < 200) return 4;     // 100-200扣4
-    return 10;                      // 超过200扣10
+    return withdrawConfig.cardFeeMin;
   };
 
   if (loading) {
@@ -744,7 +748,7 @@ export default function DashboardPage() {
                     >
                       <div 
                         className="cursor-pointer hover:opacity-90 transition"
-                        onClick={() => { setSelectedCard(card); setShowCardDetail(true); setCardDetail(null); setCodeSent(false); setVerifyCode(''); }}
+                        onClick={() => { setSelectedCard(card); setShowCardDetail(true); setCardDetail(null); setCodeSent(false); setVerifyCode(''); setNeedFirstRecharge(false); }}
                       >
                         <div className="flex justify-between items-start mb-4">
                           <div>
@@ -817,32 +821,54 @@ export default function DashboardPage() {
               
               {!cardDetail ? (
                 <>
-                  <p className="text-gray-400 mb-4">为保护您的卡片安全，查看完整卡号需要验证身份。</p>
-                  
-                  {!codeSent ? (
-                    <button
-                      onClick={handleSendVerifyCode}
-                      disabled={verifyingCard}
-                      className="w-full bg-blue-600 py-3 rounded-lg mb-4 disabled:opacity-50"
-                    >
-                      {verifyingCard ? '发送中...' : '发送验证码到邮箱'}
-                    </button>
+                  {needFirstRecharge ? (
+                    <>
+                      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mb-4">
+                        <p className="text-yellow-400 font-medium mb-2">⚠️ 需要先为该卡充值</p>
+                        <p className="text-gray-400 text-sm">为保障资金安全，首次查看卡片信息前需要先为该卡充值至少 $5。</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setShowCardDetail(false);
+                          setSelectedCardForRecharge(selectedCard);
+                          setCardAction('recharge');
+                          setCardRechargeAmount('5');
+                        }}
+                        className="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg mb-4"
+                      >
+                        立即充值
+                      </button>
+                    </>
                   ) : (
                     <>
-                      <input
-                        type="text"
-                        value={verifyCode}
-                        onChange={(e) => setVerifyCode(e.target.value)}
-                        placeholder="请输入验证码"
-                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 mb-4"
-                      />
-                      <button
-                        onClick={handleVerifyAndGetDetail}
-                        disabled={verifyingCard || !verifyCode}
-                        className="w-full bg-blue-600 py-3 rounded-lg mb-4 disabled:opacity-50"
-                      >
-                        {verifyingCard ? '验证中...' : '验证并查看'}
-                      </button>
+                      <p className="text-gray-400 mb-4">为保护您的卡片安全，查看完整卡号需要验证身份。</p>
+                      
+                      {!codeSent ? (
+                        <button
+                          onClick={handleSendVerifyCode}
+                          disabled={verifyingCard}
+                          className="w-full bg-blue-600 py-3 rounded-lg mb-4 disabled:opacity-50"
+                        >
+                          {verifyingCard ? '发送中...' : '发送验证码到邮箱'}
+                        </button>
+                      ) : (
+                        <>
+                          <input
+                            type="text"
+                            value={verifyCode}
+                            onChange={(e) => setVerifyCode(e.target.value)}
+                            placeholder="请输入验证码"
+                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 mb-4"
+                          />
+                          <button
+                            onClick={handleVerifyAndGetDetail}
+                            disabled={verifyingCard || !verifyCode}
+                            className="w-full bg-blue-600 py-3 rounded-lg mb-4 disabled:opacity-50"
+                          >
+                            {verifyingCard ? '验证中...' : '验证并查看'}
+                          </button>
+                        </>
+                      )}
                     </>
                   )}
                 </>
@@ -867,7 +893,7 @@ export default function DashboardPage() {
               )}
 
               <button
-                onClick={() => { setShowCardDetail(false); setSelectedCard(null); setCardDetail(null); }}
+                onClick={() => { setShowCardDetail(false); setSelectedCard(null); setCardDetail(null); setNeedFirstRecharge(false); }}
                 className="w-full bg-slate-600 py-3 rounded-lg mt-4"
               >
                 关闭

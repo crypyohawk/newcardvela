@@ -25,6 +25,10 @@ export async function POST(
       return NextResponse.json({ error: '充值金额无效' }, { status: 400 });
     }
 
+    if (amount < 5) {
+      return NextResponse.json({ error: '卡片充值金额不得低于 $5' }, { status: 400 });
+    }
+
     // 获取卡片信息
     const card = await db.userCard.findUnique({
       where: { id: params.id },

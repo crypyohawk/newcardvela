@@ -119,6 +119,10 @@ model Transaction {
   
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([userId])
+  @@index([type, status])
+  @@index([type, status, createdAt])
 }
 
 model SystemConfig {

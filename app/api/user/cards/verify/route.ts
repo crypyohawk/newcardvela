@@ -42,6 +42,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '卡片不存在' }, { status: 404 });
     }
 
+    // 检查该卡是否已完成首次充值（至少 $5）
+    const completedRecharge = await db.transaction.findFirst({
+      where: {
+        userId: payload.userId,
+        type: 'card_recharge',
+        status: 'completed',
+        txHash: { contains: `"cardId":"${cardId}"` },
+      },
+    });
+
+    if (!completedRecharge) {
+      return NextResponse.json(
+        { error: '请先为该卡充值至少 $5 后才能查看卡片信息', code: 'NEED_FIRST_RECHARGE' },
+        { status: 403 }
+      );
+    }
+
     // 生成 6 位验证码，有效期 10 分钟
     const code = crypto.randomInt(100000, 999999).toString();
     const expires = Date.now() + 10 * 60 * 1000;

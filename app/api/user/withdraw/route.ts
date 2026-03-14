@@ -25,12 +25,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '请填写收款地址' }, { status: 400 });
     }
 
-    // 获取系统设置
-    const settings = await db.systemSettings.findFirst();
-    const minAmount = settings?.accountWithdrawMinAmount ?? 2;
-    const maxAmount = settings?.accountWithdrawMaxAmount ?? 500;
-    const feePercent = settings?.accountWithdrawFeePercent ?? 5;
-    const feeMin = settings?.accountWithdrawFeeMin ?? 2;
+    // 获取系统设置（从 SystemConfig 表读取）
+    const withdrawConfigs = await db.systemConfig.findMany({
+      where: {
+        key: { in: ['withdraw_min_amount', 'withdraw_max_amount', 'withdraw_fee_percent', 'withdraw_fee_min'] },
+      },
+    });
+    const cfgMap: Record<string, string> = {};
+    withdrawConfigs.forEach(c => { cfgMap[c.key] = c.value; });
+
+    const minAmount = parseFloat(cfgMap['withdraw_min_amount']) || 2;
+    const maxAmount = parseFloat(cfgMap['withdraw_max_amount']) || 500;
+    const feePercent = parseFloat(cfgMap['withdraw_fee_percent']) || 5;
+    const feeMin = parseFloat(cfgMap['withdraw_fee_min']) || 2;
 
     if (amount < minAmount) {
       return NextResponse.json({ error: `最低提现金额为 $${minAmount}` }, { status: 400 });

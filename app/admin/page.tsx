@@ -77,6 +77,7 @@ export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [userStats, setUserStats] = useState({ totalUsers: 0, totalBalance: 0, totalCards: 0 });
   const [orders, setOrders] = useState<Order[]>([]);
+  const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
   const [withdrawOrders, setWithdrawOrders] = useState<Order[]>([]);
   const [refunds, setRefunds] = useState<Order[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -566,6 +567,8 @@ export default function AdminPage() {
 
   // 订单操作
   const handleOrderAction = async (orderId: string, action: 'confirm' | 'reject') => {
+    if (processingOrderId) return;
+    setProcessingOrderId(orderId);
     try {
       const res = await fetch('/api/admin/orders', {
         method: 'POST',
@@ -582,6 +585,8 @@ export default function AdminPage() {
       fetchOrders();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
+    } finally {
+      setProcessingOrderId(null);
     }
   };
 
@@ -1222,13 +1227,15 @@ export default function AdminPage() {
                           <>
                             <button
                               onClick={() => handleOrderAction(order.id, 'confirm')}
-                              className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs p-2 rounded"
+                              disabled={processingOrderId === order.id}
+                              className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white text-xs p-2 rounded"
                             >
-                              确认
+                              {processingOrderId === order.id ? '处理中...' : '确认'}
                             </button>
                             <button
                               onClick={() => handleOrderAction(order.id, 'reject')}
-                              className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs p-2 rounded"
+                              disabled={processingOrderId === order.id}
+                              className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white text-xs p-2 rounded"
                             >
                               拒绝
                             </button>
@@ -1308,13 +1315,15 @@ export default function AdminPage() {
                               <div className="flex gap-2">
                                 <button
                                   onClick={() => handleOrderAction(order.id, 'confirm')}
-                                  className="bg-green-600 px-3 py-1 rounded text-sm hover:bg-green-700"
+                                  disabled={processingOrderId === order.id}
+                                  className="bg-green-600 px-3 py-1 rounded text-sm hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
                                 >
-                                  确认
+                                  {processingOrderId === order.id ? '处理中...' : '确认'}
                                 </button>
                                 <button
                                   onClick={() => handleOrderAction(order.id, 'reject')}
-                                  className="bg-red-600 px-3 py-1 rounded text-sm hover:bg-red-700"
+                                  disabled={processingOrderId === order.id}
+                                  className="bg-red-600 px-3 py-1 rounded text-sm hover:bg-red-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
                                 >
                                   拒绝
                                 </button>

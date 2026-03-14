@@ -49,17 +49,20 @@ export async function POST(
       return NextResponse.json({ error: '卡片未激活' }, { status: 400 });
     }
 
-    // ✅ 修复：获取系统设置
-    let settings;
+    // 获取系统设置（从 SystemConfig 表读取）
+    let cardWithdrawFee = 1.5;
     try {
-      settings = await db.systemSettings.findFirst();
+      const feeConfig = await db.systemConfig.findUnique({
+        where: { key: 'card_withdraw_fee' },
+      });
+      if (feeConfig) {
+        cardWithdrawFee = parseFloat(feeConfig.value) || 1.5;
+      }
     } catch (e) {
-      console.error('获取系统设置失败:', e);
+      console.error('获取卡提现手续费配置失败:', e);
     }
 
-    const feePercent = settings?.cardWithdrawFeePercent ?? 1;
-    const feeMin = settings?.cardWithdrawFeeMin ?? 1;
-    const fee = Math.max(amount * (feePercent / 100), feeMin);
+    const fee = cardWithdrawFee;
     const userReceive = Math.round((amount - fee) * 100) / 100;
 
     // ✅ 修复：先检查手续费，避免无意义的上游请求
@@ -135,7 +138,6 @@ export async function POST(
               cardId: card.id,
               withdrawAmount: amount,
               fee: fee,
-              feePercent: feePercent,
               userReceive: userReceive,
             }),
           },

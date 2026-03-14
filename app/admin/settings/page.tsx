@@ -30,14 +30,14 @@ export default function AdminSettingsPage() {
       const data = await res.json();
       if (data.configs) {
         setConfigs(data.configs);
+        // 从 SystemConfig 读取提现配置
+        setAccountWithdrawMinAmount(parseFloat(data.configs['withdraw_min_amount']) || 2);
+        setAccountWithdrawMaxAmount(parseFloat(data.configs['withdraw_max_amount']) || 500);
+        setCardWithdrawFeePercent(parseFloat(data.configs['card_withdraw_fee_percent']) || 1);
+        setCardWithdrawFeeMin(parseFloat(data.configs['card_withdraw_fee']) || 1);
+        setAccountWithdrawFeePercent(parseFloat(data.configs['withdraw_fee_percent']) || 5);
+        setAccountWithdrawFeeMin(parseFloat(data.configs['withdraw_fee_min']) || 2);
       }
-      // 在 UI 中设置
-      setAccountWithdrawMinAmount(data.accountWithdrawMinAmount ?? 2);
-      setAccountWithdrawMaxAmount(data.accountWithdrawMaxAmount ?? 500);
-      setAccountWithdrawFeePercent(data.accountWithdrawFeePercent ?? 5);
-      setAccountWithdrawFeeMin(data.accountWithdrawFeeMin ?? 2);
-      setCardWithdrawFeePercent(data.cardWithdrawFeePercent ?? 1);
-      setCardWithdrawFeeMin(data.cardWithdrawFeeMin ?? 1);
     } catch (error) {
       console.error('获取配置失败:', error);
     } finally {
@@ -77,39 +77,6 @@ export default function AdminSettingsPage() {
       await saveConfig(key, base64);
     };
     reader.readAsDataURL(file);
-  };
-
-  const saveWithdrawSettings = async () => {
-    setSaving(true);
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/admin/config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          key: 'withdraw_settings',
-          value: {
-            accountWithdrawMinAmount,
-            accountWithdrawMaxAmount,
-            accountWithdrawFeePercent,
-            accountWithdrawFeeMin,
-            cardWithdrawFeePercent,
-            cardWithdrawFeeMin,
-          },
-        }),
-      });
-      
-      if (!res.ok) throw new Error('保存提现配置失败');
-      
-      setMessage({ type: 'success', text: '保存成功' });
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error.message });
-    } finally {
-      setSaving(false);
-    }
   };
 
   if (loading) {
@@ -352,7 +319,7 @@ export default function AdminSettingsPage() {
                   className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
                 />
                 <button
-                  onClick={() => saveConfig('withdraw_min_amount', configs['withdraw_min_amount'] || '8')}
+                  onClick={() => saveConfig('withdraw_min_amount', String(accountWithdrawMinAmount))}
                   disabled={saving}
                   className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 >
@@ -370,7 +337,7 @@ export default function AdminSettingsPage() {
                   className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
                 />
                 <button
-                  onClick={() => saveConfig('withdraw_max_amount', configs['withdraw_max_amount'] || '500')}
+                  onClick={() => saveConfig('withdraw_max_amount', String(accountWithdrawMaxAmount))}
                   disabled={saving}
                   className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 >
@@ -386,13 +353,13 @@ export default function AdminSettingsPage() {
               <input
                 type="number"
                 step="0.1"
-                value={configs['card_withdraw_fee'] || '1.5'}
-                onChange={(e) => setConfigs(prev => ({ ...prev, card_withdraw_fee: e.target.value }))}
+                value={cardWithdrawFeeMin}
+                onChange={(e) => setCardWithdrawFeeMin(parseFloat(e.target.value) || 0)}
                 placeholder="1.5"
                 className="w-32 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
               />
               <button
-                onClick={() => saveConfig('card_withdraw_fee', configs['card_withdraw_fee'] || '1.5')}
+                onClick={() => saveConfig('card_withdraw_fee', String(cardWithdrawFeeMin))}
                 disabled={saving}
                 className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
@@ -404,18 +371,47 @@ export default function AdminSettingsPage() {
 
           <div>
             <label className="block text-sm text-gray-400 mb-2">账户提现手续费规则</label>
-            <div className="bg-slate-700 rounded-lg p-4 text-sm text-gray-300">
-              <p className="mb-2">按提现金额阶梯收费（1% + 固定费用）：</p>
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div>$8-10: 扣 $1</div>
-                <div>$10-20: 扣 $1</div>
-                <div>$20-50: 扣 $2</div>
-                <div>$50-100: 扣 $4</div>
-                <div>$100-200: 扣 $6</div>
-                <div>$200-300: 扣 $8</div>
-                <div>$300-500: 扣 $10</div>
+            <div className="grid grid-cols-2 gap-6 mb-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">手续费百分比 (%)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={accountWithdrawFeePercent}
+                    onChange={(e) => setAccountWithdrawFeePercent(parseFloat(e.target.value) || 0)}
+                    className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                  />
+                  <button
+                    onClick={() => saveConfig('withdraw_fee_percent', String(accountWithdrawFeePercent))}
+                    disabled={saving}
+                    className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    保存
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">最低手续费 (USD)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={accountWithdrawFeeMin}
+                    onChange={(e) => setAccountWithdrawFeeMin(parseFloat(e.target.value) || 0)}
+                    className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                  />
+                  <button
+                    onClick={() => saveConfig('withdraw_fee_min', String(accountWithdrawFeeMin))}
+                    disabled={saving}
+                    className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    保存
+                  </button>
+                </div>
               </div>
             </div>
+            <p className="text-gray-500 text-xs">手续费 = 提现金额 × {accountWithdrawFeePercent}%，最低收取 ${accountWithdrawFeeMin}</p>
           </div>
         </div>
       </div>

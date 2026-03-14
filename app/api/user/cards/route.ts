@@ -140,35 +140,52 @@ export async function POST(request: NextRequest) {
     // 确定卡片状态
     const cardStatus = applyResult.status === 'ACTIVE' ? 'active' : 'pending';
 
-    // 扣除用户余额
-    await db.user.update({
-      where: { id: payload.userId },
-      data: { balance: { decrement: totalCost } },
-    });
+    // 使用事务原子性检查余额、扣款、创建卡片记录
+    let userCard;
+    try {
+      userCard = await db.$transaction(async (tx) => {
+        // 事务内获取最新余额
+        const freshUser = await tx.user.findUnique({ where: { id: payload.userId } });
+        if (!freshUser || freshUser.balance < totalCost) {
+          throw new Error(`余额不足，需要 $${totalCost.toFixed(2)}，当前余额 $${freshUser?.balance.toFixed(2) || '0.00'}`);
+        }
 
-    // 创建卡片记录
-    const userCard = await db.userCard.create({
-      data: {
-        userId: payload.userId,
-        cardTypeId: cardType.id,
-        gsalaryCardId: applyResult.card_id || null,
-        cardNoLast4: cardNoLast4,
-        status: cardStatus,
-        balance: initialAmount,
-        openFee: cardType.openFee,
-      },
-      include: { cardType: true },
-    });
+        // 扣除用户余额
+        await tx.user.update({
+          where: { id: payload.userId },
+          data: { balance: { decrement: totalCost } },
+        });
 
-    // 记录交易
-    await db.transaction.create({
-      data: {
-        userId: payload.userId,
-        type: 'purchase',
-        amount: -totalCost,
-        status: 'completed',
-      },
-    });
+        // 创建卡片记录
+        const card = await tx.userCard.create({
+          data: {
+            userId: payload.userId,
+            cardTypeId: cardType.id,
+            gsalaryCardId: applyResult.card_id || null,
+            cardNoLast4: cardNoLast4,
+            status: cardStatus,
+            balance: initialAmount,
+            openFee: cardType.openFee,
+          },
+          include: { cardType: true },
+        });
+
+        // 记录交易
+        await tx.transaction.create({
+          data: {
+            userId: payload.userId,
+            type: 'purchase',
+            amount: -totalCost,
+            status: 'completed',
+          },
+        });
+
+        return card;
+      });
+    } catch (txError: any) {
+      console.error('[开卡] 扣款事务失败:', txError.message);
+      return NextResponse.json({ error: txError.message }, { status: 400 });
+    }
 
     // 轮询上游卡列表，尝试找到对应的 card_id
     let upstreamCard: any = null;
