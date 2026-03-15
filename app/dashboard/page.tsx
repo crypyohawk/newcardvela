@@ -809,6 +809,34 @@ export default function DashboardPage() {
                 })}
               </div>
             )}
+
+            {/* 订阅服务时的持卡人信息填写推荐 */}
+            {billingExamples.length > 0 && (
+              <div className="bg-blue-900/30 border border-blue-700 rounded-xl p-5 mt-6">
+                <h3 className="font-bold text-blue-300 mb-4">📋 订阅服务时的持卡人信息填写推荐：</h3>
+                <div className="space-y-4">
+                  {billingExamples.map((example, index) => (
+                    <div key={example.id} className="bg-slate-800/50 rounded-lg p-4">
+                      <div className="text-blue-400 font-semibold text-sm mb-2">示例 {index + 1}</div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm text-gray-300">
+                        <div><span className="text-gray-500">姓名:</span> {example.name}</div>
+                        {example.address && <div><span className="text-gray-500">街道:</span> {example.address}</div>}
+                        {example.city && <div><span className="text-gray-500">城市:</span> {example.city}</div>}
+                        {example.state && <div><span className="text-gray-500">州:</span> {example.state}</div>}
+                        {example.zip && <div><span className="text-gray-500">邮编:</span> {example.zip}</div>}
+                        {example.country && <div><span className="text-gray-500">国家:</span> {example.country}</div>}
+                      </div>
+                      {example.billingAddress && (
+                        <div className="mt-3 pt-3 border-t border-blue-700/50">
+                          <span className="text-gray-500 text-sm">账单地址 (Billing Address):</span>
+                          <p className="text-blue-200 font-medium mt-1">{example.billingAddress}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -994,34 +1022,6 @@ export default function DashboardPage() {
                     </button>
                   </div>
                 ))}
-              </div>
-            )}
-
-            {/* 订阅服务时的持卡人信息填写推荐 */}
-            {billingExamples.length > 0 && (
-              <div className="bg-blue-900/30 border border-blue-700 rounded-xl p-5 mt-6">
-                <h3 className="font-bold text-blue-300 mb-4">📋 订阅服务时的持卡人信息填写推荐：</h3>
-                <div className="space-y-4">
-                  {billingExamples.map((example, index) => (
-                    <div key={example.id} className="bg-slate-800/50 rounded-lg p-4">
-                      <div className="text-blue-400 font-semibold text-sm mb-2">示例 {index + 1}</div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm text-gray-300">
-                        <div><span className="text-gray-500">姓名:</span> {example.name}</div>
-                        {example.address && <div><span className="text-gray-500">街道:</span> {example.address}</div>}
-                        {example.city && <div><span className="text-gray-500">城市:</span> {example.city}</div>}
-                        {example.state && <div><span className="text-gray-500">州:</span> {example.state}</div>}
-                        {example.zip && <div><span className="text-gray-500">邮编:</span> {example.zip}</div>}
-                        {example.country && <div><span className="text-gray-500">国家:</span> {example.country}</div>}
-                      </div>
-                      {example.billingAddress && (
-                        <div className="mt-3 pt-3 border-t border-blue-700/50">
-                          <span className="text-gray-500 text-sm">账单地址 (Billing Address):</span>
-                          <p className="text-blue-200 font-medium mt-1">{example.billingAddress}</p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
           </div>
