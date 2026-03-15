@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     // 获取所有正常状态的用户卡片
     const activeCards = await db.userCard.findMany({
-      where: { status: 'NORMAL' },
+      where: { status: 'active' },
       include: {
         cardType: true,
         user: { select: { id: true, username: true, email: true, balance: true } },
@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const activeCards = await db.userCard.findMany({
-      where: { status: 'NORMAL' },
+      where: { status: 'active' },
       include: {
         cardType: true,
         user: { select: { id: true, username: true, balance: true } },
