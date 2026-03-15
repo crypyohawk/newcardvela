@@ -28,6 +28,14 @@ a {
                'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
 /* 专门保留中文“卡维拉”的显示 */
 .logo-cn {
   font-family: '思源黑体', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif;
