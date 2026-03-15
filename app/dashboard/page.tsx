@@ -962,7 +962,7 @@ export default function DashboardPage() {
                       </div>
                       {/* CardVela品牌 + 卡组织图标 */}
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold tracking-wider opacity-80">CardVela</span>
+                        <span className="text-xs font-bold tracking-wider opacity-80">CardVela</span>
                         <div className="w-12 h-8 flex items-center justify-center">
                         {card.name.toUpperCase().includes('VISA') ? (
                           <svg viewBox="0 0 48 32" className="w-full h-full">
