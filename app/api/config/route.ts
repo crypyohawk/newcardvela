@@ -99,6 +99,7 @@ export async function GET(request: NextRequest) {
         cardFeeMin: parseFloat(configMap['card_withdraw_fee'] || '1.5'),
       },
       supportEmail: supportEmailConfig?.value || '',
+      subscriptionGuide: configMap['subscription_guide'] || '',
     });
   } catch (error) {
     console.error('获取配置失败:', error);

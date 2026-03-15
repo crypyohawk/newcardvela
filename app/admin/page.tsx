@@ -82,6 +82,8 @@ export default function AdminPage() {
   const [refunds, setRefunds] = useState<Order[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [newNotice, setNewNotice] = useState('');
+  const [subscriptionGuide, setSubscriptionGuide] = useState('');
+  const [subscriptionGuideSaving, setSubscriptionGuideSaving] = useState(false);
   const [billingAddress, setBillingAddress] = useState({
     name: 'Michael Johnson',
     address: '1209 Orange Street',
@@ -446,6 +448,7 @@ export default function AdminPage() {
       if (res.ok) {
         const data = await res.json();
         if (data.support_email) setSupportEmail(data.support_email);
+        if (data.configs?.subscription_guide) setSubscriptionGuide(data.configs.subscription_guide);
       }
     } catch (error) {
       console.error('获取系统配置失败:', error);
@@ -874,6 +877,49 @@ export default function AdminPage() {
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* 订阅公告配置 */}
+            <div className="bg-slate-800 rounded-xl p-6">
+              <h2 className="text-xl font-bold mb-4">📌 订阅公告</h2>
+              <p className="text-sm text-gray-400 mb-4">编辑订阅指南公告，内容将显示在用户前台卡片页面顶部。可以填写订阅AI服务的注意事项、IP填写方法等。</p>
+              <textarea
+                value={subscriptionGuide}
+                onChange={(e) => setSubscriptionGuide(e.target.value)}
+                rows={8}
+                placeholder="例如：&#10;1. 订阅ChatGPT Plus时，请使用美国IP（推荐节点：洛杉矶/西雅图）&#10;2. 账单地址请参考下方推荐信息填写&#10;3. 如遇到支付失败，请更换IP后重试..."
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-sm leading-relaxed resize-y min-h-[120px]"
+              />
+              <div className="flex justify-end mt-4">
+                <button
+                  onClick={async () => {
+                    setSubscriptionGuideSaving(true);
+                    try {
+                      const res = await fetch('/api/admin/config', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${getToken()}`,
+                        },
+                        body: JSON.stringify({ key: 'subscription_guide', value: subscriptionGuide }),
+                      });
+                      if (res.ok) {
+                        setMessage({ type: 'success', text: '订阅公告已保存' });
+                      } else {
+                        setMessage({ type: 'error', text: '保存失败' });
+                      }
+                    } catch {
+                      setMessage({ type: 'error', text: '保存失败' });
+                    } finally {
+                      setSubscriptionGuideSaving(false);
+                    }
+                  }}
+                  disabled={subscriptionGuideSaving}
+                  className="bg-blue-600 px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {subscriptionGuideSaving ? '保存中...' : '保存公告'}
+                </button>
+              </div>
             </div>
 
             {/* 订阅服务持卡人信息配置 - 替换原来的账单地址配置部分 */}

@@ -127,6 +127,7 @@ export default function DashboardPage() {
 
   // 添加客服邮箱状态
   const [supportEmail, setSupportEmail] = useState('');
+  const [subscriptionGuide, setSubscriptionGuide] = useState('');
 
   useEffect(() => {
     if (!loading && !user) {
@@ -173,6 +174,11 @@ export default function DashboardPage() {
       // 获取客服邮箱
       if (configData.supportEmail) {
         setSupportEmail(configData.supportEmail);
+      }
+
+      // 获取订阅公告
+      if (configData.subscriptionGuide) {
+        setSubscriptionGuide(configData.subscriptionGuide);
       }
       
     } catch (error) {
@@ -693,26 +699,13 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* 在快捷操作区域后添加推荐横幅 */}
-        {referralInfo?.settings?.enabled && (
-          <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl p-4 mb-8">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div>
-                <h3 className="font-bold text-lg">🎁 {referralInfo.settings.promptText}</h3>
-                <p className="text-sm opacity-90 mt-1">
-                  您的推荐码：<span className="font-mono bg-white/20 px-2 py-1 rounded">{referralInfo.referralCode}</span>
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(referralInfo.referralLink);
-                  setMessage({ type: 'success', text: '推荐链接已复制！' });
-                }}
-                className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100"
-              >
-                复制链接
-              </button>
-            </div>
+        {/* 订阅公告 */}
+        {subscriptionGuide && (
+          <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 mb-6">
+            <h3 className="font-bold text-blue-400 mb-3 flex items-center gap-2">
+              <span>📌</span> 订阅公告
+            </h3>
+            <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{subscriptionGuide}</div>
           </div>
         )}
 
@@ -807,6 +800,28 @@ export default function DashboardPage() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* 推荐横幅 */}
+            {referralInfo?.settings?.enabled && (
+              <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg p-3 mt-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm">🎁</span>
+                    <span className="text-sm truncate">{referralInfo.settings.promptText}</span>
+                    <span className="font-mono text-xs bg-white/20 px-1.5 py-0.5 rounded shrink-0">{referralInfo.referralCode}</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(referralInfo.referralLink);
+                      setMessage({ type: 'success', text: '推荐链接已复制！' });
+                    }}
+                    className="bg-white/20 hover:bg-white/30 text-xs px-3 py-1.5 rounded-lg shrink-0 transition"
+                  >
+                    复制链接
+                  </button>
+                </div>
               </div>
             )}
 
