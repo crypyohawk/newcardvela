@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '../../../../src/lib/prisma';
 import { sendVerificationCodeForward } from '../../../../src/lib/email';
-import { getCardDetail } from '../../../../src/lib/gsalary';
+import { getCardDetail, withdrawFromCard } from '../../../../src/lib/gsalary';
 
 // 验证码类型
 const OTP_BUSINESS_TYPES = [
@@ -234,7 +234,19 @@ async function handleRefundTransaction(userCard: any, data: any) {
 
     console.log(`[退款] 小额退款 $${refundAmount} < $${feeConfig.largeRefundThreshold}，自动扣手续费 $${fee}，实际到账 $${netAmount}`);
 
-    // 直接完成退款，记录为已完成
+    // 实际从卡余额中扣除手续费
+    let deductSuccess = false;
+    try {
+      if (userCard.gsalaryCardId && fee > 0) {
+        await withdrawFromCard(userCard.gsalaryCardId, fee);
+        deductSuccess = true;
+        console.log(`[退款] 已从卡 ${userCard.gsalaryCardId} 扣除手续费 $${fee}`);
+      }
+    } catch (deductError: any) {
+      console.error(`[退款] 从卡扣除手续费失败: ${deductError.message}`);
+    }
+
+    // 记录退款交易
     await prisma.transaction.create({
       data: {
         userId: user!.id,
@@ -248,18 +260,20 @@ async function handleRefundTransaction(userCard: any, data: any) {
           autoProcessed: true,
           fee: fee,
           netAmount: netAmount,
+          feeDeducted: deductSuccess,
         }),
         paymentProof: JSON.stringify({
           action: 'auto_deduct_fee',
           originalAmount: refundAmount,
           deductedFee: fee,
           netAmount: netAmount,
+          feeDeducted: deductSuccess,
           processedAt: new Date().toISOString(),
         }),
       },
     });
 
-    console.log(`[退款] 小额退款自动处理完成`);
+    console.log(`[退款] 小额退款自动处理完成, 手续费${deductSuccess ? '已扣除' : '扣除失败'}`);
   } else {
     // ===== 大额退款：创建待审核记录，等待管理员处理 =====
     const percentFee = refundAmount * (feeConfig.refundFeePercent / 100);

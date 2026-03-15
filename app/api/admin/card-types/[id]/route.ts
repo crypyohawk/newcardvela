@@ -87,6 +87,18 @@ export async function DELETE(
   }
 
   try {
+    // 检查是否有关联的卡片记录
+    const cardCount = await prisma.userCard.count({
+      where: { cardTypeId: params.id },
+    });
+
+    if (cardCount > 0) {
+      return NextResponse.json(
+        { error: `该卡片类型下已有 ${cardCount} 张开卡记录，无法删除。请改为禁用该类型。` },
+        { status: 400 }
+      );
+    }
+
     await prisma.cardType.delete({ where: { id: params.id } });
     return NextResponse.json({ success: true });
   } catch (error: any) {
