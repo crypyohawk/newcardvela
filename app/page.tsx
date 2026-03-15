@@ -183,7 +183,7 @@ export default function HomePage() {
                   { icon: '🤖', title: 'AI 服务订阅', desc: 'ChatGPT Plus、Claude Pro、Gemini Advanced、Cursor、Midjourney 等' },
                   { icon: '☁️', title: '云服务 & SaaS', desc: 'AWS、Google Cloud、Azure、Vercel、Cloudflare 等' },
                   { icon: '🎬', title: '流媒体 & 娱乐', desc: 'Netflix、Spotify、YouTube Premium、Disney+ 等' },
-                  { icon: '💼', title: '商业代付 & 发薪', desc: '广告投放、跨境电商、海外雇员发薪，支持小额高频场景' },
+                  { icon: '💼', title: '商业代付 & 发薪', desc: '广告投放、跨境电商、海外雇员发薪，支持中小额高频场景' },
                 ].map((item, i) => (
                   <div key={i} className="flex gap-4 items-start group">
                     <div className="text-2xl mt-0.5 shrink-0">{item.icon}</div>
