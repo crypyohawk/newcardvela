@@ -699,8 +699,8 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* 订阅公告 */}
-        {subscriptionGuide && (
+        {/* 订阅公告 - 仅在卡片和开卡页面显示 */}
+        {subscriptionGuide && (activeTab === 'cards' || activeTab === 'open') && (
           <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 mb-6">
             <h3 className="font-bold text-blue-400 mb-3 flex items-center gap-2">
               <span>📌</span> 订阅公告
