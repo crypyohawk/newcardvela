@@ -1870,20 +1870,16 @@ export default function AdminPage() {
                       <tr className="text-gray-400 border-b border-slate-700">
                         <th className="pb-3 text-left">用户</th>
                         <th className="pb-3">卡类型</th>
-                        <th className="pb-3">显示月费</th>
-                        <th className="pb-3">上游月费</th>
-                        <th className="pb-3">平台利润</th>
+                        <th className="pb-3">月费</th>
                         <th className="pb-3">账户余额</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {monthlyFeePreview.cards?.filter((c: any) => c.profitFee > 0).map((card: any, i: number) => (
+                      {monthlyFeePreview.cards?.filter((c: any) => c.fee > 0).map((card: any, i: number) => (
                         <tr key={i} className="border-b border-slate-700/50">
                           <td className="py-2">{card.username || '-'}</td>
                           <td className="py-2 text-center">{card.cardType}</td>
-                          <td className="py-2 text-center">${card.displayFee}</td>
-                          <td className="py-2 text-center">${card.actualFee}</td>
-                          <td className="py-2 text-center text-green-400">${card.profitFee}</td>
+                          <td className="py-2 text-center text-green-400">${card.fee}</td>
                           <td className="py-2 text-center">${card.userBalance?.toFixed(2)}</td>
                         </tr>
                       ))}

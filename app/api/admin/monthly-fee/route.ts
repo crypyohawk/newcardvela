@@ -55,21 +55,17 @@ export async function POST(request: NextRequest) {
 
     for (const card of activeCards) {
       const cardType = card.cardType as any;
-      const displayFee = cardType.displayMonthlyFee || 0;
-      const actualFee = cardType.monthlyFee || 0;
-      const profitFee = Math.round((displayFee - actualFee) * 100) / 100;
+      const fee = cardType.monthlyFee || 0;
 
-      // 如果没有利润差额，跳过
-      if (profitFee <= 0) {
+      // 如果月费为0，跳过
+      if (fee <= 0) {
         results.push({
           cardId: card.id,
           userId: card.user?.id,
           username: card.user?.username,
           status: 'skipped',
-          reason: '无月费差额',
-          displayFee,
-          actualFee,
-          profitFee,
+          reason: '月费为0',
+          fee,
         });
         continue;
       }
@@ -81,7 +77,7 @@ export async function POST(request: NextRequest) {
       // 优先尝试从卡余额扣除（通过GSalary API）
       try {
         if (card.gsalaryCardId) {
-          await withdrawFromCard(card.gsalaryCardId, profitFee);
+          await withdrawFromCard(card.gsalaryCardId, fee);
           method = 'card_balance';
           success = true;
         }
@@ -91,10 +87,10 @@ export async function POST(request: NextRequest) {
 
       // 卡余额不足，从账户余额扣除
       if (!success && card.user) {
-        if (card.user.balance >= profitFee) {
+        if (card.user.balance >= fee) {
           await db.user.update({
             where: { id: card.user.id },
-            data: { balance: { decrement: profitFee } },
+            data: { balance: { decrement: fee } },
           });
           method = 'account_balance';
           success = true;
@@ -110,21 +106,19 @@ export async function POST(request: NextRequest) {
           data: {
             userId: card.user!.id,
             type: 'monthly_fee',
-            amount: profitFee,
+            amount: fee,
             status: 'completed',
             txHash: JSON.stringify({
               userCardId: card.id,
               gsalaryCardId: card.gsalaryCardId,
               cardTypeName: cardType.name,
-              displayFee,
-              actualFee,
-              profitFee,
+              fee,
               method,
               processedAt: new Date().toISOString(),
             }),
           },
         });
-        totalCollected += profitFee;
+        totalCollected += fee;
         successCount++;
       } else {
         // 记录失败记录
@@ -132,15 +126,13 @@ export async function POST(request: NextRequest) {
           data: {
             userId: card.user!.id,
             type: 'monthly_fee',
-            amount: profitFee,
+            amount: fee,
             status: 'failed',
             txHash: JSON.stringify({
               userCardId: card.id,
               gsalaryCardId: card.gsalaryCardId,
               cardTypeName: cardType.name,
-              displayFee,
-              actualFee,
-              profitFee,
+              fee,
               error: errorMsg,
               processedAt: new Date().toISOString(),
             }),
@@ -154,9 +146,7 @@ export async function POST(request: NextRequest) {
         userId: card.user?.id,
         username: card.user?.username,
         cardType: cardType.name,
-        displayFee,
-        actualFee,
-        profitFee,
+        fee,
         method,
         success,
         error: errorMsg || undefined,
@@ -199,19 +189,15 @@ export async function GET(request: NextRequest) {
     let totalEstimated = 0;
     const preview = activeCards.map((card) => {
       const cardType = card.cardType as any;
-      const displayFee = cardType.displayMonthlyFee || 0;
-      const actualFee = cardType.monthlyFee || 0;
-      const profitFee = Math.round((displayFee - actualFee) * 100) / 100;
-      if (profitFee > 0) totalEstimated += profitFee;
+      const fee = cardType.monthlyFee || 0;
+      if (fee > 0) totalEstimated += fee;
 
       return {
         cardId: card.id,
         userId: card.user?.id,
         username: card.user?.username,
         cardType: cardType.name,
-        displayFee,
-        actualFee,
-        profitFee,
+        fee,
         userBalance: card.user?.balance,
       };
     });
