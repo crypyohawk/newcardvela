@@ -167,7 +167,7 @@ export default function HomePage() {
               </svg>
             </div>
             <h3 className="text-lg font-semibold mb-2">安全可控</h3>
-            <p className="text-sm text-gray-500 leading-relaxed">每笔交易实时通知，独立卡号隔离风险，余额随时可提现，资金安全有保障。</p>
+            <p className="text-sm text-gray-500 leading-relaxed">客户端直连银行 API，充值、消费、退款、余额变动全部实时同步，无中间商隔离，费用透明可查，资金安全有保障。</p>
           </div>
         </div>
       </section>
@@ -248,7 +248,7 @@ export default function HomePage() {
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-xs font-black text-black">C</div>
               <span className="font-semibold text-sm">CardVela</span>
-              <span className="text-gray-600 text-sm ml-2">© {new Date().getFullYear()}</span>
+              <span className="text-gray-600 text-sm ml-2">© 2020</span>
             </div>
             <div className="flex items-center gap-6 text-sm text-gray-500">
               <Link href="/terms" className="hover:text-gray-300 transition">服务条款</Link>
