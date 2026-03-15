@@ -754,7 +754,8 @@ export default function DashboardPage() {
                             <h3 className="font-bold">{card.cardType?.name || 'VISA'}</h3>
                           </div>
                           <div className="flex items-center gap-2">
-                            {/* 卡组织图标 */}
+                            {/* CardVela品牌 + 卡组织图标 */}
+                            <span className="text-[10px] font-bold tracking-wider opacity-80">CardVela</span>
                             <div className="w-10 h-6 flex items-center justify-center">
                               {isVisa ? (
                                 <svg viewBox="0 0 48 32" className="w-full h-full">
@@ -916,8 +917,10 @@ export default function DashboardPage() {
                         <span className="text-xs opacity-70">{card.issuer}发行</span>
                         <h3 className="text-lg font-bold">{card.name}</h3>
                       </div>
-                      {/* 卡组织图标 */}
-                      <div className="w-12 h-8 flex items-center justify-center">
+                      {/* CardVela品牌 + 卡组织图标 */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold tracking-wider opacity-80">CardVela</span>
+                        <div className="w-12 h-8 flex items-center justify-center">
                         {card.name.toUpperCase().includes('VISA') ? (
                           <svg viewBox="0 0 48 32" className="w-full h-full">
                             <rect fill="#1A1F71" width="48" height="32" rx="4"/>
@@ -933,6 +936,7 @@ export default function DashboardPage() {
                         ) : (
                           <div className="bg-white/20 rounded px-2 py-1 text-xs font-bold">CARD</div>
                         )}
+                        </div>
                       </div>
                     </div>
                     
