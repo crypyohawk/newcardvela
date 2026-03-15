@@ -20,6 +20,25 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // 防重复：检查本月是否已执行过
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const alreadyExecuted = await db.transaction.findFirst({
+      where: {
+        type: 'monthly_fee',
+        status: 'completed',
+        createdAt: { gte: monthStart, lt: monthEnd },
+      },
+    });
+
+    if (alreadyExecuted) {
+      return NextResponse.json({
+        error: `本月月费已于 ${alreadyExecuted.createdAt.toLocaleString('zh-CN')} 执行过，不可重复扣款`,
+      }, { status: 400 });
+    }
+
     // 获取所有正常状态的用户卡片
     const activeCards = await db.userCard.findMany({
       where: { status: 'NORMAL' },
@@ -203,10 +222,23 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
+    // 检查本月是否已执行
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const thisMonthExecuted = await db.transaction.findFirst({
+      where: {
+        type: 'monthly_fee',
+        status: 'completed',
+        createdAt: { gte: monthStart, lt: monthEnd },
+      },
+    });
+
     return NextResponse.json({
       totalCards: activeCards.length,
       totalEstimatedRevenue: Math.round(totalEstimated * 100) / 100,
       lastExecutionTime: lastExecution?.createdAt || null,
+      alreadyExecutedThisMonth: !!thisMonthExecuted,
       cards: preview,
     });
   } catch (error: any) {

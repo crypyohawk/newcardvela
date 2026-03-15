@@ -67,7 +67,11 @@ interface Notice {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds' | 'referral'>('cards');
+  const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds' | 'referral' | 'monthlyFee'>('cards');
+  const [monthlyFeePreview, setMonthlyFeePreview] = useState<any>(null);
+  const [monthlyFeeLoading, setMonthlyFeeLoading] = useState(false);
+  const [monthlyFeeExecuting, setMonthlyFeeExecuting] = useState(false);
+  const [monthlyFeeResult, setMonthlyFeeResult] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [tabLoading, setTabLoading] = useState(false);  // 新增
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -747,6 +751,7 @@ export default function AdminPage() {
             { key: 'withdraws', label: '📤 提现管理' },
             { key: 'refunds', label: '↩️ 退款管理' },
             { key: 'referral', label: '🎁 推广设置' },
+            { key: 'monthlyFee', label: '📅 月费管理' },
           ].map(tab => (
             <button
               key={tab.key}
@@ -1754,6 +1759,139 @@ export default function AdminPage() {
                 保存客服邮箱
               </button>
             </div>
+          </div>
+        )}
+
+        {/* 月费管理 */}
+        {!tabLoading && activeTab === 'monthlyFee' && (
+          <div className="bg-slate-800 rounded-xl p-6">
+            <h2 className="text-xl font-bold mb-6">📅 月费收取管理</h2>
+            <p className="text-sm text-gray-400 mb-6">扣除逻辑：每张卡扣除平台利润月费（显示月费 - 上游月费）。优先从卡余额扣，不足则从账户余额扣。</p>
+
+            {/* 预览按钮 */}
+            <div className="flex gap-3 mb-6">
+              <button
+                onClick={async () => {
+                  setMonthlyFeeLoading(true);
+                  setMonthlyFeeResult(null);
+                  try {
+                    const token = localStorage.getItem('token');
+                    const res = await fetch('/api/admin/monthly-fee', {
+                      headers: { 'Authorization': `Bearer ${token}` },
+                    });
+                    const data = await res.json();
+                    if (res.ok) setMonthlyFeePreview(data);
+                    else setMessage({ type: 'error', text: data.error });
+                  } catch { setMessage({ type: 'error', text: '加载失败' }); }
+                  setMonthlyFeeLoading(false);
+                }}
+                disabled={monthlyFeeLoading}
+                className="bg-slate-700 px-6 py-3 rounded-lg hover:bg-slate-600 font-medium disabled:opacity-50"
+              >
+                {monthlyFeeLoading ? '加载中...' : '🔍 预览本月扣款'}
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm('确定执行本月月费扣除？\n\n此操作将从卡余额/账户余额中扣除月费，请确认本月未执行过。')) return;
+                  setMonthlyFeeExecuting(true);
+                  setMonthlyFeeResult(null);
+                  try {
+                    const token = localStorage.getItem('token');
+                    const res = await fetch('/api/admin/monthly-fee', {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${token}` },
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                      setMonthlyFeeResult(data);
+                      setMessage({ type: 'success', text: `月费扣除完成！成功 ${data.summary?.successCount} 张，失败 ${data.summary?.failCount} 张，共收取 $${data.summary?.totalCollected}` });
+                    } else {
+                      setMessage({ type: 'error', text: data.error });
+                    }
+                  } catch { setMessage({ type: 'error', text: '执行失败' }); }
+                  setMonthlyFeeExecuting(false);
+                }}
+                disabled={monthlyFeeExecuting || monthlyFeePreview?.alreadyExecutedThisMonth}
+                className="bg-blue-600 px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold disabled:opacity-50"
+              >
+                {monthlyFeeExecuting ? '执行中...' : monthlyFeePreview?.alreadyExecutedThisMonth ? '⛔ 本月已执行' : '✅ 执行本月扣款'}
+              </button>
+            </div>
+
+            {/* 执行结果 */}
+            {monthlyFeeResult && (
+              <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 mb-6">
+                <h3 className="font-bold text-green-400 mb-2">执行结果</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-400">总卡片数</span>
+                    <p className="text-lg font-bold">{monthlyFeeResult.summary?.totalCards}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">成功扣除</span>
+                    <p className="text-lg font-bold text-green-400">{monthlyFeeResult.summary?.successCount}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">扣除失败</span>
+                    <p className="text-lg font-bold text-red-400">{monthlyFeeResult.summary?.failCount}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">共收取</span>
+                    <p className="text-lg font-bold text-blue-400">${monthlyFeeResult.summary?.totalCollected}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 预览数据 */}
+            {monthlyFeePreview && (
+              <div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-slate-700/50 rounded-lg p-4">
+                    <span className="text-sm text-gray-400">活跃卡片总数</span>
+                    <p className="text-2xl font-bold">{monthlyFeePreview.totalCards}</p>
+                  </div>
+                  <div className="bg-slate-700/50 rounded-lg p-4">
+                    <span className="text-sm text-gray-400">预计收入</span>
+                    <p className="text-2xl font-bold text-green-400">${monthlyFeePreview.totalEstimatedRevenue}</p>
+                  </div>
+                  <div className="bg-slate-700/50 rounded-lg p-4">
+                    <span className="text-sm text-gray-400">上次执行</span>
+                    <p className="text-sm font-medium mt-1">{monthlyFeePreview.lastExecutionTime ? new Date(monthlyFeePreview.lastExecutionTime).toLocaleString('zh-CN') : '从未执行'}</p>
+                    {monthlyFeePreview.alreadyExecutedThisMonth && (
+                      <p className="text-xs text-yellow-400 mt-1">⚠️ 本月已执行过</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-gray-400 border-b border-slate-700">
+                        <th className="pb-3 text-left">用户</th>
+                        <th className="pb-3">卡类型</th>
+                        <th className="pb-3">显示月费</th>
+                        <th className="pb-3">上游月费</th>
+                        <th className="pb-3">平台利润</th>
+                        <th className="pb-3">账户余额</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monthlyFeePreview.cards?.filter((c: any) => c.profitFee > 0).map((card: any, i: number) => (
+                        <tr key={i} className="border-b border-slate-700/50">
+                          <td className="py-2">{card.username || '-'}</td>
+                          <td className="py-2 text-center">{card.cardType}</td>
+                          <td className="py-2 text-center">${card.displayFee}</td>
+                          <td className="py-2 text-center">${card.actualFee}</td>
+                          <td className="py-2 text-center text-green-400">${card.profitFee}</td>
+                          <td className="py-2 text-center">${card.userBalance?.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
