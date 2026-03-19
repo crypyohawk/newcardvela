@@ -64,7 +64,12 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white mb-3">7. 联系我们</h2>
+            <h2 className="text-lg font-semibold text-white mb-3">7. 声明</h2>
+            <p>CardVela 义务告知：本平台由国际授权机构发行，仅面向海外用户提供服务，用户需遵守所在地法律法规。</p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-semibold text-white mb-3">8. 联系我们</h2>
             <p>如对本服务条款有任何疑问，请通过平台内的客服功能或访问 <Link href="/" className="text-blue-400 hover:text-blue-300 transition">cardvela.com</Link> 联系我们。</p>
           </section>
         </div>

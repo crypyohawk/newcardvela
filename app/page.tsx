@@ -259,6 +259,15 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Disclaimer */}
+      <div className="border-t border-white/5 bg-[#0a0e1a]">
+        <div className="max-w-6xl mx-auto px-6 py-4 text-center">
+          <p className="text-xs text-gray-500 leading-relaxed">
+            <span className="text-gray-400 font-medium">CardVela 义务告知：</span>本平台由国际授权机构发行，仅面向海外用户提供服务，用户需遵守所在地法律法规。
+          </p>
+        </div>
+      </div>
+
       {/* Footer */}
       <footer className="border-t border-white/5">
         <div className="max-w-6xl mx-auto px-6 py-10">
