@@ -16,6 +16,9 @@ export async function GET(request: NextRequest) {
         _count: {
           select: { userCards: true },
         },
+        userCards: {
+          select: { cardNoLast4: true },
+        },
       },
     });
 

@@ -1083,7 +1083,7 @@ export default function AdminPage() {
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="搜索用户名、邮箱..."
+                  placeholder="搜索用户名、邮箱、卡号后4位..."
                   value={userSearch}
                   onChange={(e) => setUserSearch(e.target.value)}
                   className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 pl-10 focus:outline-none focus:border-blue-500 transition"
@@ -1102,7 +1102,10 @@ export default function AdminPage() {
               </div>
               {userSearch && (
                 <p className="text-sm text-gray-400 mt-2">
-                  找到 {users.filter(u => u.username.toLowerCase().includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase())).length} 个匹配用户
+                  找到 {users.filter(u => {
+                    const kw = userSearch.toLowerCase();
+                    return u.username.toLowerCase().includes(kw) || u.email.toLowerCase().includes(kw) || (u.userCards && u.userCards.some((c: any) => c.cardNoLast4 && c.cardNoLast4.includes(kw)));
+                  }).length} 个匹配用户
                 </p>
               )}
             </div>
@@ -1127,7 +1130,7 @@ export default function AdminPage() {
                     .filter(user => {
                       if (!userSearch) return true;
                       const keyword = userSearch.toLowerCase();
-                      return user.username.toLowerCase().includes(keyword) || user.email.toLowerCase().includes(keyword);
+                      return user.username.toLowerCase().includes(keyword) || user.email.toLowerCase().includes(keyword) || (user.userCards && user.userCards.some((c: any) => c.cardNoLast4 && c.cardNoLast4.includes(keyword)));
                     })
                     .map(user => (
                     <tr key={user.id} className="border-b border-slate-700 hover:bg-slate-700/50">
