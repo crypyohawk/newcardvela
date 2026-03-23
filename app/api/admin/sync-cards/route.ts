@@ -5,11 +5,22 @@ import { getCards } from '../../../../src/lib/gsalary';
 // 同步上游卡片到本地数据库
 export async function GET(request: NextRequest) {
   try {
-    // 获取上游所有卡片
-    const result = await getCards({ page: 1, limit: 100 });
-    const upstreamCards = result.cards || [];
+    // 获取所有持卡人，逐个拉取上游卡片（每个持卡人最多20张，避免分页遗漏）
+    const cardHolders = await db.cardHolder.findMany({ where: { isActive: true } });
+    
+    // 如果还没有持卡人记录，回退到不传 card_holder_id 的方式
+    const holderIds = cardHolders.length > 0 
+      ? cardHolders.map(h => h.gsalaryHolderId) 
+      : [undefined];
 
-    console.log('[同步] 上游卡片数量:', upstreamCards.length);
+    const upstreamCards: any[] = [];
+    for (const holderId of holderIds) {
+      const result = await getCards({ page: 1, limit: 100, card_holder_id: holderId });
+      const cards = result.cards || [];
+      upstreamCards.push(...cards);
+    }
+
+    console.log('[同步] 上游卡片数量:', upstreamCards.length, '持卡人数:', holderIds.length);
 
     // 获取本地所有用户卡片
     const localCards = await db.userCard.findMany();
