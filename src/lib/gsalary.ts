@@ -250,7 +250,31 @@ async function getAvailableCardHolderId(): Promise<string> {
     return available.gsalaryHolderId;
   }
 
-  // 2. 所有持卡人都满了，自动创建新的
+  // 2. 数据库没有可用记录，但有环境变量配置的默认持卡人（兼容未初始化的情况）
+  if (DEFAULT_CARD_HOLDER_ID) {
+    const holderCount = await db.cardHolder.count();
+    if (holderCount === 0) {
+      console.log('[持卡人] 数据库无记录，使用环境变量默认持卡人并自动导入');
+      try {
+        await db.cardHolder.create({
+          data: {
+            gsalaryHolderId: DEFAULT_CARD_HOLDER_ID,
+            firstName: 'Default',
+            lastName: 'Holder',
+            email: 'default@cardvela.com',
+            cardCount: 19, // 假设接近满了，促使后续自动创建新的
+            maxCards: 20,
+            isActive: true,
+          },
+        });
+        return DEFAULT_CARD_HOLDER_ID;
+      } catch (e) {
+        console.warn('[持卡人] 自动导入默认持卡人失败:', e);
+      }
+    }
+  }
+
+  // 3. 所有持卡人都满了，自动创建新的
   console.log('[持卡人] 所有持卡人已满，自动创建新持卡人...');
   return await autoCreateCardHolder();
 }
@@ -261,7 +285,8 @@ async function autoCreateCardHolder(): Promise<string> {
   const lastName = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
   const addr = US_ADDRESSES[Math.floor(Math.random() * US_ADDRESSES.length)];
   const seq = Date.now().toString(36);
-  const email = `holder.${firstName.toLowerCase()}.${seq}@cardvela.com`;
+  const rand = Math.random().toString(36).slice(2, 6);
+  const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}.${seq}${rand}@gmail.com`;
   const mobile = `302${Math.floor(1000000 + Math.random() * 9000000)}`;
 
   try {
