@@ -1222,23 +1222,50 @@ export default function DashboardPage() {
                     )}
                   </label>
 
-                  {/* 截图要求说明 */}
+                  {/* 截图示例说明 */}
                   {paymentInfo?.type !== 'usdt' && (
-                    <div className="mt-3 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-                      <p className="text-amber-400 text-xs font-semibold mb-2">⚠️ 截图要求（不符合要求将无法通过审核）</p>
-                      <p className="text-gray-400 text-xs mb-2">请上传支付详情页的<span className="text-white font-medium">完整截图</span>，必须包含以下信息：</p>
-                      <div className="grid grid-cols-2 gap-1 text-xs text-gray-400">
-                        <div>✅ 支付金额</div>
-                        <div>✅ 支付时间</div>
-                        <div>✅ 交易单号</div>
-                        <div>✅ 收款方名称</div>
-                        <div>✅ 支付状态（成功）</div>
-                        <div>✅ 付款方式</div>
+                    <div className="mt-3 bg-slate-800/80 border border-slate-600/50 rounded-lg p-3">
+                      <p className="text-amber-400 text-xs font-semibold mb-3 text-center">⚠️ 请上传完整的支付「账单详情」截图，否则无法通过审核</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* 正确示例 */}
+                        <div className="relative">
+                          <div className="bg-white rounded-lg p-2.5 text-[10px] text-gray-800 leading-relaxed">
+                            <div className="text-center text-[11px] font-bold text-gray-600 mb-1.5">账单详情</div>
+                            <div className="text-center mb-1">
+                              <div className="text-gray-500 text-[9px]">{paymentInfo?.type === 'alipay' ? '支付宝商家' : '微信支付'}</div>
+                              <div className="text-lg font-bold text-gray-900 leading-tight">-¥72.00</div>
+                              <div className="text-green-600 text-[9px]">交易成功</div>
+                            </div>
+                            <div className="border-t border-gray-200 pt-1.5 space-y-0.5">
+                              <div className="flex justify-between"><span className="text-gray-400">支付时间</span><span>2026-03-23 11:27</span></div>
+                              <div className="flex justify-between"><span className="text-gray-400">付款方式</span><span>储蓄卡(9851)</span></div>
+                              <div className="flex justify-between"><span className="text-gray-400">收款方</span><span>Outsider</span></div>
+                              <div className="flex justify-between"><span className="text-gray-400">交易单号</span><span className="text-[8px]">4500...8710</span></div>
+                            </div>
+                          </div>
+                          <div className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                            <span className="text-white text-xs font-bold">✓</span>
+                          </div>
+                          <p className="text-green-400 text-[10px] text-center mt-1.5 font-medium">✅ 正确示例</p>
+                        </div>
+                        {/* 错误示例 */}
+                        <div className="relative">
+                          <div className="bg-white rounded-lg p-2.5 text-[10px] text-gray-800 leading-relaxed">
+                            <div className="text-center py-4">
+                              <div className="w-8 h-8 rounded-full bg-gray-200 mx-auto mb-1.5"></div>
+                              <div className="text-gray-500 text-[9px]">Outsider</div>
+                              <div className="text-[9px] text-gray-400 mt-2">使用零钱支付</div>
+                              <div className="text-xl font-bold text-gray-900 leading-tight">¥ 72.00</div>
+                              <div className="text-blue-500 text-[9px] mt-1">账单详情 &gt;</div>
+                            </div>
+                          </div>
+                          <div className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center shadow-lg">
+                            <span className="text-white text-xs font-bold">✕</span>
+                          </div>
+                          <p className="text-red-400 text-[10px] text-center mt-1.5 font-medium">❌ 缺少详情信息</p>
+                        </div>
                       </div>
-                      <div className="mt-2 pt-2 border-t border-amber-500/10">
-                        <p className="text-red-400 text-xs">❌ 仅显示金额的转账页面截图<span className="text-gray-500">（没有交易单号、时间等详情）</span>将被驳回</p>
-                      </div>
-                      <p className="text-gray-500 text-xs mt-2">💡 提示：支付完成后，点击订单进入「账单详情」页面截图即可</p>
+                      <p className="text-gray-500 text-[10px] mt-2 text-center">💡 支付完成后，点击订单进入「账单详情」页面再截图</p>
                     </div>
                   )}
                 </div>
