@@ -228,6 +228,22 @@ model OpenCardNotice {
   updatedAt DateTime @updatedAt
 }
 
+// 持卡人管理（上游每个持卡人限20张卡）
+model CardHolder {
+  id                String   @id @default(cuid())
+  gsalaryHolderId   String   @unique        // 上游持卡人ID
+  firstName         String
+  lastName          String
+  email             String
+  cardCount         Int      @default(0)    // 已开卡数量
+  maxCards          Int      @default(20)   // 最大开卡数
+  isActive          Boolean  @default(true) // 是否可用
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([isActive, cardCount])
+}
+
 model UserCard {
   id              String   @id @default(cuid())
   userId          String

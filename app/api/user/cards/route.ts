@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
 
     // 轮询上游卡列表，尝试找到对应的 card_id
     let upstreamCard: any = null;
-    const holderId = process.env.GSALARY_DEFAULT_CARD_HOLDER_ID || undefined;
+    const holderId = applyResult._usedHolderId || process.env.GSALARY_DEFAULT_CARD_HOLDER_ID || undefined;
     if (applyResult && applyResult.request_id && holderId) {
       const maxAttempts = 15;
       for (let attempt = 0; attempt < maxAttempts; attempt++) {

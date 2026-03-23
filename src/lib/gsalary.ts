@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { db } from './db';
 
 const API_URL = process.env.GSALARY_API_URL || 'https://api.gsalary.com';
 const APP_ID = process.env.GSALARY_APP_ID || '';
@@ -174,27 +175,133 @@ export async function getCardApplyResult(requestId: string) {
   return request(`/v1/card_applies/${requestId}`, 'GET');
 }
 
-// 便捷开卡方法（使用默认持卡人）
+// 便捷开卡方法（自动选择可用持卡人）
 export async function quickApplyCard(data: {
   product_code: string;
   init_balance: number;
   card_holder_id?: string;
 }) {
   const requestId = `REQ_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const holderId = data.card_holder_id || DEFAULT_CARD_HOLDER_ID;
+  
+  // 自动获取可用持卡人
+  const holderId = data.card_holder_id || await getAvailableCardHolderId();
   
   if (!holderId) {
-    throw new Error('未配置默认持卡人ID');
+    throw new Error('无可用持卡人，请联系管理员');
   }
 
-  return applyCard({
+  const result = await applyCard({
     request_id: requestId,
     product_code: data.product_code,
     currency: 'USD',
     card_holder_id: holderId,
     init_balance: data.init_balance,
-    // 移除或降低限额参数，让上游使用默认值
   });
+
+  // 开卡成功后，更新持卡人的开卡计数
+  try {
+    await db.cardHolder.update({
+      where: { gsalaryHolderId: holderId },
+      data: { cardCount: { increment: 1 } },
+    });
+  } catch (e) {
+    console.warn('[持卡人] 更新开卡计数失败:', e);
+  }
+
+  // 在结果中附带使用的持卡人ID，供轮询时使用
+  result._usedHolderId = holderId;
+
+  return result;
+}
+
+// ==================== 持卡人自动管理 ====================
+
+// 美国常见姓名池
+const FIRST_NAMES = [
+  'James', 'Robert', 'John', 'Michael', 'David', 'William', 'Richard', 'Joseph', 'Thomas', 'Christopher',
+  'Daniel', 'Matthew', 'Anthony', 'Mark', 'Steven', 'Andrew', 'Kevin', 'Brian', 'George', 'Timothy',
+  'Jennifer', 'Elizabeth', 'Sarah', 'Jessica', 'Emily', 'Ashley', 'Amanda', 'Michelle', 'Stephanie', 'Nicole',
+];
+const LAST_NAMES = [
+  'Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez',
+  'Wilson', 'Anderson', 'Taylor', 'Thomas', 'Moore', 'Jackson', 'Martin', 'Lee', 'Thompson', 'White',
+];
+const US_ADDRESSES = [
+  { address: '1209 Orange Street', city: 'Wilmington', state: 'DE', postcode: '19801' },
+  { address: '251 Little Falls Drive', city: 'Wilmington', state: 'DE', postcode: '19808' },
+  { address: '850 New Burton Road', city: 'Dover', state: 'DE', postcode: '19904' },
+  { address: '2711 Centerville Road', city: 'Wilmington', state: 'DE', postcode: '19808' },
+  { address: '1013 Centre Road', city: 'Wilmington', state: 'DE', postcode: '19805' },
+];
+
+// 获取可用持卡人ID（<20张卡的）
+async function getAvailableCardHolderId(): Promise<string> {
+  // 1. 先从数据库找一个还有余量的持卡人
+  const available = await db.cardHolder.findFirst({
+    where: {
+      isActive: true,
+      cardCount: { lt: 20 },
+    },
+    orderBy: { cardCount: 'asc' }, // 优先选卡少的
+  });
+
+  if (available) {
+    console.log(`[持卡人] 使用现有持卡人 ${available.gsalaryHolderId}，已开 ${available.cardCount}/20 张`);
+    return available.gsalaryHolderId;
+  }
+
+  // 2. 所有持卡人都满了，自动创建新的
+  console.log('[持卡人] 所有持卡人已满，自动创建新持卡人...');
+  return await autoCreateCardHolder();
+}
+
+// 自动创建新持卡人
+async function autoCreateCardHolder(): Promise<string> {
+  const firstName = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
+  const lastName = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
+  const addr = US_ADDRESSES[Math.floor(Math.random() * US_ADDRESSES.length)];
+  const seq = Date.now().toString(36);
+  const email = `holder.${firstName.toLowerCase()}.${seq}@cardvela.com`;
+  const mobile = `302${Math.floor(1000000 + Math.random() * 9000000)}`;
+
+  try {
+    const result = await createCardHolder({
+      first_name: firstName,
+      last_name: lastName,
+      birth: `19${85 + Math.floor(Math.random() * 10)}-${String(1 + Math.floor(Math.random() * 12)).padStart(2, '0')}-${String(1 + Math.floor(Math.random() * 28)).padStart(2, '0')}`,
+      email,
+      mobile: { nation_code: '1', mobile },
+      region: 'US',
+      bill_address: {
+        ...addr,
+        country: 'US',
+      },
+    });
+
+    const holderId = result.card_holder_id;
+    if (!holderId) {
+      throw new Error('上游未返回持卡人ID');
+    }
+
+    // 保存到数据库
+    await db.cardHolder.create({
+      data: {
+        gsalaryHolderId: holderId,
+        firstName,
+        lastName,
+        email,
+        cardCount: 0,
+        maxCards: 20,
+        isActive: true,
+      },
+    });
+
+    console.log(`[持卡人] 新持卡人创建成功: ${holderId} (${firstName} ${lastName})`);
+    return holderId;
+  } catch (err: any) {
+    console.error('[持卡人] 创建失败:', err);
+    throw new Error(`创建持卡人失败: ${err.message}`);
+  }
 }
 
 // ==================== 卡片管理接口 ====================
