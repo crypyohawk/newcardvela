@@ -1221,6 +1221,26 @@ export default function DashboardPage() {
                       </>
                     )}
                   </label>
+
+                  {/* 截图要求说明 */}
+                  {paymentInfo?.type !== 'usdt' && (
+                    <div className="mt-3 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                      <p className="text-amber-400 text-xs font-semibold mb-2">⚠️ 截图要求（不符合要求将无法通过审核）</p>
+                      <p className="text-gray-400 text-xs mb-2">请上传支付详情页的<span className="text-white font-medium">完整截图</span>，必须包含以下信息：</p>
+                      <div className="grid grid-cols-2 gap-1 text-xs text-gray-400">
+                        <div>✅ 支付金额</div>
+                        <div>✅ 支付时间</div>
+                        <div>✅ 交易单号</div>
+                        <div>✅ 收款方名称</div>
+                        <div>✅ 支付状态（成功）</div>
+                        <div>✅ 付款方式</div>
+                      </div>
+                      <div className="mt-2 pt-2 border-t border-amber-500/10">
+                        <p className="text-red-400 text-xs">❌ 仅显示金额的转账页面截图<span className="text-gray-500">（没有交易单号、时间等详情）</span>将被驳回</p>
+                      </div>
+                      <p className="text-gray-500 text-xs mt-2">💡 提示：支付完成后，点击订单进入「账单详情」页面截图即可</p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-3">
