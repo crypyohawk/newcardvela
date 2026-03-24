@@ -77,7 +77,7 @@ export async function POST(
     let cardBalance: number;
     try {
       const cardInfo = await getCardDetail(card.gsalaryCardId);
-      cardBalance = parseFloat(cardInfo.balance || '0');
+      cardBalance = parseFloat(cardInfo.available_balance ?? cardInfo.balance ?? '0');
 
       if (cardInfo.status !== 'ACTIVE') {
         return NextResponse.json(
