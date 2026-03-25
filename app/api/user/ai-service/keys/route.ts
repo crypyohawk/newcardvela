@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
 import { generateApiKey, createNewApiToken, deleteNewApiToken, usdToQuota } from '../../../../../src/lib/newapi';
+
+/** 生成混淆名称，防止上游识别客户身份 */
+function obfuscateKeyName(userId: string, keyName: string): string {
+  const hash = crypto.createHash('sha256').update(`${userId}-${keyName}-${Date.now()}`).digest('hex').slice(0, 8);
+  return `proj-${hash}`;
+}
 
 // 获取用户的所有 Key
 export async function GET(request: NextRequest) {
@@ -13,7 +20,16 @@ export async function GET(request: NextRequest) {
 
     const keys = await db.aIKey.findMany({
       where: { userId: payload.userId },
-      include: { tier: { select: { name: true, displayName: true } } },
+      include: {
+        tier: {
+          select: {
+            name: true,
+            displayName: true,
+            modelGroup: true,
+            provider: { select: { type: true, displayName: true, baseUrl: true } },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -39,11 +55,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '请填写 Key 名称并选择套餐' }, { status: 400 });
     }
 
-    // 验证套餐存在
-    const tier = await db.aIServiceTier.findUnique({ where: { id: tierId } });
+    // 验证套餐存在，并获取 provider 信息
+    const tier = await db.aIServiceTier.findUnique({
+      where: { id: tierId },
+      include: { provider: true },
+    });
     if (!tier || !tier.isActive) {
       return NextResponse.json({ error: '套餐不存在或已下线' }, { status: 400 });
     }
+
+    const providerType = tier.provider?.type || 'proxy';
 
     // 验证用户余额
     const user = await db.user.findUnique({ where: { id: payload.userId } });
@@ -66,7 +87,7 @@ export async function POST(request: NextRequest) {
     try {
       const quotaAmount = monthlyLimit ? usdToQuota(monthlyLimit) : usdToQuota(1000);
       const result = await createNewApiToken({
-        name: `${user.username}-${keyName.trim()}`,
+        name: obfuscateKeyName(payload.userId, keyName.trim()),
         key: apiKey,
         remainQuota: quotaAmount,
         group: tier.name,
@@ -91,12 +112,18 @@ export async function POST(request: NextRequest) {
       include: { tier: { select: { name: true, displayName: true } } },
     });
 
+    // 获取平台 API 域名配置
+    const platformUrlConfig = await db.systemConfig.findUnique({ where: { key: 'ai_api_base_url' } });
+    const platformBaseUrl = platformUrlConfig?.value || process.env.AI_API_BASE_URL || 'https://api.cardvela.com';
+
     return NextResponse.json({
       success: true,
       key: aiKey,
       configGuide: {
-        baseUrl: process.env.AI_API_BASE_URL || 'https://api.cardvela.com',
+        baseUrl: platformBaseUrl,
         apiKey: aiKey.apiKey,
+        modelGroup: tier.modelGroup,
+        providerType,
       },
     });
   } catch (error: any) {

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../src/lib/db';
-import { quotaToUSD } from '../../../../src/lib/newapi';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,15 +31,27 @@ export async function POST(request: NextRequest) {
     let totalCostDeducted = 0;
 
     for (const log of logs) {
-      const { token_name, model_name, prompt_tokens, completion_tokens, quota, created_at } = log;
+      const { token_name, model_name, prompt_tokens, completion_tokens } = log;
 
-      // 通过 token_name 找到对应的 AIKey
-      // token_name 格式: "username-keyName"
+      // 验证必要字段
+      if (!token_name || !model_name) {
+        skipped++;
+        continue;
+      }
+
+      const inputTokens = Number(prompt_tokens) || 0;
+      const outputTokens = Number(completion_tokens) || 0;
+      if (inputTokens === 0 && outputTokens === 0) {
+        skipped++;
+        continue;
+      }
+
+      // 通过 token_name 精确匹配 AIKey
       const aiKey = await db.aIKey.findFirst({
         where: {
           OR: [
             { apiKey: token_name },
-            { keyName: { contains: token_name } },
+            { keyName: token_name },
           ],
         },
         include: { tier: true },
@@ -52,39 +63,48 @@ export async function POST(request: NextRequest) {
       }
 
       // 计算费用
-      const inputCost = (prompt_tokens / 1000000) * aiKey.tier.pricePerMillionInput;
-      const outputCost = (completion_tokens / 1000000) * aiKey.tier.pricePerMillionOutput;
+      const inputCost = (inputTokens / 1000000) * aiKey.tier.pricePerMillionInput;
+      const outputCost = (outputTokens / 1000000) * aiKey.tier.pricePerMillionOutput;
       const cost = Math.round((inputCost + outputCost) * 10000) / 10000;
 
-      // 写入用量日志
-      await db.aIUsageLog.create({
-        data: {
-          userId: aiKey.userId,
-          aiKeyId: aiKey.id,
-          model: model_name || 'unknown',
-          inputTokens: prompt_tokens || 0,
-          outputTokens: completion_tokens || 0,
-          cost,
-          channel: log.channel ? String(log.channel) : null,
-        },
-      });
+      // 检查月度预算（在扣费前检查）
+      if (aiKey.monthlyLimit && aiKey.monthUsed + cost > aiKey.monthlyLimit) {
+        await db.aIKey.update({
+          where: { id: aiKey.id },
+          data: { status: 'disabled' },
+        });
+        console.log(`[用量同步] Key ${aiKey.id} 超出月度预算，已自动禁用`);
+        skipped++;
+        continue;
+      }
 
-      // 更新 Key 的用量统计
-      await db.aIKey.update({
-        where: { id: aiKey.id },
-        data: {
-          monthUsed: { increment: cost },
-          totalUsed: { increment: cost },
-          lastUsedAt: new Date(),
-          lastSyncAt: new Date(),
-        },
-      });
-
-      // 从用户余额扣费
-      await db.user.update({
-        where: { id: aiKey.userId },
-        data: { balance: { decrement: cost } },
-      });
+      // 使用事务保证原子性：写日志 + 更新Key用量 + 扣余额
+      await db.$transaction([
+        db.aIUsageLog.create({
+          data: {
+            userId: aiKey.userId,
+            aiKeyId: aiKey.id,
+            model: model_name,
+            inputTokens,
+            outputTokens,
+            cost,
+            channel: log.channel ? String(log.channel) : null,
+          },
+        }),
+        db.aIKey.update({
+          where: { id: aiKey.id },
+          data: {
+            monthUsed: { increment: cost },
+            totalUsed: { increment: cost },
+            lastUsedAt: new Date(),
+            lastSyncAt: new Date(),
+          },
+        }),
+        db.user.update({
+          where: { id: aiKey.userId },
+          data: { balance: { decrement: cost } },
+        }),
+      ]);
 
       totalCostDeducted += cost;
       synced++;
@@ -101,22 +121,13 @@ export async function POST(request: NextRequest) {
         });
         console.log(`[用量同步] 用户 ${aiKey.userId} 余额不足，已自动禁用所有 Key`);
       }
-
-      // 检查月度预算
-      if (aiKey.monthlyLimit && aiKey.monthUsed + cost > aiKey.monthlyLimit) {
-        await db.aIKey.update({
-          where: { id: aiKey.id },
-          data: { status: 'disabled' },
-        });
-        console.log(`[用量同步] Key ${aiKey.id} 超出月度预算，已自动禁用`);
-      }
     }
 
     return NextResponse.json({
       success: true,
       synced,
       skipped,
-      totalCostDeducted: Math.round(totalCostDeducted * 100) / 100,
+      totalCostDeducted: Math.round(totalCostDeducted * 10000) / 10000,
     });
   } catch (error: any) {
     console.error('webhook 处理失败:', error);

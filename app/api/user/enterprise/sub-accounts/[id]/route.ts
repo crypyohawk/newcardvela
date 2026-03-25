@@ -14,8 +14,8 @@ export async function PUT(
     if (!payload) return NextResponse.json({ error: '无效的令牌' }, { status: 401 });
 
     const user = await db.user.findUnique({ where: { id: payload.userId } });
-    if (!user || user.role !== 'enterprise') {
-      return NextResponse.json({ error: '仅企业账户可使用此功能' }, { status: 403 });
+    if (!user || !['enterprise', 'ADMIN', 'admin'].includes(user.role)) {
+      return NextResponse.json({ error: '仅企业账户/管理员可使用此功能' }, { status: 403 });
     }
 
     const subAccount = await db.enterpriseSubAccount.findFirst({
@@ -28,7 +28,16 @@ export async function PUT(
     const body = await request.json();
     const updateData: any = {};
 
-    if (body.monthlyBudget !== undefined) updateData.monthlyBudget = body.monthlyBudget || null;
+    const parseBudget = (val: any): number | null => {
+      if (val === '' || val === null || val === undefined) return null;
+      const num = Number(val);
+      if (isNaN(num) || num < 0) return null;
+      return num;
+    };
+
+    if (body.dailyBudget !== undefined) updateData.dailyBudget = parseBudget(body.dailyBudget);
+    if (body.weeklyBudget !== undefined) updateData.weeklyBudget = parseBudget(body.weeklyBudget);
+    if (body.monthlyBudget !== undefined) updateData.monthlyBudget = parseBudget(body.monthlyBudget);
     if (body.isActive !== undefined) updateData.isActive = body.isActive;
 
     const updated = await db.enterpriseSubAccount.update({
@@ -57,8 +66,8 @@ export async function DELETE(
     if (!payload) return NextResponse.json({ error: '无效的令牌' }, { status: 401 });
 
     const user = await db.user.findUnique({ where: { id: payload.userId } });
-    if (!user || user.role !== 'enterprise') {
-      return NextResponse.json({ error: '仅企业账户可使用此功能' }, { status: 403 });
+    if (!user || !['enterprise', 'ADMIN', 'admin'].includes(user.role)) {
+      return NextResponse.json({ error: '仅企业账户/管理员可使用此功能' }, { status: 403 });
     }
 
     const subAccount = await db.enterpriseSubAccount.findFirst({

@@ -41,6 +41,7 @@ model User {
   aiKeys              AIKey[]
   enterpriseOwned     EnterpriseSubAccount[] @relation("EnterpriseOwner")
   subAccountOf        EnterpriseSubAccount[] @relation("SubAccount")
+  enterpriseApps      EnterpriseApplication[]
 
   @@index([email])
   @@index([referralCode])
@@ -318,24 +319,54 @@ model ReferralReward {
 }
 
 // ============================================================
-// Claude 聚合服务相关模型
+// AI 聚合服务相关模型
 // ============================================================
+
+// 上游服务商
+model AIProvider {
+  id          String   @id @default(cuid())
+  name        String   @unique              // "poloapi", "closeai", "aws-bedrock"
+  displayName String                        // "PoloAPI", "CloseAI", "AWS Bedrock"
+  type        String                        // "proxy" | "reseller"
+  // proxy: 我们代理转发(PoloAPI/AWS)，用户Key由我们生成
+  // reseller: 上游分销(CloseAI)，Key从上游复制过来
+  baseUrl     String?                       // 上游 API 地址
+  masterKey   String?                       // 我们在上游的主 Key（proxy模式用）
+  config      String?  @db.Text             // JSON: 上游特定配置
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tiers       AIServiceTier[]
+}
 
 // AI 服务套餐
 model AIServiceTier {
   id                      String   @id @default(cuid())
-  name                    String   @unique              // "economy" | "stable"
-  displayName             String                        // "经济版" | "稳定版"
+  name                    String   @unique              // "claude-economy" | "gpt-stable"
+  displayName             String                        // "Claude 经济版" | "GPT 稳定版"
   description             String?  @db.Text
   pricePerMillionInput    Float                         // 每百万 input token 价格 (USD)
   pricePerMillionOutput   Float                         // 每百万 output token 价格 (USD)
   features                String?  @db.Text             // JSON: 特性列表
   isActive                Boolean  @default(true)
   sortOrder               Int      @default(0)
+
+  // 上游服务商关联
+  providerId              String?
+  provider                AIProvider? @relation(fields: [providerId], references: [id])
+  modelGroup              String   @default("claude")   // "claude" | "gpt" | "mixed"
+  channelGroup            String?                       // 上游分组名(proxy模式: PoloAPI分组名)
+  apiBaseUrl              String?                       // 用户调用的 API 地址(覆盖默认)
+
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
   aiKeys                  AIKey[]
+
+  @@index([modelGroup])
+  @@index([providerId])
 }
 
 // 用户 API Key
@@ -347,9 +378,9 @@ model AIKey {
   tier            AIServiceTier @relation(fields: [tierId], references: [id])
 
   keyName         String                        // 用户给 Key 起的名称
-  apiKey          String   @unique              // sk-cardvela-xxxx
+  apiKey          String   @unique              // proxy: sk-cardvela-xxxx / reseller: 上游原始Key
   hashedKey       String?                       // 哈希后的 Key（安全存储）
-  newApiTokenId   Int?                          // new-api 侧的 token ID
+  newApiTokenId   Int?                          // new-api 侧的 token ID（proxy模式）
   
   status          String   @default("active")   // active | disabled | expired
   monthlyLimit    Float?                        // 每月用量上限 (USD)，null=不限
@@ -395,6 +426,8 @@ model EnterpriseSubAccount {
   subUserId       String                        // 子账户 userId
   subUser         User     @relation("SubAccount", fields: [subUserId], references: [id])
 
+  dailyBudget     Float?                        // 日限额 (USD)
+  weeklyBudget    Float?                        // 周限额 (USD)
   monthlyBudget   Float?                        // 月预算上限 (USD)
   isActive        Boolean  @default(true)
 
@@ -404,4 +437,25 @@ model EnterpriseSubAccount {
   @@unique([enterpriseId, subUserId])
   @@index([enterpriseId])
   @@index([subUserId])
+}
+
+// 企业账户申请
+model EnterpriseApplication {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName     String                        // 公司名称
+  businessLicense String?  @db.Text             // 营业执照图片 (base64 或 URL)
+  contactName     String                        // 联系人姓名
+  contactPhone    String                        // 联系电话
+  useCase         String?  @db.Text             // 使用场景描述
+  estimatedUsage  String?                       // 预估月用量
+  status          String   @default("pending")  // pending | approved | rejected
+  rejectReason    String?  @db.Text             // 拒绝原因
+  reviewedAt      DateTime?                     // 审核时间
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
 }

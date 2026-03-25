@@ -77,7 +77,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: '参数不完整' }, { status: 400 });
     }
 
-    if (!['user', 'agent'].includes(role)) {
+    if (!['user', 'agent', 'enterprise'].includes(role)) {
       return NextResponse.json({ error: '无效的角色' }, { status: 400 });
     }
 

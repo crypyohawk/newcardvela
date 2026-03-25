@@ -21,10 +21,16 @@ export async function PUT(
     if (body.features !== undefined) updateData.features = JSON.stringify(body.features);
     if (body.isActive !== undefined) updateData.isActive = body.isActive;
     if (body.sortOrder !== undefined) updateData.sortOrder = body.sortOrder;
+    if (body.providerId !== undefined) updateData.providerId = body.providerId || null;
+    if (body.modelGroup !== undefined) updateData.modelGroup = body.modelGroup;
+    if (body.channelGroup !== undefined) updateData.channelGroup = body.channelGroup || null;
 
     const tier = await db.aIServiceTier.update({
       where: { id: params.id },
       data: updateData,
+      include: {
+        provider: { select: { id: true, name: true, displayName: true, type: true } },
+      },
     });
 
     return NextResponse.json({ success: true, tier });

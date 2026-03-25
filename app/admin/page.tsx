@@ -67,7 +67,7 @@ interface Notice {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds' | 'referral' | 'monthlyFee' | 'ai'>('cards');
+  const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds' | 'referral' | 'monthlyFee' | 'ai' | 'enterprise'>('cards');
   const [monthlyFeePreview, setMonthlyFeePreview] = useState<any>(null);
   const [monthlyFeeLoading, setMonthlyFeeLoading] = useState(false);
   const [monthlyFeeExecuting, setMonthlyFeeExecuting] = useState(false);
@@ -140,6 +140,11 @@ export default function AdminPage() {
     description: '',
   });
 
+  // 企业审核状态
+  const [enterpriseApps, setEnterpriseApps] = useState<any[]>([]);
+  const [rejectingApp, setRejectingApp] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
   // AI 管理状态
   const [aiTiers, setAiTiers] = useState<any[]>([]);
   const [aiUsageStats, setAiUsageStats] = useState<any>(null);
@@ -147,7 +152,13 @@ export default function AdminPage() {
   const [aiKeySearch, setAiKeySearch] = useState('');
   const [showAddTier, setShowAddTier] = useState(false);
   const [editingTier, setEditingTier] = useState<any>(null);
-  const [tierForm, setTierForm] = useState({ name: '', displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true });
+  const [tierForm, setTierForm] = useState({ displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '' });
+
+  // Provider 管理状态
+  const [aiProviders, setAiProviders] = useState<any[]>([]);
+  const [showAddProvider, setShowAddProvider] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<any>(null);
+  const [providerForm, setProviderForm] = useState({ displayName: '', type: 'proxy', baseUrl: '', masterKey: '', isActive: true });
 
   // 查看凭证弹窗状态
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -206,6 +217,9 @@ export default function AdminPage() {
           break;
         case 'ai':
           await fetchAIManagement();
+          break;
+        case 'enterprise':
+          await fetchEnterpriseApps();
           break;
       }
       setLoadedTabs(prev => new Set(prev).add(tab));
@@ -455,31 +469,77 @@ export default function AdminPage() {
     }
   };
 
+  // 企业申请数据获取
+  const fetchEnterpriseApps = async () => {
+    try {
+      const res = await fetch('/api/admin/enterprise', {
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+      });
+      if (res.ok) { const d = await res.json(); setEnterpriseApps(d.applications || []); }
+    } catch (error) {
+      console.error('获取企业申请数据失败:', error);
+    }
+  };
+
+  const handleEnterpriseReview = async (applicationId: string, action: 'approve' | 'reject') => {
+    if (action === 'reject' && !rejectReason.trim()) {
+      setMessage({ type: 'error', text: '请填写拒绝原因' });
+      return;
+    }
+    try {
+      const res = await fetch('/api/admin/enterprise', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+        body: JSON.stringify({ applicationId, action, rejectReason: rejectReason.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setMessage({ type: 'success', text: action === 'approve' ? '已批准，用户已升级为企业账户' : '已拒绝' });
+      setRejectingApp(null);
+      setRejectReason('');
+      fetchEnterpriseApps();
+      fetchUsers();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
   // AI 管理数据获取
   const fetchAIManagement = async () => {
     try {
-      const [tiersRes, usageRes, keysRes] = await Promise.all([
+      const [tiersRes, usageRes, keysRes, providersRes] = await Promise.all([
         fetch('/api/admin/ai-tiers', { headers: { 'Authorization': `Bearer ${getToken()}` } }),
         fetch('/api/admin/ai-usage', { headers: { 'Authorization': `Bearer ${getToken()}` } }),
         fetch('/api/admin/ai-keys', { headers: { 'Authorization': `Bearer ${getToken()}` } }),
+        fetch('/api/admin/ai-providers', { headers: { 'Authorization': `Bearer ${getToken()}` } }),
       ]);
       if (tiersRes.ok) { const d = await tiersRes.json(); setAiTiers(d.tiers || []); }
       if (usageRes.ok) { const d = await usageRes.json(); setAiUsageStats(d); }
       if (keysRes.ok) { const d = await keysRes.json(); setAiKeys(d.keys || []); }
+      if (providersRes.ok) { const d = await providersRes.json(); setAiProviders(d.providers || []); }
     } catch (error) {
       console.error('获取 AI 管理数据失败:', error);
     }
   };
 
   const handleSaveTier = async () => {
+    if (!tierForm.displayName.trim()) {
+      setMessage({ type: 'error', text: '请填写套餐名称' });
+      return;
+    }
     try {
+      // 自动从名称生成slug
+      const autoName = tierForm.displayName.trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || `tier-${Date.now()}`;
       const payload = {
-        name: tierForm.name,
-        displayName: tierForm.displayName,
+        name: editingTier ? editingTier.name : autoName,
+        displayName: tierForm.displayName.trim(),
         pricePerMillionInput: parseFloat(tierForm.pricePerMillionInput) || 0,
         pricePerMillionOutput: parseFloat(tierForm.pricePerMillionOutput) || 0,
         features: tierForm.features.split(',').map((f: string) => f.trim()).filter(Boolean),
         isActive: tierForm.isActive,
+        providerId: tierForm.providerId || null,
+        modelGroup: tierForm.modelGroup || 'claude',
+        channelGroup: tierForm.channelGroup || null,
       };
       const url = editingTier ? `/api/admin/ai-tiers/${editingTier.id}` : '/api/admin/ai-tiers';
       const res = await fetch(url, {
@@ -491,7 +551,7 @@ export default function AdminPage() {
       setMessage({ type: 'success', text: editingTier ? '套餐已更新' : '套餐已创建' });
       setShowAddTier(false);
       setEditingTier(null);
-      setTierForm({ name: '', displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true });
+      setTierForm({ displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '' });
       fetchAIManagement();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
@@ -521,6 +581,54 @@ export default function AdminPage() {
         body: JSON.stringify({ keyId, status: currentStatus === 'active' ? 'disabled' : 'active' }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      fetchAIManagement();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  // Provider 管理
+  const handleSaveProvider = async () => {
+    try {
+      if (!providerForm.displayName.trim()) {
+        setMessage({ type: 'error', text: '请填写服务商名称' });
+        return;
+      }
+      const autoName = providerForm.displayName.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || `provider-${Date.now()}`;
+      const payload = {
+        name: editingProvider ? editingProvider.name : autoName,
+        displayName: providerForm.displayName.trim(),
+        type: providerForm.type,
+        baseUrl: providerForm.baseUrl || null,
+        masterKey: providerForm.masterKey || null,
+        isActive: providerForm.isActive,
+      };
+      const url = editingProvider ? `/api/admin/ai-providers/${editingProvider.id}` : '/api/admin/ai-providers';
+      const res = await fetch(url, {
+        method: editingProvider ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      setMessage({ type: 'success', text: editingProvider ? '服务商已更新' : '服务商已创建' });
+      setShowAddProvider(false);
+      setEditingProvider(null);
+      setProviderForm({ displayName: '', type: 'proxy', baseUrl: '', masterKey: '', isActive: true });
+      fetchAIManagement();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  const handleDeleteProvider = async (providerId: string) => {
+    if (!confirm('确定要删除此服务商吗？')) return;
+    try {
+      const res = await fetch(`/api/admin/ai-providers/${providerId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      setMessage({ type: 'success', text: '服务商已删除' });
       fetchAIManagement();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
@@ -747,7 +855,7 @@ export default function AdminPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      setMessage({ type: 'success', text: newRole === 'agent' ? '已设为代理商' : '已取消代理商' });
+      setMessage({ type: 'success', text: newRole === 'agent' ? '已设为代理商' : newRole === 'enterprise' ? '已设为企业用户' : '已设为普通用户' });
       fetchUsers();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
@@ -836,7 +944,8 @@ export default function AdminPage() {
             { key: 'refunds', label: '↩️ 退款管理' },
             { key: 'referral', label: '🎁 推广设置' },
             { key: 'monthlyFee', label: '📅 月费管理' },
-            { key: 'ai', label: '🤖 AI 管理' },
+            { key: 'enterprise', label: '🏢 企业审核' },
+            { key: 'ai', label: '✦ AI 管理' },
           ].map(tab => (
             <button
               key={tab.key}
@@ -1244,10 +1353,12 @@ export default function AdminPage() {
                         <span className={`px-2 py-1 rounded text-xs ${
                           user.role === 'admin' ? 'bg-purple-600' : 
                           user.role === 'agent' ? 'bg-orange-600' : 
+                          user.role === 'enterprise' ? 'bg-cyan-600' : 
                           'bg-gray-600'
                         }`}>
                           {user.role === 'admin' ? '管理员' : 
                            user.role === 'agent' ? '代理商' : 
+                           user.role === 'enterprise' ? '企业用户' : 
                            '普通用户'}
                         </span>
                       </td>
@@ -1979,6 +2090,122 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* 企业审核 */}
+        {!tabLoading && activeTab === 'enterprise' && (
+          <div className="space-y-6">
+            <div className="bg-slate-800 rounded-xl p-6">
+              <h2 className="text-xl font-bold mb-4">🏢 企业账户申请审核</h2>
+              {enterpriseApps.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <p>暂无企业申请</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {enterpriseApps.map((app: any) => (
+                    <div key={app.id} className={`bg-slate-700 rounded-lg p-5 border ${
+                      app.status === 'pending' ? 'border-yellow-500/30' :
+                      app.status === 'approved' ? 'border-green-500/30' : 'border-red-500/30'
+                    }`}>
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <div className="flex items-center gap-3 mb-1">
+                            <span className="font-bold text-lg">{app.companyName}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded ${
+                              app.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                              app.status === 'approved' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                            }`}>
+                              {app.status === 'pending' ? '待审核' : app.status === 'approved' ? '已批准' : '已拒绝'}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-400">
+                            申请人：{app.user?.username} ({app.user?.email})
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {new Date(app.createdAt).toLocaleString('zh-CN')}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
+                        <div>
+                          <span className="text-gray-500">联系人：</span>
+                          <span>{app.contactName}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">联系电话：</span>
+                          <span>{app.contactPhone}</span>
+                        </div>
+                        {app.estimatedUsage && (
+                          <div>
+                            <span className="text-gray-500">预估用量：</span>
+                            <span>{app.estimatedUsage}</span>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-gray-500">账户余额：</span>
+                          <span className="text-green-400">${app.user?.balance?.toFixed(2)}</span>
+                        </div>
+                      </div>
+                      {app.useCase && (
+                        <div className="text-sm mb-3">
+                          <span className="text-gray-500">使用场景：</span>
+                          <span className="text-gray-300">{app.useCase}</span>
+                        </div>
+                      )}
+                      {app.status === 'rejected' && app.rejectReason && (
+                        <div className="text-sm text-red-400 bg-red-500/10 rounded p-2 mb-3">
+                          拒绝原因：{app.rejectReason}
+                        </div>
+                      )}
+                      {app.status === 'pending' && (
+                        <div className="flex gap-2 mt-3">
+                          {rejectingApp === app.id ? (
+                            <div className="flex-1 flex gap-2">
+                              <input
+                                type="text"
+                                value={rejectReason}
+                                onChange={(e) => setRejectReason(e.target.value)}
+                                placeholder="请输入拒绝原因"
+                                className="flex-1 bg-slate-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                              />
+                              <button
+                                onClick={() => handleEnterpriseReview(app.id, 'reject')}
+                                className="px-3 py-1.5 rounded-lg text-xs bg-red-600 hover:bg-red-700"
+                              >
+                                确认拒绝
+                              </button>
+                              <button
+                                onClick={() => { setRejectingApp(null); setRejectReason(''); }}
+                                className="px-3 py-1.5 rounded-lg text-xs bg-slate-600 hover:bg-slate-500"
+                              >
+                                取消
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleEnterpriseReview(app.id, 'approve')}
+                                className="px-4 py-1.5 rounded-lg text-sm bg-green-600 hover:bg-green-700"
+                              >
+                                ✓ 批准
+                              </button>
+                              <button
+                                onClick={() => setRejectingApp(app.id)}
+                                className="px-4 py-1.5 rounded-lg text-sm bg-red-600 hover:bg-red-700"
+                              >
+                                ✕ 拒绝
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* AI 管理 */}
         {!tabLoading && activeTab === 'ai' && (
           <div className="space-y-6">
@@ -2007,6 +2234,72 @@ export default function AdminPage() {
               </div>
             )}
 
+            {/* 上游服务商管理 */}
+            <div>
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-bold">🔗 上游服务商</h3>
+                <button
+                  onClick={() => {
+                    setEditingProvider(null);
+                    setProviderForm({ displayName: '', type: 'proxy', baseUrl: '', masterKey: '', isActive: true });
+                    setShowAddProvider(true);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm"
+                >
+                  + 添加服务商
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {aiProviders.map((p: any) => (
+                  <div key={p.id} className="bg-slate-800 p-4 rounded-xl">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <span className="font-medium">{p.displayName}</span>
+                        <span className="text-xs text-gray-500 ml-2">({p.name})</span>
+                      </div>
+                      <span className={`text-xs px-2 py-0.5 rounded ${p.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                        {p.isActive ? '启用' : '停用'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`text-xs px-2 py-0.5 rounded ${p.type === 'proxy' ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                        代理模式
+                      </span>
+                      <span className="text-xs text-gray-500">{p._count?.tiers || 0} 个套餐</span>
+                    </div>
+                    {p.baseUrl && <p className="text-xs text-gray-500 truncate">API: {p.baseUrl}</p>}
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={() => {
+                          setEditingProvider(p);
+                          setProviderForm({
+                            displayName: p.displayName,
+                            type: p.type,
+                            baseUrl: p.baseUrl || '',
+                            masterKey: p.masterKey || '',
+                            isActive: p.isActive,
+                          });
+                          setShowAddProvider(true);
+                        }}
+                        className="text-blue-400 hover:text-blue-300 text-xs"
+                      >
+                        编辑
+                      </button>
+                      <button
+                        onClick={() => handleDeleteProvider(p.id)}
+                        className="text-red-400 hover:text-red-300 text-xs"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {aiProviders.length === 0 && (
+                  <p className="text-gray-500 text-sm col-span-full text-center py-4">暂无服务商，请先添加上游服务商（如 PoloAPI、CloseAI）</p>
+                )}
+              </div>
+            </div>
+
             {/* 套餐管理 */}
             <div>
               <div className="flex justify-between items-center mb-3">
@@ -2014,7 +2307,7 @@ export default function AdminPage() {
                 <button
                   onClick={() => {
                     setEditingTier(null);
-                    setTierForm({ name: '', displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true });
+                    setTierForm({ displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '' });
                     setShowAddTier(true);
                   }}
                   className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm"
@@ -2027,15 +2320,28 @@ export default function AdminPage() {
                 {aiTiers.map((tier: any) => (
                   <div key={tier.id} className="bg-slate-800 p-4 rounded-xl flex justify-between items-center">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium">{tier.displayName}</span>
                         <span className="text-xs text-gray-500">({tier.name})</span>
                         <span className={`text-xs px-2 py-0.5 rounded ${tier.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                           {tier.isActive ? '启用' : '停用'}
                         </span>
+                        <span className={`text-xs px-2 py-0.5 rounded ${
+                          tier.modelGroup === 'claude' ? 'bg-amber-500/20 text-amber-400' :
+                          tier.modelGroup === 'gpt' ? 'bg-emerald-500/20 text-emerald-400' :
+                          'bg-purple-500/20 text-purple-400'
+                        }`}>
+                          {tier.modelGroup === 'claude' ? 'Claude' : tier.modelGroup === 'gpt' ? 'GPT' : '混合'}
+                        </span>
+                        {tier.provider && (
+                          <span className={`text-xs px-2 py-0.5 rounded ${tier.provider.type === 'proxy' ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>
+                            {tier.provider.displayName}
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-gray-400 mt-1">
-                        输入 ${tier.pricePerMillionInput}/M tokens · 输出 ${tier.pricePerMillionOutput}/M tokens
+                        输入 ${tier.pricePerMillionInput}/M · 输出 ${tier.pricePerMillionOutput}/M
+                        {tier.channelGroup && <span className="ml-2 text-cyan-400">分组: {tier.channelGroup}</span>}
                         {tier._count?.aiKeys > 0 && <span className="ml-2 text-blue-400">({tier._count.aiKeys} 个 Key)</span>}
                       </p>
                     </div>
@@ -2044,12 +2350,14 @@ export default function AdminPage() {
                         onClick={() => {
                           setEditingTier(tier);
                           setTierForm({
-                            name: tier.name,
                             displayName: tier.displayName,
                             pricePerMillionInput: String(tier.pricePerMillionInput),
                             pricePerMillionOutput: String(tier.pricePerMillionOutput),
                             features: Array.isArray(tier.features) ? tier.features.join(', ') : (typeof tier.features === 'string' ? tier.features : ''),
                             isActive: tier.isActive,
+                            providerId: tier.providerId || '',
+                            modelGroup: tier.modelGroup || 'claude',
+                            channelGroup: tier.channelGroup || '',
                           });
                           setShowAddTier(true);
                         }}
@@ -2067,14 +2375,16 @@ export default function AdminPage() {
                   </div>
                 ))}
                 {aiTiers.length === 0 && (
-                  <p className="text-center text-gray-500 py-4">暂无套餐，请点击"新建套餐"创建</p>
+                  <p className="text-center text-gray-500 py-4">暂无套餐，请先添加服务商后创建套餐</p>
                 )}
               </div>
             </div>
 
             {/* Key 管理 */}
             <div>
-              <h3 className="text-lg font-bold mb-3">🔑 Key 管理</h3>
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-bold">🔑 Key 管理</h3>
+              </div>
               <div className="mb-3">
                 <input
                   type="text"
@@ -2091,6 +2401,8 @@ export default function AdminPage() {
                       <th className="pb-3 text-left">用户</th>
                       <th className="pb-3 text-left">Key 名称</th>
                       <th className="pb-3">套餐</th>
+                      <th className="pb-3">模型</th>
+                      <th className="pb-3">模式</th>
                       <th className="pb-3">本月用量</th>
                       <th className="pb-3">状态</th>
                       <th className="pb-3">操作</th>
@@ -2108,6 +2420,20 @@ export default function AdminPage() {
                         <td className="py-2">{key.user?.email || '-'}</td>
                         <td className="py-2">{key.keyName}</td>
                         <td className="py-2 text-center">{key.tier?.displayName || '-'}</td>
+                        <td className="py-2 text-center">
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${
+                            key.tier?.modelGroup === 'gpt' ? 'bg-emerald-500/20 text-emerald-400' :
+                            key.tier?.modelGroup === 'mixed' ? 'bg-purple-500/20 text-purple-400' :
+                            'bg-amber-500/20 text-amber-400'
+                          }`}>
+                            {key.tier?.modelGroup === 'gpt' ? 'GPT' : key.tier?.modelGroup === 'mixed' ? '混合' : 'Claude'}
+                          </span>
+                        </td>
+                        <td className="py-2 text-center">
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">
+                            代理
+                          </span>
+                        </td>
                         <td className="py-2 text-center">${key.monthUsed?.toFixed(4) || '0'}</td>
                         <td className="py-2 text-center">
                           <span className={`text-xs px-2 py-0.5 rounded ${
@@ -2129,7 +2455,7 @@ export default function AdminPage() {
                       </tr>
                     ))}
                     {aiKeys.length === 0 && (
-                      <tr><td colSpan={6} className="py-4 text-center text-gray-500">暂无 Key</td></tr>
+                      <tr><td colSpan={8} className="py-4 text-center text-gray-500">暂无 Key</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -2141,26 +2467,53 @@ export default function AdminPage() {
         {/* 新建/编辑套餐弹窗 */}
         {showAddTier && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-slate-800 p-6 rounded-xl w-full max-w-md">
+            <div className="bg-slate-800 p-6 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
               <h3 className="text-lg font-bold mb-4">{editingTier ? '编辑套餐' : '新建套餐'}</h3>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">套餐标识 (英文)</label>
-                  <input
-                    type="text"
-                    value={tierForm.name}
-                    onChange={(e) => setTierForm({ ...tierForm, name: e.target.value })}
-                    placeholder="例如：economy, stable, official"
+                  <label className="block text-sm text-gray-400 mb-1">上游服务商</label>
+                  <select
+                    value={tierForm.providerId}
+                    onChange={(e) => setTierForm({ ...tierForm, providerId: e.target.value })}
                     className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  >
+                    <option value="">未指定</option>
+                    {aiProviders.filter((p: any) => p.isActive).map((p: any) => (
+                      <option key={p.id} value={p.id}>{p.displayName}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">模型分组</label>
+                    <select
+                      value={tierForm.modelGroup}
+                      onChange={(e) => setTierForm({ ...tierForm, modelGroup: e.target.value })}
+                      className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="claude">Claude</option>
+                      <option value="gpt">GPT</option>
+                      <option value="mixed">混合</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">上游分组名</label>
+                    <input
+                      type="text"
+                      value={tierForm.channelGroup}
+                      onChange={(e) => setTierForm({ ...tierForm, channelGroup: e.target.value })}
+                      placeholder="如: code稳定, gpt-4o"
+                      className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">显示名称</label>
+                  <label className="block text-sm text-gray-400 mb-1">套餐名称</label>
                   <input
                     type="text"
                     value={tierForm.displayName}
                     onChange={(e) => setTierForm({ ...tierForm, displayName: e.target.value })}
-                    placeholder="例如：经济版、稳定版、官方直连"
+                    placeholder="例如：Claude 经济版、GPT-4o 稳定版"
                     className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -2217,6 +2570,71 @@ export default function AdminPage() {
                 </button>
                 <button
                   onClick={() => { setShowAddTier(false); setEditingTier(null); }}
+                  className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded-lg font-medium text-sm"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 新建/编辑服务商弹窗 */}
+        {showAddProvider && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-slate-800 p-6 rounded-xl w-full max-w-md">
+              <h3 className="text-lg font-bold mb-4">{editingProvider ? '编辑服务商' : '添加服务商'}</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">服务商名称</label>
+                  <input
+                    type="text"
+                    value={providerForm.displayName}
+                    onChange={(e) => setProviderForm({ ...providerForm, displayName: e.target.value })}
+                    placeholder="例如：PoloAPI, CloseAI"
+                    className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">上游 API 地址（内部代理转发用，用户不可见）</label>
+                  <input
+                    type="text"
+                    value={providerForm.baseUrl}
+                    onChange={(e) => setProviderForm({ ...providerForm, baseUrl: e.target.value })}
+                    placeholder="https://api.poloapi.com"
+                    className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">此地址仅用于后端代理转发，用户看到的是「系统设置」中配置的平台 API 域名</p>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Master Key（你的上游主密钥）</label>
+                  <input
+                    type="password"
+                    value={providerForm.masterKey}
+                    onChange={(e) => setProviderForm({ ...providerForm, masterKey: e.target.value })}
+                    placeholder="sk-xxx..."
+                    className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={providerForm.isActive}
+                    onChange={(e) => setProviderForm({ ...providerForm, isActive: e.target.checked })}
+                    className="rounded"
+                  />
+                  <label className="text-sm text-gray-400">启用</label>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={handleSaveProvider}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-medium text-sm"
+                >
+                  {editingProvider ? '保存修改' : '添加服务商'}
+                </button>
+                <button
+                  onClick={() => { setShowAddProvider(false); setEditingProvider(null); }}
                   className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded-lg font-medium text-sm"
                 >
                   取消

@@ -125,6 +125,33 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
+        {/* AI API 域名配置 */}
+        <div className="bg-slate-800 rounded-xl p-6 mb-6">
+          <h2 className="text-xl font-bold mb-4">🤖 AI API 域名</h2>
+          <p className="text-gray-400 text-sm mb-4">配置面向用户的 API 接入地址。用户创建 Key 后看到的 Base URL 就是这个地址。上游服务商地址仅用于内部代理转发，不会暴露给用户。</p>
+          
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">平台 API 域名</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={configs['ai_api_base_url'] || ''}
+                onChange={(e) => setConfigs(prev => ({ ...prev, ai_api_base_url: e.target.value }))}
+                placeholder="https://api.cardvela.com"
+                className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+              />
+              <button
+                onClick={() => saveConfig('ai_api_base_url', configs['ai_api_base_url'] || '')}
+                disabled={saving}
+                className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                保存
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">用户在 Cline / Cursor / Claude Code 等工具中使用此域名接入。不同工具的路径（如 /v1）由系统自动处理</p>
+          </div>
+        </div>
+
         {/* USDT 收款地址配置 */}
         <div className="bg-slate-800 rounded-xl p-6 mb-6">
           <h2 className="text-xl font-bold mb-4">💵 USDT 收款地址</h2>

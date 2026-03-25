@@ -11,8 +11,8 @@ export async function GET(request: NextRequest) {
     if (!payload) return NextResponse.json({ error: '无效的令牌' }, { status: 401 });
 
     const user = await db.user.findUnique({ where: { id: payload.userId } });
-    if (!user || user.role !== 'enterprise') {
-      return NextResponse.json({ error: '仅企业账户可使用此功能' }, { status: 403 });
+    if (!user || !['enterprise', 'ADMIN', 'admin'].includes(user.role)) {
+      return NextResponse.json({ error: '仅企业账户/管理员可使用此功能' }, { status: 403 });
     }
 
     // 获取所有子账户 ID
@@ -60,17 +60,17 @@ export async function GET(request: NextRequest) {
       enterpriseBalance: user.balance,
       subAccountCount: subUserIds.length,
       month: {
-        cost: Math.round((monthUsage._sum.cost || 0) * 100) / 100,
+        cost: Math.round((monthUsage._sum.cost || 0) * 10000) / 10000,
         tokens: (monthUsage._sum.inputTokens || 0) + (monthUsage._sum.outputTokens || 0),
         requests: monthUsage._count,
       },
       total: {
-        cost: Math.round((totalUsage._sum.cost || 0) * 100) / 100,
+        cost: Math.round((totalUsage._sum.cost || 0) * 10000) / 10000,
         requests: totalUsage._count,
       },
       perUser: perUserUsage.map(u => ({
         userId: u.userId,
-        monthCost: Math.round((u._sum.cost || 0) * 100) / 100,
+        monthCost: Math.round((u._sum.cost || 0) * 10000) / 10000,
         requestCount: u._count,
       })),
     });

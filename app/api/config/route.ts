@@ -100,6 +100,7 @@ export async function GET(request: NextRequest) {
       },
       supportEmail: supportEmailConfig?.value || '',
       subscriptionGuide: configMap['subscription_guide'] || '',
+      aiApiBaseUrl: configMap['ai_api_base_url'] || '',
     });
   } catch (error) {
     console.error('获取配置失败:', error);

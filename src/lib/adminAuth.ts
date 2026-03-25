@@ -28,7 +28,7 @@ export async function verifyAdmin(request: NextRequest) {
       where: { id: decoded.userId },
     });
 
-    if (!user || user.role !== 'admin') {
+    if (!user || user.role.toUpperCase() !== 'ADMIN') {
       return null;
     }
 

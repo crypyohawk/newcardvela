@@ -127,12 +127,26 @@ export default function DashboardPage() {
   const [newKeyLimit, setNewKeyLimit] = useState('');
   const [creatingKey, setCreatingKey] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [aiConfigTab, setAiConfigTab] = useState<'cline' | 'cursor' | 'claudecode'>('cline');
+  const [aiConfigTab, setAiConfigTab] = useState<'cline' | 'cursor' | 'claudecode' | 'openai'>('cline');
   // 企业管理
   const [enterpriseSubAccounts, setEnterpriseSubAccounts] = useState<any[]>([]);
   const [showAddSubAccount, setShowAddSubAccount] = useState(false);
   const [subAccountEmail, setSubAccountEmail] = useState('');
   const [subAccountBudget, setSubAccountBudget] = useState('');
+  // 子账户编辑
+  const [editingSubAccount, setEditingSubAccount] = useState<any>(null);
+  const [editBudgetForm, setEditBudgetForm] = useState({ dailyBudget: '', weeklyBudget: '', monthlyBudget: '' });
+  // 子账户用量详情
+  const [selectedSubAccount, setSelectedSubAccount] = useState<any>(null);
+  const [subAccountUsage, setSubAccountUsage] = useState<any>(null);
+  const [usageRange, setUsageRange] = useState('7d');
+  // 企业用量
+  const [enterpriseUsage, setEnterpriseUsage] = useState<any>(null);
+  // 企业申请
+  const [enterpriseApps, setEnterpriseApps] = useState<any[]>([]);
+  const [showEnterpriseApply, setShowEnterpriseApply] = useState(false);
+  const [enterpriseForm, setEnterpriseForm] = useState({ companyName: '', contactName: '', contactPhone: '', useCase: '', estimatedUsage: '' });
+  const [applyingEnterprise, setApplyingEnterprise] = useState(false);
 
   // 固定提现配置（不从后台读取）
     const [withdrawConfig, setWithdrawConfig] = useState<WithdrawConfig>({
@@ -147,6 +161,7 @@ export default function DashboardPage() {
   // 添加客服邮箱状态
   const [supportEmail, setSupportEmail] = useState('');
   const [subscriptionGuide, setSubscriptionGuide] = useState('');
+  const [platformApiUrl, setPlatformApiUrl] = useState('');
 
   useEffect(() => {
     if (!loading && !user) {
@@ -194,6 +209,11 @@ export default function DashboardPage() {
       // 获取客服邮箱
       if (configData.supportEmail) {
         setSupportEmail(configData.supportEmail);
+      }
+
+      // 获取平台 API 域名
+      if (configData.aiApiBaseUrl) {
+        setPlatformApiUrl(configData.aiApiBaseUrl);
       }
 
       // 获取订阅公告
@@ -244,6 +264,14 @@ export default function DashboardPage() {
       // 企业子账户
       const subRes = await fetch('/api/user/enterprise/sub-accounts', { headers });
       if (subRes.ok) { const d = await subRes.json(); setEnterpriseSubAccounts(d.subAccounts || []); }
+
+      // 企业用量（企业/管理员才拉）
+      const entUsageRes = await fetch('/api/user/enterprise/usage', { headers });
+      if (entUsageRes.ok) { const d = await entUsageRes.json(); setEnterpriseUsage(d); }
+
+      // 企业申请状态
+      const appRes = await fetch('/api/user/enterprise/apply', { headers });
+      if (appRes.ok) { const d = await appRes.json(); setEnterpriseApps(d.applications || []); }
     } catch (error) {
       console.error('获取 AI 服务数据失败:', error);
     }
@@ -336,6 +364,111 @@ export default function DashboardPage() {
       fetchAIData();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  // 编辑子账户限额
+  const handleEditSubAccount = async () => {
+    if (!editingSubAccount) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/user/enterprise/sub-accounts/${editingSubAccount.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          dailyBudget: editBudgetForm.dailyBudget || null,
+          weeklyBudget: editBudgetForm.weeklyBudget || null,
+          monthlyBudget: editBudgetForm.monthlyBudget || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setMessage({ type: 'success', text: '限额设置已更新' });
+      setEditingSubAccount(null);
+      fetchAIData();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  // 切换子账户启用/停用
+  const handleToggleSubAccount = async (sa: any) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/user/enterprise/sub-accounts/${sa.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ isActive: !sa.isActive }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setMessage({ type: 'success', text: sa.isActive ? '已停用' : '已启用' });
+      fetchAIData();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  // 获取子账户用量详情
+  const fetchSubAccountUsage = async (saId: string, range: string = '7d') => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/user/enterprise/sub-accounts/${saId}/usage?range=${range}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSubAccountUsage(data);
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  // 删除子账户
+  const handleRemoveSubAccount = async (saId: string) => {
+    if (!confirm('确定要移除该子账户吗？')) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/user/enterprise/sub-accounts/${saId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setMessage({ type: 'success', text: '子账户已移除' });
+      if (selectedSubAccount?.id === saId) {
+        setSelectedSubAccount(null);
+        setSubAccountUsage(null);
+      }
+      fetchAIData();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  const handleEnterpriseApply = async () => {
+    if (!enterpriseForm.companyName.trim() || !enterpriseForm.contactName.trim() || !enterpriseForm.contactPhone.trim()) {
+      setMessage({ type: 'error', text: '请填写公司名称、联系人和联系电话' });
+      return;
+    }
+    setApplyingEnterprise(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/user/enterprise/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(enterpriseForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setMessage({ type: 'success', text: '企业账户申请已提交，我们将在 1-3 个工作日内审核' });
+      setShowEnterpriseApply(false);
+      setEnterpriseForm({ companyName: '', contactName: '', contactPhone: '', useCase: '', estimatedUsage: '' });
+      fetchAIData();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    } finally {
+      setApplyingEnterprise(false);
     }
   };
 
@@ -799,7 +932,7 @@ export default function DashboardPage() {
         )}
 
         {/* 快捷操作 */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
           <button
             onClick={() => setActiveTab('cards')}
             className={`p-4 rounded-xl text-left transition ${activeTab === 'cards' ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'}`}
@@ -833,14 +966,6 @@ export default function DashboardPage() {
             <div className="text-sm text-gray-400">账户余额提现</div>
           </button>
           <button
-            onClick={() => { setActiveTab('ai'); fetchAIData(); }}
-            className={`p-4 rounded-xl text-left transition ${activeTab === 'ai' ? 'bg-gradient-to-br from-purple-600 to-blue-600' : 'bg-slate-800 hover:bg-slate-700'}`}
-          >
-            <div className="text-2xl mb-2">🤖</div>
-            <div className="font-semibold">Claude AI</div>
-            <div className="text-sm text-gray-400">{aiKeys.length} 个 Key</div>
-          </button>
-          <button
             onClick={() => setActiveTab('referral')}
             className={`p-4 rounded-xl text-left transition ${activeTab === 'referral' ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'}`}
           >
@@ -849,6 +974,41 @@ export default function DashboardPage() {
             <div className="text-sm text-gray-400">邀请好友得奖励</div>
           </button>
         </div>
+
+        {/* Claude AI 常驻横幅 */}
+        <button
+          onClick={() => { setActiveTab('ai'); fetchAIData(); }}
+          className={`w-full mb-8 relative overflow-hidden rounded-2xl p-4 md:p-5 text-left transition-all group ${
+            activeTab === 'ai'
+              ? 'bg-gradient-to-r from-[#2a1a0a] via-[#3a2010] to-[#2a1a0a] border-2 border-orange-500/50 shadow-lg shadow-orange-900/20'
+              : 'bg-gradient-to-r from-[#1a1207] via-[#241810] to-[#1a1207] border border-orange-900/30 hover:border-orange-700/50 hover:shadow-lg hover:shadow-orange-900/10'
+          }`}
+        >
+          <div className="absolute top-0 right-0 w-48 h-48 opacity-[0.03] group-hover:opacity-[0.06] transition-opacity">
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full text-orange-300"><path d="M12 1L13.5 9L19 4L15 10.5L23 12L15 13.5L19 20L13.5 15L12 23L10.5 15L5 20L9 13.5L1 12L9 10.5L5 4L10.5 9Z"/></svg>
+          </div>
+          <div className="relative flex items-center gap-4">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-lg shadow-orange-900/40 flex-shrink-0">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M12 1L13.5 9L19 4L15 10.5L23 12L15 13.5L19 20L13.5 15L12 23L10.5 15L5 20L9 13.5L1 12L9 10.5L5 4L10.5 9Z"/></svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3">
+                <h3 className="font-bold text-white text-lg">Claude AI 服务</h3>
+                {aiKeys.length > 0 && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300">{aiKeys.length} 个 Key 运行中</span>
+                )}
+              </div>
+              <p className="text-sm text-gray-400 mt-0.5">稳定高速的 Claude 官转 API 代理 · 支持 vscode / Cursor / Claude Code 等全系列工具</p>
+            </div>
+            <div className="flex-shrink-0 hidden md:flex items-center gap-2 text-sm">
+              <span className={`px-3 py-1.5 rounded-lg transition ${
+                activeTab === 'ai' ? 'bg-orange-500 text-white' : 'bg-orange-500/10 text-orange-300 group-hover:bg-orange-500/20'
+              }`}>
+                {activeTab === 'ai' ? '当前页面' : '进入管理 →'}
+              </span>
+            </div>
+          </div>
+        </button>
 
         {/* 订阅公告 - 仅在卡片和开卡页面显示 */}
         {subscriptionGuide && (activeTab === 'cards' || activeTab === 'open') && (
@@ -1562,20 +1722,28 @@ export default function DashboardPage() {
           <div className="space-y-6">
             {/* 概览卡片 */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-slate-800 rounded-xl p-4">
-                <div className="text-sm text-gray-400">账户余额</div>
+              <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50">
+                <div className="flex items-center gap-2 text-sm text-gray-400 mb-1">
+                  <span className="text-green-400">💰</span> 账户余额
+                </div>
                 <div className="text-2xl font-bold text-green-400">${aiSummary?.balance?.toFixed(2) || '0.00'}</div>
               </div>
-              <div className="bg-slate-800 rounded-xl p-4">
-                <div className="text-sm text-gray-400">本月消费</div>
+              <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50">
+                <div className="flex items-center gap-2 text-sm text-gray-400 mb-1">
+                  <span className="text-blue-400">📊</span> 本月消费
+                </div>
                 <div className="text-2xl font-bold text-blue-400">${aiSummary?.monthCost?.toFixed(2) || '0.00'}</div>
               </div>
-              <div className="bg-slate-800 rounded-xl p-4">
-                <div className="text-sm text-gray-400">本月请求</div>
+              <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50">
+                <div className="flex items-center gap-2 text-sm text-gray-400 mb-1">
+                  <span className="text-purple-400">⚡</span> 本月请求
+                </div>
                 <div className="text-2xl font-bold">{aiSummary?.monthRequests || 0}</div>
               </div>
-              <div className="bg-slate-800 rounded-xl p-4">
-                <div className="text-sm text-gray-400">活跃 Key</div>
+              <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50">
+                <div className="flex items-center gap-2 text-sm text-gray-400 mb-1">
+                  <span className="text-amber-400">🔑</span> 活跃 Key
+                </div>
                 <div className="text-2xl font-bold">{aiSummary?.activeKeys || 0} / {aiSummary?.totalKeys || 0}</div>
               </div>
             </div>
@@ -1595,19 +1763,24 @@ export default function DashboardPage() {
               {aiKeys.length === 0 ? (
                 <div className="text-center py-12 text-gray-400">
                   <div className="text-4xl mb-4">🔑</div>
-                  <p>您还没有创建任何 API Key</p>
-                  <p className="text-sm mt-1">创建 Key 后即可在 Cline / Cursor / Claude Code 中使用</p>
+                  <p>您还没有任何 API Key</p>
+                  <p className="text-sm mt-1">创建 Key 后即可在 Cline / Cursor / Claude Code 等工具中使用</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {aiKeys.map((key: any) => (
                     <div key={key.id} className="bg-slate-700 rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
                           <span className="font-semibold">{key.keyName}</span>
                           <span className={`text-xs px-2 py-0.5 rounded ${
-                            key.tier?.name === 'stable' ? 'bg-green-600/20 text-green-400' : 'bg-blue-600/20 text-blue-400'
+                            key.tier?.modelGroup === 'gpt' ? 'bg-emerald-600/20 text-emerald-400' :
+                            key.tier?.modelGroup === 'mixed' ? 'bg-purple-600/20 text-purple-400' :
+                            'bg-amber-600/20 text-amber-400'
                           }`}>
+                            {key.tier?.modelGroup === 'gpt' ? 'GPT' : key.tier?.modelGroup === 'mixed' ? '混合' : 'Claude'}
+                          </span>
+                          <span className="text-xs px-2 py-0.5 rounded bg-blue-600/20 text-blue-400">
                             {key.tier?.displayName || key.tier?.name}
                           </span>
                           <span className={`text-xs px-2 py-0.5 rounded ${
@@ -1642,11 +1815,11 @@ export default function DashboardPage() {
                           {copiedKey === key.id ? '✓ 已复制' : '复制'}
                         </button>
                       </div>
-                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
+                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-400 flex-wrap">
+                        <span>Base URL: {platformApiUrl || 'https://api.cardvela.com'}</span>
                         <span>本月: ${key.monthUsed?.toFixed(2) || '0.00'}</span>
                         <span>累计: ${key.totalUsed?.toFixed(2) || '0.00'}</span>
                         {key.monthlyLimit && <span>月限: ${key.monthlyLimit}</span>}
-                        {key.lastUsedAt && <span>最后使用: {new Date(key.lastUsedAt).toLocaleDateString()}</span>}
                       </div>
                     </div>
                   ))}
@@ -1658,8 +1831,8 @@ export default function DashboardPage() {
             {aiKeys.length > 0 && (
               <div className="bg-slate-800 rounded-xl p-6">
                 <h2 className="text-xl font-bold mb-4">⚡ 快速配置</h2>
-                <div className="flex gap-2 mb-4">
-                  {(['cline', 'cursor', 'claudecode'] as const).map(tab => (
+                <div className="flex gap-2 mb-4 flex-wrap">
+                  {(['cline', 'cursor', 'claudecode', 'openai'] as const).map(tab => (
                     <button
                       key={tab}
                       onClick={() => setAiConfigTab(tab)}
@@ -1667,41 +1840,74 @@ export default function DashboardPage() {
                         aiConfigTab === tab ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'
                       }`}
                     >
-                      {tab === 'cline' ? 'Cline' : tab === 'cursor' ? 'Cursor' : 'Claude Code'}
+                      {tab === 'cline' ? 'Cline' : tab === 'cursor' ? 'Cursor' : tab === 'claudecode' ? 'Claude Code' : 'OpenAI 兼容'}
                     </button>
                   ))}
                 </div>
-                <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm text-green-400">
-                  {aiConfigTab === 'cline' && (
-                    <div>
-                      <p className="text-gray-500 mb-1"># Cline 配置 → Settings → API Provider → Anthropic</p>
-                      <p>Base URL: {process.env.NEXT_PUBLIC_AI_API_URL || 'https://api.cardvela.com'}</p>
-                      <p>API Key: {aiKeys[0]?.apiKey}</p>
+                {(() => {
+                  const firstKey = aiKeys[0];
+                  const baseUrl = platformApiUrl || 'https://api.cardvela.com';
+                  const apiKey = firstKey?.apiKey || '';
+                  // 不同工具需要不同的 URL 路径层级
+                  const urlForTool = (tool: string) => {
+                    const clean = baseUrl.replace(/\/+$/, '');
+                    switch (tool) {
+                      case 'cline': return `${clean}/`;        // Cline (Anthropic 模式) 需要末尾带 /
+                      case 'cursor': return `${clean}/v1`;    // Cursor 需要 /v1
+                      case 'claudecode': return clean;         // Claude Code 使用根域名
+                      case 'openai': return `${clean}/v1`;    // OpenAI 兼容需要 /v1
+                      default: return clean;
+                    }
+                  };
+                  return (
+                    <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm text-green-400">
+                      {aiConfigTab === 'cline' && (
+                        <div>
+                          <p className="text-gray-500 mb-1"># Cline 配置 → Settings → API Provider → Anthropic</p>
+                          <p>Base URL: {urlForTool('cline')}</p>
+                          <p>API Key: {apiKey}</p>
+                          <p className="text-gray-500 mt-2"># 若选 OpenAI Compatible 模式:</p>
+                          <p>Base URL: {urlForTool('openai')}</p>
+                        </div>
+                      )}
+                      {aiConfigTab === 'cursor' && (
+                        <div>
+                          <p className="text-gray-500 mb-1"># Cursor 配置 → Settings → Models → Override OpenAI Base URL</p>
+                          <p>Base URL: {urlForTool('cursor')}</p>
+                          <p>API Key: {apiKey}</p>
+                        </div>
+                      )}
+                      {aiConfigTab === 'claudecode' && (
+                        <div>
+                          <p className="text-gray-500 mb-1"># Claude Code 环境变量</p>
+                          <p>export ANTHROPIC_BASE_URL={urlForTool('claudecode')}</p>
+                          <p>export ANTHROPIC_API_KEY={apiKey}</p>
+                        </div>
+                      )}
+                      {aiConfigTab === 'openai' && (
+                        <div>
+                          <p className="text-gray-500 mb-1"># OpenAI 兼容客户端（GPT 套餐 / 任何支持 OpenAI API 的工具）</p>
+                          <p>Base URL: {urlForTool('openai')}</p>
+                          <p>API Key: {apiKey}</p>
+                          <p className="text-gray-500 mt-2"># Python 示例</p>
+                          <p>from openai import OpenAI</p>
+                          <p>client = OpenAI(base_url=&quot;{urlForTool('openai')}&quot;, api_key=&quot;{apiKey}&quot;)</p>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {aiConfigTab === 'cursor' && (
-                    <div>
-                      <p className="text-gray-500 mb-1"># Cursor 配置 → Settings → Models → Override OpenAI Base URL</p>
-                      <p>Base URL: {process.env.NEXT_PUBLIC_AI_API_URL || 'https://api.cardvela.com'}/v1</p>
-                      <p>API Key: {aiKeys[0]?.apiKey}</p>
-                    </div>
-                  )}
-                  {aiConfigTab === 'claudecode' && (
-                    <div>
-                      <p className="text-gray-500 mb-1"># Claude Code 环境变量</p>
-                      <p>export ANTHROPIC_BASE_URL={process.env.NEXT_PUBLIC_AI_API_URL || 'https://api.cardvela.com'}</p>
-                      <p>export ANTHROPIC_API_KEY={aiKeys[0]?.apiKey}</p>
-                    </div>
-                  )}
-                </div>
+                  );
+                })()}
                 <button
                   onClick={() => {
-                    const baseUrl = process.env.NEXT_PUBLIC_AI_API_URL || 'https://api.cardvela.com';
-                    const key = aiKeys[0]?.apiKey || '';
+                    const firstKey = aiKeys[0];
+                    const bUrl = platformApiUrl || 'https://api.cardvela.com';
+                    const clean = bUrl.replace(/\/+$/, '');
+                    const key = firstKey?.apiKey || '';
                     let text = '';
-                    if (aiConfigTab === 'cline') text = `Base URL: ${baseUrl}\nAPI Key: ${key}`;
-                    else if (aiConfigTab === 'cursor') text = `Base URL: ${baseUrl}/v1\nAPI Key: ${key}`;
-                    else text = `export ANTHROPIC_BASE_URL=${baseUrl}\nexport ANTHROPIC_API_KEY=${key}`;
+                    if (aiConfigTab === 'cline') text = `Base URL: ${clean}\nAPI Key: ${key}`;
+                    else if (aiConfigTab === 'cursor') text = `Base URL: ${clean}/v1\nAPI Key: ${key}`;
+                    else if (aiConfigTab === 'claudecode') text = `export ANTHROPIC_BASE_URL=${clean}\nexport ANTHROPIC_API_KEY=${key}`;
+                    else text = `Base URL: ${clean}/v1\nAPI Key: ${key}`;
                     navigator.clipboard.writeText(text);
                     setMessage({ type: 'success', text: '配置信息已复制！' });
                   }}
@@ -1738,56 +1944,425 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* 企业管理（仅企业账户显示） */}
-            {user?.role === 'enterprise' && (
-              <div className="bg-slate-800 rounded-xl p-6">
+            {/* 企业账户升级 - 非企业用户可见 */}
+            {user?.role !== 'enterprise' && user?.role?.toUpperCase() !== 'ADMIN' && (
+              <div className="bg-gradient-to-r from-slate-800 to-slate-800/80 rounded-xl p-6 border border-purple-500/20">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold">🏢 企业子账户管理</h2>
-                  <button
-                    onClick={() => setShowAddSubAccount(true)}
-                    className="bg-purple-600 px-4 py-2 rounded-lg hover:bg-purple-700 text-sm font-medium"
-                  >
-                    + 添加子账户
-                  </button>
-                </div>
-
-                {enterpriseSubAccounts.length === 0 ? (
-                  <div className="text-center py-8 text-gray-400">
-                    <p>暂无子账户</p>
-                    <p className="text-sm mt-1">添加团队成员的邮箱来创建子账户</p>
+                  <div>
+                    <h2 className="text-xl font-bold flex items-center gap-2">🏢 企业账户</h2>
+                    <p className="text-sm text-gray-400 mt-1">升级为企业账户，解锁子账户管理、用量分析等高级功能</p>
                   </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-gray-400 border-b border-slate-700">
-                          <th className="text-left py-2 px-3">用户名</th>
-                          <th className="text-left py-2 px-3">邮箱</th>
-                          <th className="text-right py-2 px-3">本月消费</th>
-                          <th className="text-right py-2 px-3">月预算</th>
-                          <th className="text-right py-2 px-3">活跃Key</th>
-                          <th className="text-center py-2 px-3">状态</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {enterpriseSubAccounts.map((sa: any) => (
-                          <tr key={sa.id} className="border-b border-slate-700/50">
-                            <td className="py-3 px-3">{sa.user?.username}</td>
-                            <td className="py-3 px-3 text-gray-400">{sa.user?.email}</td>
-                            <td className="py-3 px-3 text-right">${sa.user?.monthUsed?.toFixed(2) || '0.00'}</td>
-                            <td className="py-3 px-3 text-right">{sa.monthlyBudget ? `$${sa.monthlyBudget}` : '不限'}</td>
-                            <td className="py-3 px-3 text-right">{sa.user?.activeKeys || 0}</td>
-                            <td className="py-3 px-3 text-center">
-                              <span className={`text-xs px-2 py-0.5 rounded ${sa.isActive ? 'bg-green-600/20 text-green-400' : 'bg-red-600/20 text-red-400'}`}>
-                                {sa.isActive ? '正常' : '已停用'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  {(() => {
+                    const latestApp = enterpriseApps[0];
+                    if (!latestApp || latestApp.status === 'rejected') {
+                      return (
+                        <button
+                          onClick={() => setShowEnterpriseApply(true)}
+                          className="bg-purple-600 px-4 py-2 rounded-lg hover:bg-purple-700 text-sm font-medium"
+                        >
+                          申请企业账户
+                        </button>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+                {(() => {
+                  const latestApp = enterpriseApps[0];
+                  if (latestApp?.status === 'pending') {
+                    return (
+                      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+                        <div className="flex items-center gap-2 text-yellow-400 font-medium">
+                          <span>⏳</span> 申请审核中
+                        </div>
+                        <p className="text-sm text-gray-400 mt-1">
+                          您的企业账户申请（{latestApp.companyName}）正在审核中，预计 1-3 个工作日内完成
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">提交时间：{new Date(latestApp.createdAt).toLocaleString('zh-CN')}</p>
+                      </div>
+                    );
+                  }
+                  if (latestApp?.status === 'rejected') {
+                    return (
+                      <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+                        <div className="flex items-center gap-2 text-red-400 font-medium">
+                          <span>✕</span> 申请未通过
+                        </div>
+                        <p className="text-sm text-gray-400 mt-1">原因：{latestApp.rejectReason}</p>
+                        <p className="text-xs text-gray-500 mt-1">您可以修改资料后重新申请</p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div className="bg-slate-700/50 rounded-lg p-3">
+                        <div className="text-purple-400 text-lg mb-1">👥</div>
+                        <div className="text-sm font-medium">子账户管理</div>
+                        <div className="text-xs text-gray-400">团队成员独立 Key</div>
+                      </div>
+                      <div className="bg-slate-700/50 rounded-lg p-3">
+                        <div className="text-purple-400 text-lg mb-1">📊</div>
+                        <div className="text-sm font-medium">用量分析</div>
+                        <div className="text-xs text-gray-400">全局用量可视化</div>
+                      </div>
+                      <div className="bg-slate-700/50 rounded-lg p-3">
+                        <div className="text-purple-400 text-lg mb-1">💰</div>
+                        <div className="text-sm font-medium">预算管控</div>
+                        <div className="text-xs text-gray-400">子账户月度预算</div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* 企业管理（企业账户和管理员均可见） */}
+            {(user?.role === 'enterprise' || user?.role?.toUpperCase() === 'ADMIN') && (
+              <div className="space-y-6">
+                {/* 企业用量总览 */}
+                {enterpriseUsage && (
+                  <div className="bg-slate-800 rounded-xl p-6">
+                    <h2 className="text-xl font-bold mb-4">📊 企业用量总览</h2>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                      <div className="bg-slate-700/50 rounded-lg p-4 border border-slate-600/30">
+                        <div className="text-sm text-gray-400">本月总消费</div>
+                        <div className="text-2xl font-bold text-blue-400">${enterpriseUsage.month?.cost?.toFixed(2) || '0.00'}</div>
+                      </div>
+                      <div className="bg-slate-700/50 rounded-lg p-4 border border-slate-600/30">
+                        <div className="text-sm text-gray-400">本月总请求</div>
+                        <div className="text-2xl font-bold">{enterpriseUsage.month?.requests || 0}</div>
+                      </div>
+                      <div className="bg-slate-700/50 rounded-lg p-4 border border-slate-600/30">
+                        <div className="text-sm text-gray-400">本月 Tokens</div>
+                        <div className="text-2xl font-bold text-purple-400">{((enterpriseUsage.month?.tokens || 0) / 1000).toFixed(1)}K</div>
+                      </div>
+                      <div className="bg-slate-700/50 rounded-lg p-4 border border-slate-600/30">
+                        <div className="text-sm text-gray-400">子账户数</div>
+                        <div className="text-2xl font-bold text-cyan-400">{enterpriseUsage.subAccountCount || 0}</div>
+                      </div>
+                    </div>
+
+                    {/* 按成员用量柱状图 */}
+                    {enterpriseUsage.perUser && enterpriseUsage.perUser.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-400 mb-3">成员本月用量分布</h3>
+                        <div className="space-y-2">
+                          {(() => {
+                            const maxCost = Math.max(...enterpriseUsage.perUser.map((u: any) => u.monthCost || 0), 0.01);
+                            // 匹配子账户信息
+                            const getUserName = (uid: string) => {
+                              if (uid === user?.id) return `${user?.username || '我'}（主账户）`;
+                              const sa = enterpriseSubAccounts.find((s: any) => s.subUserId === uid);
+                              return sa?.user?.username || uid.slice(0, 8);
+                            };
+                            return enterpriseUsage.perUser.map((pu: any) => (
+                              <div key={pu.userId} className="flex items-center gap-3 text-sm">
+                                <span className="text-gray-300 w-32 truncate">{getUserName(pu.userId)}</span>
+                                <div className="flex-1 bg-slate-700 rounded-full h-6 overflow-hidden">
+                                  <div
+                                    className="h-full bg-gradient-to-r from-purple-500 to-cyan-400 rounded-full flex items-center px-2"
+                                    style={{ width: `${Math.max(((pu.monthCost || 0) / maxCost) * 100, 3)}%` }}
+                                  >
+                                    {(pu.monthCost || 0) > 0 && <span className="text-xs text-white font-medium whitespace-nowrap">${(pu.monthCost || 0).toFixed(2)}</span>}
+                                  </div>
+                                </div>
+                                <span className="text-gray-400 w-16 text-right">{pu.requestCount || 0} 次</span>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
+
+                {/* 子账户管理 */}
+                <div className="bg-slate-800 rounded-xl p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold">🏢 企业子账户管理</h2>
+                    <button
+                      onClick={() => setShowAddSubAccount(true)}
+                      className="bg-purple-600 px-4 py-2 rounded-lg hover:bg-purple-700 text-sm font-medium"
+                    >
+                      + 添加子账户
+                    </button>
+                  </div>
+
+                  {enterpriseSubAccounts.length === 0 ? (
+                    <div className="text-center py-8 text-gray-400">
+                      <p>暂无子账户</p>
+                      <p className="text-sm mt-1">添加团队成员的邮箱来创建子账户</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-gray-400 border-b border-slate-700">
+                            <th className="text-left py-2 px-3">用户名</th>
+                            <th className="text-left py-2 px-3">邮箱</th>
+                            <th className="text-right py-2 px-3">本月消费</th>
+                            <th className="text-right py-2 px-3">天限额</th>
+                            <th className="text-right py-2 px-3">周限额</th>
+                            <th className="text-right py-2 px-3">月限额</th>
+                            <th className="text-center py-2 px-3">状态</th>
+                            <th className="text-center py-2 px-3">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {enterpriseSubAccounts.map((sa: any) => {
+                            const userUsage = enterpriseUsage?.perUser?.find((p: any) => p.userId === sa.subUserId);
+                            const monthCost = userUsage?.monthCost || 0;
+                            return (
+                              <tr key={sa.id} className={`border-b border-slate-700/50 hover:bg-slate-700/30 cursor-pointer transition ${selectedSubAccount?.id === sa.id ? 'bg-slate-700/50' : ''}`}
+                                onClick={() => { setSelectedSubAccount(sa); setUsageRange('7d'); fetchSubAccountUsage(sa.id, '7d'); }}>
+                                <td className="py-3 px-3 font-medium">{sa.user?.username}</td>
+                                <td className="py-3 px-3 text-gray-400">{sa.user?.email}</td>
+                                <td className="py-3 px-3 text-right font-medium">${monthCost.toFixed(2)}</td>
+                                <td className="py-3 px-3 text-right text-sm">{sa.dailyBudget ? `$${sa.dailyBudget}` : <span className="text-gray-500">不限</span>}</td>
+                                <td className="py-3 px-3 text-right text-sm">{sa.weeklyBudget ? `$${sa.weeklyBudget}` : <span className="text-gray-500">不限</span>}</td>
+                                <td className="py-3 px-3 text-right text-sm">{sa.monthlyBudget ? `$${sa.monthlyBudget}` : <span className="text-gray-500">不限</span>}</td>
+                                <td className="py-3 px-3 text-center">
+                                  <span className={`text-xs px-2 py-0.5 rounded ${sa.isActive ? 'bg-green-600/20 text-green-400' : 'bg-red-600/20 text-red-400'}`}>
+                                    {sa.isActive ? '正常' : '已停用'}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3 text-center" onClick={e => e.stopPropagation()}>
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button onClick={() => {
+                                      setEditingSubAccount(sa);
+                                      setEditBudgetForm({
+                                        dailyBudget: sa.dailyBudget?.toString() || '',
+                                        weeklyBudget: sa.weeklyBudget?.toString() || '',
+                                        monthlyBudget: sa.monthlyBudget?.toString() || '',
+                                      });
+                                    }} className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-blue-600/20 text-blue-400 hover:bg-blue-600/40 text-xs font-medium transition">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                      限额
+                                    </button>
+                                    <button onClick={() => handleToggleSubAccount(sa)}
+                                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition ${sa.isActive ? 'bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/40' : 'bg-green-600/20 text-green-400 hover:bg-green-600/40'}`}>
+                                      {sa.isActive ? (
+                                        <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>停用</>
+                                      ) : (
+                                        <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>启用</>
+                                      )}
+                                    </button>
+                                    <button onClick={() => handleRemoveSubAccount(sa.id)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-red-600/20 text-red-400 hover:bg-red-600/40 text-xs font-medium transition">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                      移除
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* 子账户用量详情面板 */}
+                  {selectedSubAccount && subAccountUsage && (
+                    <div className="mt-6 border-t border-slate-700 pt-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-bold">
+                          📊 {selectedSubAccount.user?.username} 的用量详情
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          {['7d', '30d', '90d'].map(r => (
+                            <button key={r} onClick={() => { setUsageRange(r); fetchSubAccountUsage(selectedSubAccount.id, r); }}
+                              className={`px-3 py-1 rounded text-xs font-medium transition ${usageRange === r ? 'bg-blue-600 text-white' : 'bg-slate-700 text-gray-400 hover:text-white'}`}>
+                              {r === '7d' ? '近7天' : r === '30d' ? '近30天' : '近90天'}
+                            </button>
+                          ))}
+                          <button onClick={() => { setSelectedSubAccount(null); setSubAccountUsage(null); }}
+                            className="text-gray-400 hover:text-white ml-2">✕</button>
+                        </div>
+                      </div>
+
+                      {/* 用量概览卡片 */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                        <div className="bg-slate-700/50 rounded-lg p-3">
+                          <div className="text-xs text-gray-400">今日消费</div>
+                          <div className="text-lg font-bold text-orange-400">${subAccountUsage.today?.cost?.toFixed(4)}</div>
+                          <div className="text-xs text-gray-500">{subAccountUsage.today?.requests} 次请求</div>
+                          {selectedSubAccount.dailyBudget && (
+                            <div className="mt-1">
+                              <div className="flex justify-between text-xs"><span className="text-gray-500">限额</span><span>${selectedSubAccount.dailyBudget}</span></div>
+                              <div className="bg-slate-600 rounded-full h-1.5 mt-1 overflow-hidden">
+                                <div className={`h-full rounded-full ${(subAccountUsage.today?.cost / selectedSubAccount.dailyBudget) > 0.8 ? 'bg-red-500' : 'bg-green-500'}`}
+                                  style={{ width: `${Math.min((subAccountUsage.today?.cost / selectedSubAccount.dailyBudget) * 100, 100)}%` }}/>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="bg-slate-700/50 rounded-lg p-3">
+                          <div className="text-xs text-gray-400">本周消费</div>
+                          <div className="text-lg font-bold text-blue-400">${subAccountUsage.week?.cost?.toFixed(4)}</div>
+                          <div className="text-xs text-gray-500">{subAccountUsage.week?.requests} 次请求</div>
+                          {selectedSubAccount.weeklyBudget && (
+                            <div className="mt-1">
+                              <div className="flex justify-between text-xs"><span className="text-gray-500">限额</span><span>${selectedSubAccount.weeklyBudget}</span></div>
+                              <div className="bg-slate-600 rounded-full h-1.5 mt-1 overflow-hidden">
+                                <div className={`h-full rounded-full ${(subAccountUsage.week?.cost / selectedSubAccount.weeklyBudget) > 0.8 ? 'bg-red-500' : 'bg-blue-500'}`}
+                                  style={{ width: `${Math.min((subAccountUsage.week?.cost / selectedSubAccount.weeklyBudget) * 100, 100)}%` }}/>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="bg-slate-700/50 rounded-lg p-3">
+                          <div className="text-xs text-gray-400">本月消费</div>
+                          <div className="text-lg font-bold text-green-400">${subAccountUsage.month?.cost?.toFixed(4)}</div>
+                          <div className="text-xs text-gray-500">{subAccountUsage.month?.requests} 次请求</div>
+                          {selectedSubAccount.monthlyBudget && (
+                            <div className="mt-1">
+                              <div className="flex justify-between text-xs"><span className="text-gray-500">限额</span><span>${selectedSubAccount.monthlyBudget}</span></div>
+                              <div className="bg-slate-600 rounded-full h-1.5 mt-1 overflow-hidden">
+                                <div className={`h-full rounded-full ${(subAccountUsage.month?.cost / selectedSubAccount.monthlyBudget) > 0.8 ? 'bg-red-500' : 'bg-purple-500'}`}
+                                  style={{ width: `${Math.min((subAccountUsage.month?.cost / selectedSubAccount.monthlyBudget) * 100, 100)}%` }}/>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="bg-slate-700/50 rounded-lg p-3">
+                          <div className="text-xs text-gray-400">本月 Tokens</div>
+                          <div className="text-lg font-bold text-purple-400">{subAccountUsage.month?.tokens >= 1000000 ? `${(subAccountUsage.month.tokens / 1000000).toFixed(1)}M` : subAccountUsage.month?.tokens >= 1000 ? `${(subAccountUsage.month.tokens / 1000).toFixed(1)}K` : subAccountUsage.month?.tokens || 0}</div>
+                          <div className="text-xs text-gray-500">累计 ${subAccountUsage.total?.cost?.toFixed(2)}</div>
+                        </div>
+                      </div>
+
+                      {/* 模型消耗分布 */}
+                      {subAccountUsage.modelBreakdown?.length > 0 && (
+                        <div className="mb-6">
+                          <h4 className="text-sm font-semibold text-gray-300 mb-3">🔬 模型消耗分布</h4>
+                          <div className="space-y-2">
+                            {(() => {
+                              const totalCost = subAccountUsage.modelBreakdown.reduce((s: number, m: any) => s + m.cost, 0);
+                              const colors = ['bg-pink-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-cyan-500', 'bg-orange-500'];
+                              return subAccountUsage.modelBreakdown.map((m: any, i: number) => {
+                                const pct = totalCost > 0 ? (m.cost / totalCost) * 100 : 0;
+                                return (
+                                  <div key={m.model} className="flex items-center gap-3">
+                                    <div className={`w-3 h-3 rounded-sm ${colors[i % colors.length]}`}/>
+                                    <span className="text-sm w-48 truncate" title={m.model}>{m.model}</span>
+                                    <div className="flex-1 bg-slate-700 rounded-full h-4 overflow-hidden relative">
+                                      <div className={`h-full ${colors[i % colors.length]} rounded-full transition-all`} style={{ width: `${pct}%` }}/>
+                                      {pct > 15 && <span className="absolute inset-0 flex items-center justify-center text-xs text-white font-medium">${m.cost.toFixed(4)}</span>}
+                                    </div>
+                                    <span className="text-xs text-gray-400 w-12 text-right">{pct.toFixed(1)}%</span>
+                                    <span className="text-xs text-gray-500 w-16 text-right">{m.requests} 次</span>
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
+                          {/* 模型详细表 */}
+                          <div className="mt-3 bg-slate-700/30 rounded-lg overflow-hidden">
+                            <table className="w-full text-xs">
+                              <thead><tr className="text-gray-500 border-b border-slate-600">
+                                <th className="text-left py-2 px-3">模型</th>
+                                <th className="text-right py-2 px-3">费用</th>
+                                <th className="text-right py-2 px-3">请求数</th>
+                                <th className="text-right py-2 px-3">Input Tokens</th>
+                                <th className="text-right py-2 px-3">Output Tokens</th>
+                              </tr></thead>
+                              <tbody>
+                                {subAccountUsage.modelBreakdown.map((m: any) => (
+                                  <tr key={m.model} className="border-b border-slate-700/30">
+                                    <td className="py-2 px-3 font-medium">{m.model}</td>
+                                    <td className="py-2 px-3 text-right text-orange-400">${m.cost.toFixed(4)}</td>
+                                    <td className="py-2 px-3 text-right">{m.requests}</td>
+                                    <td className="py-2 px-3 text-right text-gray-400">{m.inputTokens.toLocaleString()}</td>
+                                    <td className="py-2 px-3 text-right text-gray-400">{m.outputTokens.toLocaleString()}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 消费趋势图 */}
+                      {subAccountUsage.trend?.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-gray-300 mb-3">📈 消费趋势</h4>
+                          <div className="bg-slate-700/30 rounded-lg p-4">
+                            {(() => {
+                              const trend = subAccountUsage.trend;
+                              const maxCost = Math.max(...trend.map((t: any) => t.cost), 0.01);
+                              const chartHeight = 160;
+                              // 收集所有模型
+                              const allModels = new Set<string>();
+                              trend.forEach((t: any) => Object.keys(t.models || {}).forEach(m => allModels.add(m)));
+                              const modelList = Array.from(allModels);
+                              const barColors = ['#ec4899', '#3b82f6', '#22c55e', '#eab308', '#a855f7', '#06b6d4', '#f97316'];
+                              return (
+                                <div>
+                                  <div className="flex items-end gap-1" style={{ height: chartHeight }}>
+                                    {trend.map((t: any, i: number) => {
+                                      const barHeight = Math.max((t.cost / maxCost) * chartHeight, 2);
+                                      // 按模型分段
+                                      const segments = modelList.map((model, mi) => ({
+                                        model,
+                                        cost: t.models?.[model] || 0,
+                                        color: barColors[mi % barColors.length],
+                                      })).filter(s => s.cost > 0);
+                                      const segTotal = segments.reduce((s, seg) => s + seg.cost, 0);
+                                      return (
+                                        <div key={i} className="flex-1 flex flex-col items-center justify-end group relative">
+                                          <div className="absolute bottom-full mb-1 hidden group-hover:block bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs whitespace-nowrap z-10">
+                                            <div className="font-medium mb-1">{t.date}</div>
+                                            {segments.map(s => (
+                                              <div key={s.model} className="flex items-center gap-1">
+                                                <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: s.color }}/>
+                                                <span>{s.model}: ${s.cost.toFixed(4)}</span>
+                                              </div>
+                                            ))}
+                                            <div className="border-t border-slate-600 mt-1 pt-1">总计: ${t.cost.toFixed(4)} | {t.requests} 次</div>
+                                          </div>
+                                          <div className="w-full rounded-t overflow-hidden flex flex-col justify-end" style={{ height: barHeight }}>
+                                            {segments.map((s, si) => (
+                                              <div key={si} style={{ height: `${segTotal > 0 ? (s.cost / segTotal) * 100 : 0}%`, backgroundColor: s.color, minHeight: '1px' }}/>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  {/* X轴日期 */}
+                                  <div className="flex gap-1 mt-1">
+                                    {trend.map((t: any, i: number) => (
+                                      <div key={i} className="flex-1 text-center text-[10px] text-gray-500 truncate">
+                                        {trend.length <= 14 ? t.date.slice(5) : (i % Math.ceil(trend.length / 10) === 0 ? t.date.slice(5) : '')}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  {/* 图例 */}
+                                  <div className="flex flex-wrap gap-3 mt-3">
+                                    {modelList.map((model, mi) => (
+                                      <div key={model} className="flex items-center gap-1 text-xs text-gray-400">
+                                        <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: barColors[mi % barColors.length] }}/>
+                                        {model}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 无数据提示 */}
+                      {(!subAccountUsage.modelBreakdown || subAccountUsage.modelBreakdown.length === 0) && (
+                        <div className="text-center py-8 text-gray-500">
+                          <p>📭 该时间范围内暂无使用数据</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1797,12 +2372,21 @@ export default function DashboardPage() {
                 <h2 className="text-xl font-bold mb-4">📋 套餐说明</h2>
                 <div className="grid md:grid-cols-2 gap-4">
                   {aiTiers.map((tier: any) => (
-                    <div key={tier.id} className={`rounded-xl p-5 border ${
-                      tier.name === 'stable' ? 'border-green-500/30 bg-green-500/5' : 'border-blue-500/30 bg-blue-500/5'
+                    <div key={tier.id} className={`rounded-xl p-5 border transition-all hover:scale-[1.02] ${
+                      tier.modelGroup === 'gpt' ? 'border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-emerald-900/10' :
+                      tier.modelGroup === 'mixed' ? 'border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-purple-900/10' :
+                      'border-orange-500/30 bg-gradient-to-br from-orange-500/5 to-amber-900/10'
                     }`}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-lg">{tier.name === 'stable' ? '🛡️' : '⚡'}</span>
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        {tier.modelGroup === 'gpt' ? <span className="text-lg">🤖</span> : tier.modelGroup === 'mixed' ? <span className="text-lg">🔀</span> : <span><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-[#D4A27C] inline"><path d="M12 1L13.5 9L19 4L15 10.5L23 12L15 13.5L19 20L13.5 15L12 23L10.5 15L5 20L9 13.5L1 12L9 10.5L5 4L10.5 9Z"/></svg></span>}
                         <span className="font-bold text-lg">{tier.displayName}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded ${
+                          tier.modelGroup === 'gpt' ? 'bg-emerald-500/20 text-emerald-400' :
+                          tier.modelGroup === 'mixed' ? 'bg-purple-500/20 text-purple-400' :
+                          'bg-amber-500/20 text-amber-400'
+                        }`}>
+                          {tier.modelGroup === 'gpt' ? 'GPT' : tier.modelGroup === 'mixed' ? '混合' : 'Claude'}
+                        </span>
                       </div>
                       <p className="text-sm text-gray-400 mb-3">{tier.description}</p>
                       <div className="space-y-1 text-sm">
@@ -1864,13 +2448,22 @@ export default function DashboardPage() {
                       }`}
                     >
                       <div className="flex justify-between items-center mb-1">
-                        <span className="font-medium">{tier.displayName}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{tier.displayName}</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${
+                            tier.modelGroup === 'gpt' ? 'bg-emerald-500/20 text-emerald-400' :
+                            tier.modelGroup === 'mixed' ? 'bg-purple-500/20 text-purple-400' :
+                            'bg-amber-500/20 text-amber-400'
+                          }`}>
+                            {tier.modelGroup === 'gpt' ? 'GPT' : tier.modelGroup === 'mixed' ? '混合' : 'Claude'}
+                          </span>
+                        </div>
                         <span className="text-sm text-green-400">
                           输入 ${tier.pricePerMillionInput}/M · 输出 ${tier.pricePerMillionOutput}/M
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-1 mt-2">
-                        {tier.parsedFeatures?.map((f: string, i: number) => (
+                        {tier.features?.map((f: string, i: number) => (
                           <span key={i} className="text-xs bg-slate-600 px-2 py-0.5 rounded">{f}</span>
                         ))}
                       </div>
@@ -1934,19 +2527,6 @@ export default function DashboardPage() {
                 />
                 <p className="text-xs text-gray-500 mt-1">子账户必须是已注册的 CardVela 用户</p>
               </div>
-
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">月度预算 (USD，留空不限)</label>
-                <input
-                  type="number"
-                  value={subAccountBudget}
-                  onChange={(e) => setSubAccountBudget(e.target.value)}
-                  placeholder="例如：500"
-                  min="0"
-                  step="1"
-                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
             </div>
 
             <div className="flex gap-3 mt-6">
@@ -1963,6 +2543,152 @@ export default function DashboardPage() {
                   setSubAccountEmail('');
                   setSubAccountBudget('');
                 }}
+                className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded-lg font-medium transition"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 编辑子账户限额弹窗 */}
+      {editingSubAccount && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 p-6 rounded-xl w-full max-w-md">
+            <h3 className="text-lg font-bold mb-1">⚙️ 设置限额</h3>
+            <p className="text-sm text-gray-400 mb-4">{editingSubAccount.user?.username} ({editingSubAccount.user?.email})</p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">日限额 (USD)</label>
+                <input
+                  type="number"
+                  value={editBudgetForm.dailyBudget}
+                  onChange={(e) => setEditBudgetForm(f => ({ ...f, dailyBudget: e.target.value }))}
+                  placeholder="留空不限"
+                  min="0"
+                  step="0.01"
+                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">周限额 (USD)</label>
+                <input
+                  type="number"
+                  value={editBudgetForm.weeklyBudget}
+                  onChange={(e) => setEditBudgetForm(f => ({ ...f, weeklyBudget: e.target.value }))}
+                  placeholder="留空不限"
+                  min="0"
+                  step="0.01"
+                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">月限额 (USD)</label>
+                <input
+                  type="number"
+                  value={editBudgetForm.monthlyBudget}
+                  onChange={(e) => setEditBudgetForm(f => ({ ...f, monthlyBudget: e.target.value }))}
+                  placeholder="留空不限"
+                  min="0"
+                  step="0.01"
+                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleEditSubAccount}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-medium transition"
+              >
+                保存设置
+              </button>
+              <button
+                onClick={() => setEditingSubAccount(null)}
+                className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded-lg font-medium transition"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 企业账户申请弹窗 */}
+      {showEnterpriseApply && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 p-6 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold mb-4">🏢 申请企业账户</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">公司名称 *</label>
+                <input
+                  type="text"
+                  value={enterpriseForm.companyName}
+                  onChange={(e) => setEnterpriseForm({ ...enterpriseForm, companyName: e.target.value })}
+                  placeholder="请输入公司全称"
+                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">联系人 *</label>
+                  <input
+                    type="text"
+                    value={enterpriseForm.contactName}
+                    onChange={(e) => setEnterpriseForm({ ...enterpriseForm, contactName: e.target.value })}
+                    placeholder="您的姓名"
+                    className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">联系电话 *</label>
+                  <input
+                    type="text"
+                    value={enterpriseForm.contactPhone}
+                    onChange={(e) => setEnterpriseForm({ ...enterpriseForm, contactPhone: e.target.value })}
+                    placeholder="手机号或微信号"
+                    className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">使用场景</label>
+                <textarea
+                  value={enterpriseForm.useCase}
+                  onChange={(e) => setEnterpriseForm({ ...enterpriseForm, useCase: e.target.value })}
+                  placeholder="简述您的使用场景，如：代码开发辅助、内容生成等"
+                  rows={3}
+                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">预估月用量</label>
+                <input
+                  type="text"
+                  value={enterpriseForm.estimatedUsage}
+                  onChange={(e) => setEnterpriseForm({ ...enterpriseForm, estimatedUsage: e.target.value })}
+                  placeholder="例如：$500/月、100万tokens/月"
+                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div className="bg-slate-700/50 rounded-lg p-3 text-sm text-gray-400">
+                <p className="font-medium text-gray-300 mb-1">📋 审核说明</p>
+                <p>· 提交申请后，我们将在 1-3 个工作日内审核</p>
+                <p>· 审核通过后，您将自动升级为企业账户</p>
+                <p>· 企业账户可管理子账户、分配预算、查看全局用量</p>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleEnterpriseApply}
+                disabled={applyingEnterprise || !enterpriseForm.companyName.trim() || !enterpriseForm.contactName.trim() || !enterpriseForm.contactPhone.trim()}
+                className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-2 rounded-lg font-medium transition"
+              >
+                {applyingEnterprise ? '提交中...' : '提交申请'}
+              </button>
+              <button
+                onClick={() => setShowEnterpriseApply(false)}
                 className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded-lg font-medium transition"
               >
                 取消

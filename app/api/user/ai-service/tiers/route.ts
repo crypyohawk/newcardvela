@@ -16,6 +16,9 @@ export async function GET(request: NextRequest) {
         pricePerMillionOutput: true,
         features: true,
         sortOrder: true,
+        modelGroup: true,
+        channelGroup: true,
+        provider: { select: { id: true, name: true, displayName: true, type: true, baseUrl: true } },
       },
     });
 

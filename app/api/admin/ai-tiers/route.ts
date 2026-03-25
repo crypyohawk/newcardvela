@@ -9,7 +9,10 @@ export async function GET(request: NextRequest) {
 
   const tiers = await db.aIServiceTier.findMany({
     orderBy: { sortOrder: 'asc' },
-    include: { _count: { select: { aiKeys: true } } },
+    include: {
+      _count: { select: { aiKeys: true } },
+      provider: { select: { id: true, name: true, displayName: true, type: true } },
+    },
   });
 
   return NextResponse.json({ tiers });
@@ -28,6 +31,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '名称不能为空' }, { status: 400 });
     }
 
+    const { providerId, modelGroup, channelGroup } = body;
+
     const tier = await db.aIServiceTier.create({
       data: {
         name: name.trim(),
@@ -37,6 +42,12 @@ export async function POST(request: NextRequest) {
         pricePerMillionOutput: pricePerMillionOutput || 15,
         features: features ? JSON.stringify(features) : null,
         sortOrder: sortOrder || 0,
+        providerId: providerId || null,
+        modelGroup: modelGroup || 'claude',
+        channelGroup: channelGroup || null,
+      },
+      include: {
+        provider: { select: { id: true, name: true, displayName: true, type: true } },
       },
     });
 

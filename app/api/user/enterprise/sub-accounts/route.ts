@@ -12,8 +12,8 @@ export async function GET(request: NextRequest) {
 
     // 验证是企业账户
     const user = await db.user.findUnique({ where: { id: payload.userId } });
-    if (!user || user.role !== 'enterprise') {
-      return NextResponse.json({ error: '仅企业账户可使用此功能' }, { status: 403 });
+    if (!user || !['enterprise', 'ADMIN', 'admin'].includes(user.role)) {
+      return NextResponse.json({ error: '仅企业账户/管理员可使用此功能' }, { status: 403 });
     }
 
     const subAccounts = await db.enterpriseSubAccount.findMany({
@@ -37,6 +37,8 @@ export async function GET(request: NextRequest) {
 
     const result = subAccounts.map(sa => ({
       id: sa.id,
+      dailyBudget: sa.dailyBudget,
+      weeklyBudget: sa.weeklyBudget,
       monthlyBudget: sa.monthlyBudget,
       isActive: sa.isActive,
       createdAt: sa.createdAt,
@@ -63,8 +65,8 @@ export async function POST(request: NextRequest) {
     if (!payload) return NextResponse.json({ error: '无效的令牌' }, { status: 401 });
 
     const user = await db.user.findUnique({ where: { id: payload.userId } });
-    if (!user || user.role !== 'enterprise') {
-      return NextResponse.json({ error: '仅企业账户可使用此功能' }, { status: 403 });
+    if (!user || !['enterprise', 'ADMIN', 'admin'].includes(user.role)) {
+      return NextResponse.json({ error: '仅企业账户/管理员可使用此功能' }, { status: 403 });
     }
 
     const body = await request.json();
