@@ -95,16 +95,16 @@ export async function POST(request: NextRequest) {
       const outputCost = (outputTokens / 1000000) * aiKey.tier.pricePerMillionOutput;
       const cost = Math.round((inputCost + outputCost) * 10000) / 10000;
 
-      // 检查月度预算（在扣费前检查）
-      if (aiKey.monthlyLimit && aiKey.monthUsed + cost > aiKey.monthlyLimit) {
+      // 检查月度预算（超限禁用Key，但不跳过计费——请求已完成必须收费）
+      let keyBudgetExceeded = false;
+      if (aiKey.monthlyLimit != null && aiKey.monthUsed + cost > aiKey.monthlyLimit) {
         await db.aIKey.update({
           where: { id: aiKey.id },
           data: { status: 'disabled' },
         });
         await disableKeyOnNewApi(aiKey.newApiTokenId);
-        console.log(`[用量同步] Key ${aiKey.id} 超出月度预算，已自动禁用（含new-api侧）`);
-        skipped++;
-        continue;
+        keyBudgetExceeded = true;
+        console.log(`[用量同步] Key ${aiKey.id} 超出月度预算 $${aiKey.monthlyLimit}，已自动禁用（含new-api侧）。此次调用仍正常扣费。`);
       }
 
       // 检查子账户预算限制（超限仅禁用Key，不跳过计费——请求已完成必须收费）

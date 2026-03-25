@@ -47,7 +47,12 @@ export async function PUT(
     const updateData: any = {};
 
     if (body.keyName !== undefined) updateData.keyName = body.keyName.trim();
-    if (body.monthlyLimit !== undefined) updateData.monthlyLimit = body.monthlyLimit || null;
+    if (body.monthlyLimit !== undefined) {
+      updateData.monthlyLimit = (body.monthlyLimit === null || body.monthlyLimit === '' || body.monthlyLimit === 0) ? null : Number(body.monthlyLimit);
+      if (updateData.monthlyLimit !== null && (isNaN(updateData.monthlyLimit) || updateData.monthlyLimit < 0)) {
+        return NextResponse.json({ error: '月度限额不能为负数' }, { status: 400 });
+      }
+    }
     if (body.status !== undefined && ['active', 'disabled'].includes(body.status)) {
       // 重新启用 Key 时必须检查余额
       if (body.status === 'active') {

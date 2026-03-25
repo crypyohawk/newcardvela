@@ -77,6 +77,34 @@ export async function DELETE(
       return NextResponse.json({ error: '子账户不存在' }, { status: 404 });
     }
 
+    // 禁用该子账户所有活跃Key（CardVela侧 + new-api侧）
+    const subAccountData = await db.enterpriseSubAccount.findUnique({
+      where: { id: params.id },
+      select: { subUserId: true },
+    });
+    if (subAccountData) {
+      const activeKeys = await db.aIKey.findMany({
+        where: { userId: subAccountData.subUserId, status: 'active' },
+        select: { id: true, newApiTokenId: true },
+      });
+      if (activeKeys.length > 0) {
+        await db.aIKey.updateMany({
+          where: { userId: subAccountData.subUserId, status: 'active' },
+          data: { status: 'disabled' },
+        });
+        for (const k of activeKeys) {
+          if (k.newApiTokenId) {
+            try {
+              const { updateNewApiToken } = await import('../../../../../../src/lib/newapi');
+              await updateNewApiToken(k.newApiTokenId, { status: 2 });
+            } catch (e) {
+              console.error('同步禁用new-api token失败:', e);
+            }
+          }
+        }
+      }
+    }
+
     await db.enterpriseSubAccount.delete({ where: { id: params.id } });
 
     return NextResponse.json({ success: true });

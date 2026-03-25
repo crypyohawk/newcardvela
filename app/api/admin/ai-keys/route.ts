@@ -40,7 +40,12 @@ export async function GET(request: NextRequest) {
     ]);
 
     return NextResponse.json({
-      keys,
+      keys: keys.map(k => ({
+        ...k,
+        apiKey: k.apiKey.length > 12
+          ? k.apiKey.slice(0, 8) + '...' + k.apiKey.slice(-4)
+          : '****',
+      })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error: any) {
