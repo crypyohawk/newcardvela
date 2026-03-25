@@ -90,30 +90,42 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // 扣费前检查余额：如果余额已经不足以覆盖本次消费，禁用所有Key
+      // 获取信用额度配置（默认允许透支 $5）
+      const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
+      const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 5;
+
+      // 查当前余额
       const currentUser = await db.user.findUnique({
         where: { id: aiKey.userId },
         select: { balance: true },
       });
-      if (!currentUser || currentUser.balance < cost) {
-        // 余额不足，禁用该用户所有活跃Key（CardVela侧 + new-api侧）
-        const activeKeys = await db.aIKey.findMany({
-          where: { userId: aiKey.userId, status: 'active' },
-          select: { id: true, newApiTokenId: true },
-        });
-        await db.aIKey.updateMany({
-          where: { userId: aiKey.userId, status: 'active' },
-          data: { status: 'disabled' },
-        });
-        for (const k of activeKeys) {
-          await disableKeyOnNewApi(k.newApiTokenId);
-        }
-        console.log(`[用量同步] 用户 ${aiKey.userId} 余额不足($${currentUser?.balance?.toFixed(4)}), 费用$${cost}, 已禁用所有Key（含new-api侧）`);
+      if (!currentUser) {
         skipped++;
         continue;
       }
 
-      // 使用事务保证原子性：写日志 + 更新Key用量 + 扣余额
+      // 如果余额已经低于信用下限（如 -$5），禁用所有 Key 并跳过
+      // 注意：请求已完成但用户欠太多了，不再记账避免无底洞
+      if (currentUser.balance <= -creditLimit) {
+        const activeKeys = await db.aIKey.findMany({
+          where: { userId: aiKey.userId, status: 'active' },
+          select: { id: true, newApiTokenId: true },
+        });
+        if (activeKeys.length > 0) {
+          await db.aIKey.updateMany({
+            where: { userId: aiKey.userId, status: 'active' },
+            data: { status: 'disabled' },
+          });
+          for (const k of activeKeys) {
+            await disableKeyOnNewApi(k.newApiTokenId);
+          }
+          console.log(`[用量同步] 用户 ${aiKey.userId} 已超出信用额度(余额$${currentUser.balance.toFixed(4)}, 信用上限-$${creditLimit})，禁用所有Key`);
+        }
+        skipped++;
+        continue;
+      }
+
+      // 无论余额是否足够，都要扣费（请求已经完成，上游已经扣了我们的钱）
       await db.$transaction([
         db.aIUsageLog.create({
           data: {
@@ -144,12 +156,12 @@ export async function POST(request: NextRequest) {
       totalCostDeducted += cost;
       synced++;
 
-      // 扣费后再次检查余额，处理并发导致的余额透支
+      // 扣费后检查：余额低于信用下限则禁用所有 Key
       const updatedUser = await db.user.findUnique({
         where: { id: aiKey.userId },
         select: { balance: true },
       });
-      if (updatedUser && updatedUser.balance <= 0) {
+      if (updatedUser && updatedUser.balance <= -creditLimit) {
         const activeKeys = await db.aIKey.findMany({
           where: { userId: aiKey.userId, status: 'active' },
           select: { id: true, newApiTokenId: true },
@@ -161,7 +173,7 @@ export async function POST(request: NextRequest) {
         for (const k of activeKeys) {
           await disableKeyOnNewApi(k.newApiTokenId);
         }
-        console.log(`[用量同步] 用户 ${aiKey.userId} 扣费后余额不足($${updatedUser.balance.toFixed(4)})，已禁用所有 Key（含new-api侧）`);
+        console.log(`[用量同步] 用户 ${aiKey.userId} 扣费后超出信用额度(余额$${updatedUser.balance.toFixed(4)})，已禁用所有 Key（含new-api侧）`);
       }
     }
 

@@ -152,6 +152,35 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
+        {/* AI 信用额度配置 */}
+        <div className="bg-slate-800 rounded-xl p-6 mb-6">
+          <h2 className="text-xl font-bold mb-4">💳 AI 信用额度</h2>
+          <p className="text-gray-400 text-sm mb-4">允许用户余额透支的最大金额。API 调用是事后扣费，当用户正在执行任务时余额可能不足，信用额度允许用户完成当前任务，余额变为负数。超过信用下限后 Key 会被自动禁用，充值后可重新启用。</p>
+          
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">信用额度上限 ($)</label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={configs['ai_credit_limit'] || '5'}
+                onChange={(e) => setConfigs(prev => ({ ...prev, ai_credit_limit: e.target.value }))}
+                placeholder="5"
+                step="1"
+                min="0"
+                className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+              />
+              <button
+                onClick={() => saveConfig('ai_credit_limit', configs['ai_credit_limit'] || '5')}
+                disabled={saving}
+                className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                保存
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">例如设为 5，则用户余额最低可到 -$5。设为 0 表示不允许透支（余额归零即禁用 Key）。建议 3~10 美元</p>
+          </div>
+        </div>
+
         {/* USDT 收款地址配置 */}
         <div className="bg-slate-800 rounded-xl p-6 mb-6">
           <h2 className="text-xl font-bold mb-4">💵 USDT 收款地址</h2>
