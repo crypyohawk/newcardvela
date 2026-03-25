@@ -181,6 +181,35 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
+        {/* 企业子账户默认日限额 */}
+        <div className="bg-slate-800 rounded-xl p-6 mb-6">
+          <h2 className="text-xl font-bold mb-4">🏢 子账户默认日限额</h2>
+          <p className="text-gray-400 text-sm mb-4">当企业子账户未设置任何预算限额（日/周/月都为空）时，系统自动应用此默认日限额，防止子账户无限消费。企业主可在子账户管理中覆盖此值。</p>
+          
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">默认每日限额 ($)</label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={configs['ai_sub_account_default_daily_budget'] || '10'}
+                onChange={(e) => setConfigs(prev => ({ ...prev, ai_sub_account_default_daily_budget: e.target.value }))}
+                placeholder="10"
+                step="1"
+                min="1"
+                className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+              />
+              <button
+                onClick={() => saveConfig('ai_sub_account_default_daily_budget', configs['ai_sub_account_default_daily_budget'] || '10')}
+                disabled={saving}
+                className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                保存
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">建议设为 10~50 美元。仅对未设置任何限额的子账户生效，已设限额的子账户不受影响</p>
+          </div>
+        </div>
+
         {/* USDT 收款地址配置 */}
         <div className="bg-slate-800 rounded-xl p-6 mb-6">
           <h2 className="text-xl font-bold mb-4">💵 USDT 收款地址</h2>

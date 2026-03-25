@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // 检查子账户预算限制
+      // 检查子账户预算限制（超限仅禁用Key，不跳过计费——请求已完成必须收费）
       const subAccount = await db.enterpriseSubAccount.findFirst({
         where: { subUserId: aiKey.userId, isActive: true },
       });
@@ -118,70 +118,70 @@ export async function POST(request: NextRequest) {
         weekStart.setHours(0, 0, 0, 0);
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-        // 检查日限额
-        if (subAccount.dailyBudget) {
+        let subBudgetExceeded = false;
+        let subBudgetReason = '';
+
+        // 判断是否设置了任何限额（注意：0 也是有效限额，表示禁止消费）
+        const hasAnyBudget = subAccount.dailyBudget != null || subAccount.weeklyBudget != null || subAccount.monthlyBudget != null;
+
+        // 如果未设置任何限额，使用系统默认日限额兜底，防止无限消费
+        const defaultBudgetConfig = !hasAnyBudget
+          ? await db.systemConfig.findUnique({ where: { key: 'ai_sub_account_default_daily_budget' } })
+          : null;
+        const defaultDailyBudget = defaultBudgetConfig ? parseFloat(defaultBudgetConfig.value) : 10; // 默认 $10/天
+
+        const effectiveDailyBudget = subAccount.dailyBudget != null
+          ? subAccount.dailyBudget
+          : (!hasAnyBudget ? defaultDailyBudget : null);
+
+        // 检查日限额（含系统默认兜底）
+        if (effectiveDailyBudget != null) {
           const todayUsage = await db.aIUsageLog.aggregate({
             where: { userId: aiKey.userId, createdAt: { gte: todayStart } },
             _sum: { cost: true },
           });
-          if ((todayUsage._sum.cost || 0) + cost > subAccount.dailyBudget) {
-            await db.aIKey.updateMany({
-              where: { userId: aiKey.userId, status: 'active' },
-              data: { status: 'disabled' },
-            });
-            const keys = await db.aIKey.findMany({
-              where: { userId: aiKey.userId },
-              select: { newApiTokenId: true },
-            });
-            for (const k of keys) await disableKeyOnNewApi(k.newApiTokenId);
-            console.log(`[用量同步] 子账户 ${aiKey.userId} 超出日限额 $${subAccount.dailyBudget}`);
-            skipped++;
-            continue;
+          if ((todayUsage._sum.cost || 0) + cost > effectiveDailyBudget) {
+            subBudgetExceeded = true;
+            subBudgetReason = `日限额 $${effectiveDailyBudget}${!hasAnyBudget ? '(系统默认)' : ''}`;
           }
         }
 
         // 检查周限额
-        if (subAccount.weeklyBudget) {
+        if (subAccount.weeklyBudget != null) {
           const weekUsage = await db.aIUsageLog.aggregate({
             where: { userId: aiKey.userId, createdAt: { gte: weekStart } },
             _sum: { cost: true },
           });
           if ((weekUsage._sum.cost || 0) + cost > subAccount.weeklyBudget) {
-            await db.aIKey.updateMany({
-              where: { userId: aiKey.userId, status: 'active' },
-              data: { status: 'disabled' },
-            });
-            const keys = await db.aIKey.findMany({
-              where: { userId: aiKey.userId },
-              select: { newApiTokenId: true },
-            });
-            for (const k of keys) await disableKeyOnNewApi(k.newApiTokenId);
-            console.log(`[用量同步] 子账户 ${aiKey.userId} 超出周限额 $${subAccount.weeklyBudget}`);
-            skipped++;
-            continue;
+            subBudgetExceeded = true;
+            subBudgetReason = `周限额 $${subAccount.weeklyBudget}`;
           }
         }
 
         // 检查月限额
-        if (subAccount.monthlyBudget) {
+        if (subAccount.monthlyBudget != null) {
           const monthUsage = await db.aIUsageLog.aggregate({
             where: { userId: aiKey.userId, createdAt: { gte: monthStart } },
             _sum: { cost: true },
           });
           if ((monthUsage._sum.cost || 0) + cost > subAccount.monthlyBudget) {
-            await db.aIKey.updateMany({
-              where: { userId: aiKey.userId, status: 'active' },
-              data: { status: 'disabled' },
-            });
-            const keys = await db.aIKey.findMany({
-              where: { userId: aiKey.userId },
-              select: { newApiTokenId: true },
-            });
-            for (const k of keys) await disableKeyOnNewApi(k.newApiTokenId);
-            console.log(`[用量同步] 子账户 ${aiKey.userId} 超出月限额 $${subAccount.monthlyBudget}`);
-            skipped++;
-            continue;
+            subBudgetExceeded = true;
+            subBudgetReason = `月限额 $${subAccount.monthlyBudget}`;
           }
+        }
+
+        // 超限时禁用所有Key，但不跳过计费（请求已完成，必须扣费）
+        if (subBudgetExceeded) {
+          await db.aIKey.updateMany({
+            where: { userId: aiKey.userId, status: 'active' },
+            data: { status: 'disabled' },
+          });
+          const keys = await db.aIKey.findMany({
+            where: { userId: aiKey.userId },
+            select: { newApiTokenId: true },
+          });
+          for (const k of keys) await disableKeyOnNewApi(k.newApiTokenId);
+          console.log(`[用量同步] 子账户 ${aiKey.userId} 超出${subBudgetReason}，已禁用所有Key（含new-api侧）。此次调用仍正常扣费。`);
         }
       }
 
