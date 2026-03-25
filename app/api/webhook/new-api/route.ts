@@ -185,9 +185,9 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 获取信用额度配置（默认允许透支 $5）
+      // 获取信用额度配置（默认允许透支 $1）
       const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
-      const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 5;
+      const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
 
       // 查当前余额
       const currentUser = await db.user.findUnique({

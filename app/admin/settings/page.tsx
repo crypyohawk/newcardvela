@@ -162,7 +162,7 @@ export default function AdminSettingsPage() {
             <div className="flex gap-2">
               <input
                 type="number"
-                value={configs['ai_credit_limit'] || '5'}
+                value={configs['ai_credit_limit'] || '1'}
                 onChange={(e) => setConfigs(prev => ({ ...prev, ai_credit_limit: e.target.value }))}
                 placeholder="5"
                 step="1"
@@ -170,7 +170,7 @@ export default function AdminSettingsPage() {
                 className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
               />
               <button
-                onClick={() => saveConfig('ai_credit_limit', configs['ai_credit_limit'] || '5')}
+                onClick={() => saveConfig('ai_credit_limit', configs['ai_credit_limit'] || '1')}
                 disabled={saving}
                 className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
