@@ -67,13 +67,13 @@ export async function updateNewApiToken(tokenId: number, params: {
   remainQuota?: number;
   name?: string;
 }): Promise<void> {
+  const body: any = { id: tokenId };
+  if (params.status !== undefined) body.status = params.status;
+  if (params.remainQuota !== undefined) body.remain_quota = params.remainQuota;
+  if (params.name !== undefined) body.name = params.name;
   await newApiRequest(`/api/token/`, {
     method: 'PUT',
-    body: JSON.stringify({
-      id: tokenId,
-      ...params,
-      remain_quota: params.remainQuota,
-    }),
+    body: JSON.stringify(body),
   });
 }
 

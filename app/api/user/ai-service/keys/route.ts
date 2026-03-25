@@ -85,7 +85,9 @@ export async function POST(request: NextRequest) {
     // 在 new-api 创建对应 token
     let newApiTokenId: number | null = null;
     try {
-      const quotaAmount = monthlyLimit ? usdToQuota(monthlyLimit) : usdToQuota(1000);
+      // 配额设为用户余额的2倍或月度限额，取较小值，防止上游被过度消耗
+      const maxQuota = monthlyLimit ? Math.min(monthlyLimit, user.balance * 2) : Math.min(user.balance * 2, 100);
+      const quotaAmount = usdToQuota(maxQuota);
       const result = await createNewApiToken({
         name: obfuscateKeyName(payload.userId, keyName.trim()),
         key: apiKey,
