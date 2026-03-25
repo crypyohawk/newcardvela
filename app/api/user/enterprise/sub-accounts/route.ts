@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
       data: {
         enterpriseId: payload.userId,
         subUserId: subUser.id,
-        monthlyBudget: monthlyBudget || null,
+        monthlyBudget: monthlyBudget !== undefined && monthlyBudget !== null ? Number(monthlyBudget) : null,
       },
       include: {
         subUser: { select: { id: true, username: true, email: true } },

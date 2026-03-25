@@ -54,6 +54,9 @@ export async function POST(request: NextRequest) {
     if (!keyName?.trim() || !tierId) {
       return NextResponse.json({ error: '请填写 Key 名称并选择套餐' }, { status: 400 });
     }
+    if (monthlyLimit !== undefined && monthlyLimit !== null && (isNaN(Number(monthlyLimit)) || Number(monthlyLimit) < 0)) {
+      return NextResponse.json({ error: '月度限额不能为负数' }, { status: 400 });
+    }
 
     // 验证套餐存在，并获取 provider 信息
     const tier = await db.aIServiceTier.findUnique({

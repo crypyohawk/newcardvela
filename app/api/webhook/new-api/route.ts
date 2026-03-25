@@ -21,13 +21,15 @@ async function disableKeyOnNewApi(newApiTokenId: number | null) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // 验证 webhook secret
+    // 验证 webhook secret（必须配置，否则拒绝请求）
     const webhookSecret = process.env.NEW_API_WEBHOOK_SECRET;
-    if (webhookSecret) {
-      const authHeader = request.headers.get('authorization');
-      if (authHeader !== `Bearer ${webhookSecret}`) {
-        return NextResponse.json({ error: '未授权' }, { status: 401 });
-      }
+    if (!webhookSecret) {
+      console.error('[webhook] NEW_API_WEBHOOK_SECRET 未配置，拒绝请求');
+      return NextResponse.json({ error: 'Webhook 未配置' }, { status: 503 });
+    }
+    const authHeader = request.headers.get('authorization');
+    if (authHeader !== `Bearer ${webhookSecret}`) {
+      return NextResponse.json({ error: '未授权' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -50,8 +52,8 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const inputTokens = Number(prompt_tokens) || 0;
-      const outputTokens = Number(completion_tokens) || 0;
+      const inputTokens = Math.max(0, Number(prompt_tokens) || 0);
+      const outputTokens = Math.max(0, Number(completion_tokens) || 0);
       if (inputTokens === 0 && outputTokens === 0) {
         skipped++;
         continue;
@@ -73,6 +75,21 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      // 月度懒重置：如果 Key 的 lastSyncAt 在上个月，重置 monthUsed
+      const now = new Date();
+      if (aiKey.lastSyncAt) {
+        const lastMonth = aiKey.lastSyncAt.getMonth();
+        const lastYear = aiKey.lastSyncAt.getFullYear();
+        if (lastMonth !== now.getMonth() || lastYear !== now.getFullYear()) {
+          await db.aIKey.update({
+            where: { id: aiKey.id },
+            data: { monthUsed: 0 },
+          });
+          aiKey.monthUsed = 0;
+          console.log(`[用量同步] Key ${aiKey.id} 跨月重置 monthUsed`);
+        }
+      }
+
       // 计算费用
       const inputCost = (inputTokens / 1000000) * aiKey.tier.pricePerMillionInput;
       const outputCost = (outputTokens / 1000000) * aiKey.tier.pricePerMillionOutput;
@@ -88,6 +105,84 @@ export async function POST(request: NextRequest) {
         console.log(`[用量同步] Key ${aiKey.id} 超出月度预算，已自动禁用（含new-api侧）`);
         skipped++;
         continue;
+      }
+
+      // 检查子账户预算限制
+      const subAccount = await db.enterpriseSubAccount.findFirst({
+        where: { subUserId: aiKey.userId, isActive: true },
+      });
+      if (subAccount) {
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const weekStart = new Date(now);
+        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+        weekStart.setHours(0, 0, 0, 0);
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        // 检查日限额
+        if (subAccount.dailyBudget) {
+          const todayUsage = await db.aIUsageLog.aggregate({
+            where: { userId: aiKey.userId, createdAt: { gte: todayStart } },
+            _sum: { cost: true },
+          });
+          if ((todayUsage._sum.cost || 0) + cost > subAccount.dailyBudget) {
+            await db.aIKey.updateMany({
+              where: { userId: aiKey.userId, status: 'active' },
+              data: { status: 'disabled' },
+            });
+            const keys = await db.aIKey.findMany({
+              where: { userId: aiKey.userId },
+              select: { newApiTokenId: true },
+            });
+            for (const k of keys) await disableKeyOnNewApi(k.newApiTokenId);
+            console.log(`[用量同步] 子账户 ${aiKey.userId} 超出日限额 $${subAccount.dailyBudget}`);
+            skipped++;
+            continue;
+          }
+        }
+
+        // 检查周限额
+        if (subAccount.weeklyBudget) {
+          const weekUsage = await db.aIUsageLog.aggregate({
+            where: { userId: aiKey.userId, createdAt: { gte: weekStart } },
+            _sum: { cost: true },
+          });
+          if ((weekUsage._sum.cost || 0) + cost > subAccount.weeklyBudget) {
+            await db.aIKey.updateMany({
+              where: { userId: aiKey.userId, status: 'active' },
+              data: { status: 'disabled' },
+            });
+            const keys = await db.aIKey.findMany({
+              where: { userId: aiKey.userId },
+              select: { newApiTokenId: true },
+            });
+            for (const k of keys) await disableKeyOnNewApi(k.newApiTokenId);
+            console.log(`[用量同步] 子账户 ${aiKey.userId} 超出周限额 $${subAccount.weeklyBudget}`);
+            skipped++;
+            continue;
+          }
+        }
+
+        // 检查月限额
+        if (subAccount.monthlyBudget) {
+          const monthUsage = await db.aIUsageLog.aggregate({
+            where: { userId: aiKey.userId, createdAt: { gte: monthStart } },
+            _sum: { cost: true },
+          });
+          if ((monthUsage._sum.cost || 0) + cost > subAccount.monthlyBudget) {
+            await db.aIKey.updateMany({
+              where: { userId: aiKey.userId, status: 'active' },
+              data: { status: 'disabled' },
+            });
+            const keys = await db.aIKey.findMany({
+              where: { userId: aiKey.userId },
+              select: { newApiTokenId: true },
+            });
+            for (const k of keys) await disableKeyOnNewApi(k.newApiTokenId);
+            console.log(`[用量同步] 子账户 ${aiKey.userId} 超出月限额 $${subAccount.monthlyBudget}`);
+            skipped++;
+            continue;
+          }
+        }
       }
 
       // 获取信用额度配置（默认允许透支 $5）
