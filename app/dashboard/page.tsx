@@ -2422,6 +2422,12 @@ export default function DashboardPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-slate-800 p-6 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">🔑 创建 API Key</h3>
+            {(user?.balance ?? 0) <= 0 && (
+              <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 mb-4">
+                <p className="text-red-400 text-sm font-medium">⚠️ 账户余额不足，无法创建 Key</p>
+                <p className="text-red-400/70 text-xs mt-1">请先充值后再创建 API Key。创建 Key 需要账户余额大于 $0。</p>
+              </div>
+            )}
             <div className="space-y-4">
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Key 名称 *</label>
@@ -2436,6 +2442,9 @@ export default function DashboardPage() {
 
               <div>
                 <label className="block text-sm text-gray-400 mb-2">选择套餐 *</label>
+                {aiTiers.length === 0 && (
+                  <p className="text-yellow-400 text-sm bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">暂无可用套餐，请联系管理员添加</p>
+                )}
                 <div className="grid gap-3">
                   {aiTiers.map((tier: any) => (
                     <div
@@ -2489,10 +2498,10 @@ export default function DashboardPage() {
             <div className="flex gap-3 mt-6">
               <button
                 onClick={handleCreateKey}
-                disabled={creatingKey || !newKeyName.trim() || !newKeyTier}
+                disabled={creatingKey || !newKeyName.trim() || !newKeyTier || (user?.balance ?? 0) <= 0}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-2 rounded-lg font-medium transition"
               >
-                {creatingKey ? '创建中...' : '创建 Key'}
+                {creatingKey ? '创建中...' : (user?.balance ?? 0) <= 0 ? '余额不足，请先充值' : '创建 Key'}
               </button>
               <button
                 onClick={() => {

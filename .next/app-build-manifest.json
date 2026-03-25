@@ -12,7 +12,7 @@
       "static/chunks/fd9d1056-e88209dc08b01fd8.js",
       "static/chunks/117-a01a7a84fe99fcff.js",
       "static/chunks/main-app-c39d4a919987daae.js",
-      "static/css/571f4f3f6f9fe57b.css",
+      "static/css/9672016085b71ad0.css",
       "static/chunks/app/layout-353d1b713adfab78.js"
     ],
     "/(auth)/login/page": [
@@ -22,14 +22,6 @@
       "static/chunks/main-app-c39d4a919987daae.js",
       "static/chunks/972-2773d7582beaca66.js",
       "static/chunks/app/(auth)/login/page-9668e66b2e9d5782.js"
-    ],
-    "/admin/card-types/page": [
-      "static/chunks/webpack-c81f7fd28659d64f.js",
-      "static/chunks/fd9d1056-e88209dc08b01fd8.js",
-      "static/chunks/117-a01a7a84fe99fcff.js",
-      "static/chunks/main-app-c39d4a919987daae.js",
-      "static/chunks/972-2773d7582beaca66.js",
-      "static/chunks/app/admin/card-types/page-0f7b1abd55dc44dd.js"
     ],
     "/(auth)/register/page": [
       "static/chunks/webpack-c81f7fd28659d64f.js",
@@ -54,6 +46,14 @@
       "static/chunks/main-app-c39d4a919987daae.js",
       "static/chunks/972-2773d7582beaca66.js",
       "static/chunks/app/admin/users/[id]/page-f56d1432566818a9.js"
+    ],
+    "/admin/card-types/page": [
+      "static/chunks/webpack-c81f7fd28659d64f.js",
+      "static/chunks/fd9d1056-e88209dc08b01fd8.js",
+      "static/chunks/117-a01a7a84fe99fcff.js",
+      "static/chunks/main-app-c39d4a919987daae.js",
+      "static/chunks/972-2773d7582beaca66.js",
+      "static/chunks/app/admin/card-types/page-0f7b1abd55dc44dd.js"
     ],
     "/admin/page": [
       "static/chunks/webpack-c81f7fd28659d64f.js",
@@ -93,7 +93,7 @@
       "static/chunks/117-a01a7a84fe99fcff.js",
       "static/chunks/main-app-c39d4a919987daae.js",
       "static/chunks/972-2773d7582beaca66.js",
-      "static/chunks/app/dashboard/page-e351ccf427538291.js"
+      "static/chunks/app/dashboard/page-d5ff51defd228766.js"
     ],
     "/callback/page": [
       "static/chunks/webpack-c81f7fd28659d64f.js",
