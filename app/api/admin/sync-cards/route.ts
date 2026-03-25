@@ -1,9 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../src/lib/db';
 import { getCards } from '../../../../src/lib/gsalary';
+import { verifyToken } from '../../../../src/lib/auth';
+
+// 验证管理员
+async function requireAdmin(request: NextRequest) {
+  const authHeader = request.headers.get('authorization');
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  try {
+    const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
+    if (!decoded) return null;
+    const user = await db.user.findUnique({ where: { id: decoded.userId } });
+    if (!user || user.role !== 'admin') return null;
+    return user;
+  } catch {
+    return null;
+  }
+}
 
 // 同步上游卡片到本地数据库
 export async function GET(request: NextRequest) {
+  const admin = await requireAdmin(request);
+  if (!admin) {
+    return NextResponse.json({ error: '需要管理员权限' }, { status: 403 });
+  }
   try {
     // 获取所有持卡人，逐个拉取上游卡片（每个持卡人最多20张，避免分页遗漏）
     const cardHolders = await db.cardHolder.findMany({ where: { isActive: true } });
@@ -67,6 +88,10 @@ export async function GET(request: NextRequest) {
 
 // 手动关联卡片
 export async function POST(request: NextRequest) {
+  const admin = await requireAdmin(request);
+  if (!admin) {
+    return NextResponse.json({ error: '需要管理员权限' }, { status: 403 });
+  }
   try {
     const body = await request.json();
     const { localCardId, gsalaryCardId, cardNoLast4 } = body;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '../../../../src/lib/prisma';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET!;
 
 // 验证管理员
 async function verifyAdmin(request: NextRequest) {
@@ -13,7 +13,7 @@ async function verifyAdmin(request: NextRequest) {
     const token = authHeader.substring(7);
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
     const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
-    if (!user || (user.role !== 'admin' && user.role !== 'ADMIN')) return null;
+    if (!user || user.role !== 'admin') return null;
     return user;
   } catch {
     return null;
