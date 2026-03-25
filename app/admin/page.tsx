@@ -67,7 +67,7 @@ interface Notice {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds' | 'referral' | 'monthlyFee'>('cards');
+  const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds' | 'referral' | 'monthlyFee' | 'ai'>('cards');
   const [monthlyFeePreview, setMonthlyFeePreview] = useState<any>(null);
   const [monthlyFeeLoading, setMonthlyFeeLoading] = useState(false);
   const [monthlyFeeExecuting, setMonthlyFeeExecuting] = useState(false);
@@ -140,6 +140,15 @@ export default function AdminPage() {
     description: '',
   });
 
+  // AI 管理状态
+  const [aiTiers, setAiTiers] = useState<any[]>([]);
+  const [aiUsageStats, setAiUsageStats] = useState<any>(null);
+  const [aiKeys, setAiKeys] = useState<any[]>([]);
+  const [aiKeySearch, setAiKeySearch] = useState('');
+  const [showAddTier, setShowAddTier] = useState(false);
+  const [editingTier, setEditingTier] = useState<any>(null);
+  const [tierForm, setTierForm] = useState({ name: '', displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true });
+
   // 查看凭证弹窗状态
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [returnAmount, setReturnAmount] = useState<string>('');
@@ -194,6 +203,9 @@ export default function AdminPage() {
           break;
         case 'referral':
           await fetchReferralSettings();
+          break;
+        case 'ai':
+          await fetchAIManagement();
           break;
       }
       setLoadedTabs(prev => new Set(prev).add(tab));
@@ -440,6 +452,78 @@ export default function AdminPage() {
       }
     } catch (error) {
       setMessage({ type: 'error', text: '保存失败' });
+    }
+  };
+
+  // AI 管理数据获取
+  const fetchAIManagement = async () => {
+    try {
+      const [tiersRes, usageRes, keysRes] = await Promise.all([
+        fetch('/api/admin/ai-tiers', { headers: { 'Authorization': `Bearer ${getToken()}` } }),
+        fetch('/api/admin/ai-usage', { headers: { 'Authorization': `Bearer ${getToken()}` } }),
+        fetch('/api/admin/ai-keys', { headers: { 'Authorization': `Bearer ${getToken()}` } }),
+      ]);
+      if (tiersRes.ok) { const d = await tiersRes.json(); setAiTiers(d.tiers || []); }
+      if (usageRes.ok) { const d = await usageRes.json(); setAiUsageStats(d); }
+      if (keysRes.ok) { const d = await keysRes.json(); setAiKeys(d.keys || []); }
+    } catch (error) {
+      console.error('获取 AI 管理数据失败:', error);
+    }
+  };
+
+  const handleSaveTier = async () => {
+    try {
+      const payload = {
+        name: tierForm.name,
+        displayName: tierForm.displayName,
+        pricePerMillionInput: parseFloat(tierForm.pricePerMillionInput) || 0,
+        pricePerMillionOutput: parseFloat(tierForm.pricePerMillionOutput) || 0,
+        features: tierForm.features.split(',').map((f: string) => f.trim()).filter(Boolean),
+        isActive: tierForm.isActive,
+      };
+      const url = editingTier ? `/api/admin/ai-tiers/${editingTier.id}` : '/api/admin/ai-tiers';
+      const res = await fetch(url, {
+        method: editingTier ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      setMessage({ type: 'success', text: editingTier ? '套餐已更新' : '套餐已创建' });
+      setShowAddTier(false);
+      setEditingTier(null);
+      setTierForm({ name: '', displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true });
+      fetchAIManagement();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  const handleDeleteTier = async (tierId: string) => {
+    if (!confirm('确定要删除此套餐吗？')) return;
+    try {
+      const res = await fetch(`/api/admin/ai-tiers/${tierId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      setMessage({ type: 'success', text: '套餐已删除' });
+      fetchAIManagement();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  const handleToggleAIKey = async (keyId: string, currentStatus: string) => {
+    try {
+      const res = await fetch('/api/admin/ai-keys', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+        body: JSON.stringify({ keyId, status: currentStatus === 'active' ? 'disabled' : 'active' }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      fetchAIManagement();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
     }
   };
 
@@ -752,6 +836,7 @@ export default function AdminPage() {
             { key: 'refunds', label: '↩️ 退款管理' },
             { key: 'referral', label: '🎁 推广设置' },
             { key: 'monthlyFee', label: '📅 月费管理' },
+            { key: 'ai', label: '🤖 AI 管理' },
           ].map(tab => (
             <button
               key={tab.key}
@@ -1891,6 +1976,253 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* AI 管理 */}
+        {!tabLoading && activeTab === 'ai' && (
+          <div className="space-y-6">
+            {/* 用量统计 */}
+            {aiUsageStats && (
+              <div>
+                <h3 className="text-lg font-bold mb-3">📊 用量统计</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="bg-slate-800 p-4 rounded-xl text-center">
+                    <p className="text-gray-400 text-sm">今日费用</p>
+                    <p className="text-xl font-bold text-green-400">${aiUsageStats.todayCost?.toFixed(2) || '0.00'}</p>
+                  </div>
+                  <div className="bg-slate-800 p-4 rounded-xl text-center">
+                    <p className="text-gray-400 text-sm">本月费用</p>
+                    <p className="text-xl font-bold text-blue-400">${aiUsageStats.monthCost?.toFixed(2) || '0.00'}</p>
+                  </div>
+                  <div className="bg-slate-800 p-4 rounded-xl text-center">
+                    <p className="text-gray-400 text-sm">总 Key 数</p>
+                    <p className="text-xl font-bold">{aiUsageStats.totalKeys || 0}</p>
+                  </div>
+                  <div className="bg-slate-800 p-4 rounded-xl text-center">
+                    <p className="text-gray-400 text-sm">活跃 Key</p>
+                    <p className="text-xl font-bold text-purple-400">{aiUsageStats.activeKeys || 0}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 套餐管理 */}
+            <div>
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-bold">📦 套餐管理</h3>
+                <button
+                  onClick={() => {
+                    setEditingTier(null);
+                    setTierForm({ name: '', displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true });
+                    setShowAddTier(true);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm"
+                >
+                  + 新建套餐
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {aiTiers.map((tier: any) => (
+                  <div key={tier.id} className="bg-slate-800 p-4 rounded-xl flex justify-between items-center">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{tier.displayName}</span>
+                        <span className="text-xs text-gray-500">({tier.name})</span>
+                        <span className={`text-xs px-2 py-0.5 rounded ${tier.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                          {tier.isActive ? '启用' : '停用'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-400 mt-1">
+                        输入 ${tier.pricePerMillionInput}/M tokens · 输出 ${tier.pricePerMillionOutput}/M tokens
+                        {tier._count?.aiKeys > 0 && <span className="ml-2 text-blue-400">({tier._count.aiKeys} 个 Key)</span>}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingTier(tier);
+                          setTierForm({
+                            name: tier.name,
+                            displayName: tier.displayName,
+                            pricePerMillionInput: String(tier.pricePerMillionInput),
+                            pricePerMillionOutput: String(tier.pricePerMillionOutput),
+                            features: Array.isArray(tier.features) ? tier.features.join(', ') : (typeof tier.features === 'string' ? tier.features : ''),
+                            isActive: tier.isActive,
+                          });
+                          setShowAddTier(true);
+                        }}
+                        className="text-blue-400 hover:text-blue-300 text-sm"
+                      >
+                        编辑
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTier(tier.id)}
+                        className="text-red-400 hover:text-red-300 text-sm"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {aiTiers.length === 0 && (
+                  <p className="text-center text-gray-500 py-4">暂无套餐，请点击"新建套餐"创建</p>
+                )}
+              </div>
+            </div>
+
+            {/* Key 管理 */}
+            <div>
+              <h3 className="text-lg font-bold mb-3">🔑 Key 管理</h3>
+              <div className="mb-3">
+                <input
+                  type="text"
+                  value={aiKeySearch}
+                  onChange={(e) => setAiKeySearch(e.target.value)}
+                  placeholder="搜索用户名或邮箱..."
+                  className="w-full bg-slate-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-gray-400 border-b border-slate-700">
+                      <th className="pb-3 text-left">用户</th>
+                      <th className="pb-3 text-left">Key 名称</th>
+                      <th className="pb-3">套餐</th>
+                      <th className="pb-3">本月用量</th>
+                      <th className="pb-3">状态</th>
+                      <th className="pb-3">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aiKeys
+                      .filter((k: any) => {
+                        if (!aiKeySearch) return true;
+                        const s = aiKeySearch.toLowerCase();
+                        return k.user?.username?.toLowerCase().includes(s) || k.user?.email?.toLowerCase().includes(s);
+                      })
+                      .map((key: any) => (
+                      <tr key={key.id} className="border-b border-slate-700/50">
+                        <td className="py-2">{key.user?.email || '-'}</td>
+                        <td className="py-2">{key.keyName}</td>
+                        <td className="py-2 text-center">{key.tier?.displayName || '-'}</td>
+                        <td className="py-2 text-center">${key.monthUsed?.toFixed(4) || '0'}</td>
+                        <td className="py-2 text-center">
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            key.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                            key.status === 'disabled' ? 'bg-yellow-500/20 text-yellow-400' :
+                            'bg-red-500/20 text-red-400'
+                          }`}>
+                            {key.status === 'active' ? '正常' : key.status === 'disabled' ? '已停用' : '已暂停'}
+                          </span>
+                        </td>
+                        <td className="py-2 text-center">
+                          <button
+                            onClick={() => handleToggleAIKey(key.id, key.status)}
+                            className={`text-xs ${key.status === 'active' ? 'text-yellow-400' : 'text-green-400'}`}
+                          >
+                            {key.status === 'active' ? '停用' : '启用'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {aiKeys.length === 0 && (
+                      <tr><td colSpan={6} className="py-4 text-center text-gray-500">暂无 Key</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 新建/编辑套餐弹窗 */}
+        {showAddTier && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-slate-800 p-6 rounded-xl w-full max-w-md">
+              <h3 className="text-lg font-bold mb-4">{editingTier ? '编辑套餐' : '新建套餐'}</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">套餐标识 (英文)</label>
+                  <input
+                    type="text"
+                    value={tierForm.name}
+                    onChange={(e) => setTierForm({ ...tierForm, name: e.target.value })}
+                    placeholder="例如：economy, stable, official"
+                    className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">显示名称</label>
+                  <input
+                    type="text"
+                    value={tierForm.displayName}
+                    onChange={(e) => setTierForm({ ...tierForm, displayName: e.target.value })}
+                    placeholder="例如：经济版、稳定版、官方直连"
+                    className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">输入价格 ($/M tokens)</label>
+                    <input
+                      type="number"
+                      value={tierForm.pricePerMillionInput}
+                      onChange={(e) => setTierForm({ ...tierForm, pricePerMillionInput: e.target.value })}
+                      placeholder="3.00"
+                      step="0.01"
+                      className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">输出价格 ($/M tokens)</label>
+                    <input
+                      type="number"
+                      value={tierForm.pricePerMillionOutput}
+                      onChange={(e) => setTierForm({ ...tierForm, pricePerMillionOutput: e.target.value })}
+                      placeholder="15.00"
+                      step="0.01"
+                      className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">特性 (逗号分隔)</label>
+                  <input
+                    type="text"
+                    value={tierForm.features}
+                    onChange={(e) => setTierForm({ ...tierForm, features: e.target.value })}
+                    placeholder="多通道聚合, 自动切换, 低延迟"
+                    className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={tierForm.isActive}
+                    onChange={(e) => setTierForm({ ...tierForm, isActive: e.target.checked })}
+                    className="rounded"
+                  />
+                  <label className="text-sm text-gray-400">启用</label>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={handleSaveTier}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-medium text-sm"
+                >
+                  {editingTier ? '保存修改' : '创建套餐'}
+                </button>
+                <button
+                  onClick={() => { setShowAddTier(false); setEditingTier(null); }}
+                  className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded-lg font-medium text-sm"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

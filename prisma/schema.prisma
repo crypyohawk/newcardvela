@@ -37,6 +37,11 @@ model User {
   cardRecharges  CardRechargeOrder[]
   referralRewards ReferralReward[]
 
+  // AI 服务关联
+  aiKeys              AIKey[]
+  enterpriseOwned     EnterpriseSubAccount[] @relation("EnterpriseOwner")
+  subAccountOf        EnterpriseSubAccount[] @relation("SubAccount")
+
   @@index([email])
   @@index([referralCode])
 }
@@ -310,4 +315,93 @@ model ReferralReward {
   updatedAt       DateTime @updatedAt
 
   @@index([referrerId])
+}
+
+// ============================================================
+// Claude 聚合服务相关模型
+// ============================================================
+
+// AI 服务套餐
+model AIServiceTier {
+  id                      String   @id @default(cuid())
+  name                    String   @unique              // "economy" | "stable"
+  displayName             String                        // "经济版" | "稳定版"
+  description             String?  @db.Text
+  pricePerMillionInput    Float                         // 每百万 input token 价格 (USD)
+  pricePerMillionOutput   Float                         // 每百万 output token 价格 (USD)
+  features                String?  @db.Text             // JSON: 特性列表
+  isActive                Boolean  @default(true)
+  sortOrder               Int      @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  aiKeys                  AIKey[]
+}
+
+// 用户 API Key
+model AIKey {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tierId          String
+  tier            AIServiceTier @relation(fields: [tierId], references: [id])
+
+  keyName         String                        // 用户给 Key 起的名称
+  apiKey          String   @unique              // sk-cardvela-xxxx
+  hashedKey       String?                       // 哈希后的 Key（安全存储）
+  newApiTokenId   Int?                          // new-api 侧的 token ID
+  
+  status          String   @default("active")   // active | disabled | expired
+  monthlyLimit    Float?                        // 每月用量上限 (USD)，null=不限
+  totalUsed       Float    @default(0)          // 累计消费 (USD)
+  monthUsed       Float    @default(0)          // 本月消费 (USD)
+  lastUsedAt      DateTime?
+  lastSyncAt      DateTime?                     // 上次用量同步时间
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  usageLogs       AIUsageLog[]
+
+  @@index([userId])
+  @@index([apiKey])
+  @@index([status])
+}
+
+// API 调用日志
+model AIUsageLog {
+  id              String   @id @default(cuid())
+  userId          String
+  aiKeyId         String
+  aiKey           AIKey    @relation(fields: [aiKeyId], references: [id], onDelete: Cascade)
+
+  model           String                        // claude-sonnet-4-20250514 等
+  inputTokens     Int
+  outputTokens    Int
+  cost            Float                         // 本次费用 (USD)
+  channel         String?                       // 实际走的渠道
+
+  createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([aiKeyId, createdAt])
+}
+
+// 企业子账户关系
+model EnterpriseSubAccount {
+  id              String   @id @default(cuid())
+  enterpriseId    String                        // 企业主账户 userId
+  enterprise      User     @relation("EnterpriseOwner", fields: [enterpriseId], references: [id])
+  subUserId       String                        // 子账户 userId
+  subUser         User     @relation("SubAccount", fields: [subUserId], references: [id])
+
+  monthlyBudget   Float?                        // 月预算上限 (USD)
+  isActive        Boolean  @default(true)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([enterpriseId, subUserId])
+  @@index([enterpriseId])
+  @@index([subUserId])
 }

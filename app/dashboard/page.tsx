@@ -61,7 +61,7 @@ export default function DashboardPage() {
   const [cardTypes, setCardTypes] = useState<CardType[]>([]);
   const [userCards, setUserCards] = useState<UserCard[]>([]);
   const [notices, setNotices] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'cards' | 'open' | 'recharge' | 'referral'>('cards');
+  const [activeTab, setActiveTab] = useState<'cards' | 'open' | 'recharge' | 'referral' | 'ai'>('cards');
   const [openingCard, setOpeningCard] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
@@ -116,6 +116,24 @@ export default function DashboardPage() {
   const [agreedToNotices, setAgreedToNotices] = useState(false);
   const [noticeExpanded, setNoticeExpanded] = useState(false);
 
+  // AI 服务相关状态
+  const [aiTiers, setAiTiers] = useState<any[]>([]);
+  const [aiKeys, setAiKeys] = useState<any[]>([]);
+  const [aiSummary, setAiSummary] = useState<any>(null);
+  const [aiUsage, setAiUsage] = useState<any>(null);
+  const [showCreateKey, setShowCreateKey] = useState(false);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [newKeyTier, setNewKeyTier] = useState('');
+  const [newKeyLimit, setNewKeyLimit] = useState('');
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [aiConfigTab, setAiConfigTab] = useState<'cline' | 'cursor' | 'claudecode'>('cline');
+  // 企业管理
+  const [enterpriseSubAccounts, setEnterpriseSubAccounts] = useState<any[]>([]);
+  const [showAddSubAccount, setShowAddSubAccount] = useState(false);
+  const [subAccountEmail, setSubAccountEmail] = useState('');
+  const [subAccountBudget, setSubAccountBudget] = useState('');
+
   // 固定提现配置（不从后台读取）
     const [withdrawConfig, setWithdrawConfig] = useState<WithdrawConfig>({
       accountMinAmount: 2,
@@ -139,6 +157,7 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchData();
     fetchReferralInfo();
+    fetchAIData();
   }, []);
 
   const fetchData = async () => {
@@ -201,6 +220,129 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('获取推荐信息失败:', error);
     }
+  };
+
+  // AI 服务数据
+  const fetchAIData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const headers = { 'Authorization': `Bearer ${token}` };
+
+      const [tiersRes, keysRes, summaryRes, usageRes] = await Promise.all([
+        fetch('/api/user/ai-service/tiers', { headers }),
+        fetch('/api/user/ai-service/keys', { headers }),
+        fetch('/api/user/ai-service/usage/summary', { headers }),
+        fetch('/api/user/ai-service/usage?period=30d', { headers }),
+      ]);
+
+      if (tiersRes.ok) { const d = await tiersRes.json(); setAiTiers(d.tiers || []); }
+      if (keysRes.ok) { const d = await keysRes.json(); setAiKeys(d.keys || []); }
+      if (summaryRes.ok) { const d = await summaryRes.json(); setAiSummary(d); }
+      if (usageRes.ok) { const d = await usageRes.json(); setAiUsage(d); }
+
+      // 企业子账户
+      const subRes = await fetch('/api/user/enterprise/sub-accounts', { headers });
+      if (subRes.ok) { const d = await subRes.json(); setEnterpriseSubAccounts(d.subAccounts || []); }
+    } catch (error) {
+      console.error('获取 AI 服务数据失败:', error);
+    }
+  };
+
+  const handleCreateKey = async () => {
+    if (!newKeyName.trim() || !newKeyTier) {
+      setMessage({ type: 'error', text: '请填写 Key 名称并选择套餐' });
+      return;
+    }
+    setCreatingKey(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/user/ai-service/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          keyName: newKeyName.trim(),
+          tierId: newKeyTier,
+          monthlyLimit: newKeyLimit ? parseFloat(newKeyLimit) : null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setMessage({ type: 'success', text: 'API Key 创建成功！请妥善保管。' });
+      setShowCreateKey(false);
+      setNewKeyName('');
+      setNewKeyTier('');
+      setNewKeyLimit('');
+      fetchAIData();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    } finally {
+      setCreatingKey(false);
+    }
+  };
+
+  const handleDeleteKey = async (keyId: string) => {
+    if (!confirm('确定要删除此 Key 吗？删除后无法恢复。')) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/user/ai-service/keys/${keyId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      setMessage({ type: 'success', text: 'Key 已删除' });
+      fetchAIData();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  const handleToggleKey = async (keyId: string, currentStatus: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/user/ai-service/keys/${keyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ status: currentStatus === 'active' ? 'disabled' : 'active' }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      fetchAIData();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  const handleAddSubAccount = async () => {
+    if (!subAccountEmail.trim()) {
+      setMessage({ type: 'error', text: '请输入子账户邮箱' });
+      return;
+    }
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/user/enterprise/sub-accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          email: subAccountEmail.trim(),
+          monthlyBudget: subAccountBudget ? parseFloat(subAccountBudget) : null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setMessage({ type: 'success', text: '子账户添加成功' });
+      setShowAddSubAccount(false);
+      setSubAccountEmail('');
+      setSubAccountBudget('');
+      fetchAIData();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  const copyToClipboard = (text: string, keyId: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(keyId);
+    setTimeout(() => setCopiedKey(null), 2000);
   };
 
   // 开卡
@@ -657,7 +799,7 @@ export default function DashboardPage() {
         )}
 
         {/* 快捷操作 */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
           <button
             onClick={() => setActiveTab('cards')}
             className={`p-4 rounded-xl text-left transition ${activeTab === 'cards' ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'}`}
@@ -689,6 +831,14 @@ export default function DashboardPage() {
             <div className="text-2xl mb-2">💸</div>
             <div className="font-semibold">提现</div>
             <div className="text-sm text-gray-400">账户余额提现</div>
+          </button>
+          <button
+            onClick={() => { setActiveTab('ai'); fetchAIData(); }}
+            className={`p-4 rounded-xl text-left transition ${activeTab === 'ai' ? 'bg-gradient-to-br from-purple-600 to-blue-600' : 'bg-slate-800 hover:bg-slate-700'}`}
+          >
+            <div className="text-2xl mb-2">🤖</div>
+            <div className="font-semibold">Claude AI</div>
+            <div className="text-sm text-gray-400">{aiKeys.length} 个 Key</div>
           </button>
           <button
             onClick={() => setActiveTab('referral')}
@@ -1406,7 +1556,421 @@ export default function DashboardPage() {
             )}
           </div>
         )}
+
+        {/* Claude AI 服务 */}
+        {activeTab === 'ai' && (
+          <div className="space-y-6">
+            {/* 概览卡片 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-slate-800 rounded-xl p-4">
+                <div className="text-sm text-gray-400">账户余额</div>
+                <div className="text-2xl font-bold text-green-400">${aiSummary?.balance?.toFixed(2) || '0.00'}</div>
+              </div>
+              <div className="bg-slate-800 rounded-xl p-4">
+                <div className="text-sm text-gray-400">本月消费</div>
+                <div className="text-2xl font-bold text-blue-400">${aiSummary?.monthCost?.toFixed(2) || '0.00'}</div>
+              </div>
+              <div className="bg-slate-800 rounded-xl p-4">
+                <div className="text-sm text-gray-400">本月请求</div>
+                <div className="text-2xl font-bold">{aiSummary?.monthRequests || 0}</div>
+              </div>
+              <div className="bg-slate-800 rounded-xl p-4">
+                <div className="text-sm text-gray-400">活跃 Key</div>
+                <div className="text-2xl font-bold">{aiSummary?.activeKeys || 0} / {aiSummary?.totalKeys || 0}</div>
+              </div>
+            </div>
+
+            {/* 我的 Key */}
+            <div className="bg-slate-800 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold">🔑 我的 API Key</h2>
+                <button
+                  onClick={() => setShowCreateKey(true)}
+                  className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium"
+                >
+                  + 创建新 Key
+                </button>
+              </div>
+
+              {aiKeys.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <div className="text-4xl mb-4">🔑</div>
+                  <p>您还没有创建任何 API Key</p>
+                  <p className="text-sm mt-1">创建 Key 后即可在 Cline / Cursor / Claude Code 中使用</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {aiKeys.map((key: any) => (
+                    <div key={key.id} className="bg-slate-700 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                          <span className="font-semibold">{key.keyName}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            key.tier?.name === 'stable' ? 'bg-green-600/20 text-green-400' : 'bg-blue-600/20 text-blue-400'
+                          }`}>
+                            {key.tier?.displayName || key.tier?.name}
+                          </span>
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            key.status === 'active' ? 'bg-green-600/20 text-green-400' : 'bg-red-600/20 text-red-400'
+                          }`}>
+                            {key.status === 'active' ? '活跃' : '已禁用'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleToggleKey(key.id, key.status)}
+                            className={`text-xs px-3 py-1 rounded ${
+                              key.status === 'active' ? 'bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/30' : 'bg-green-600/20 text-green-400 hover:bg-green-600/30'
+                            }`}
+                          >
+                            {key.status === 'active' ? '禁用' : '启用'}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteKey(key.id)}
+                            className="text-xs px-3 py-1 rounded bg-red-600/20 text-red-400 hover:bg-red-600/30"
+                          >
+                            删除
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 bg-slate-800 px-3 py-2 rounded-lg text-sm font-mono">
+                        <span className="flex-1 truncate text-gray-300">{key.apiKey}</span>
+                        <button
+                          onClick={() => copyToClipboard(key.apiKey, key.id)}
+                          className="text-blue-400 hover:text-blue-300 text-xs whitespace-nowrap"
+                        >
+                          {copiedKey === key.id ? '✓ 已复制' : '复制'}
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
+                        <span>本月: ${key.monthUsed?.toFixed(2) || '0.00'}</span>
+                        <span>累计: ${key.totalUsed?.toFixed(2) || '0.00'}</span>
+                        {key.monthlyLimit && <span>月限: ${key.monthlyLimit}</span>}
+                        {key.lastUsedAt && <span>最后使用: {new Date(key.lastUsedAt).toLocaleDateString()}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 快速配置 */}
+            {aiKeys.length > 0 && (
+              <div className="bg-slate-800 rounded-xl p-6">
+                <h2 className="text-xl font-bold mb-4">⚡ 快速配置</h2>
+                <div className="flex gap-2 mb-4">
+                  {(['cline', 'cursor', 'claudecode'] as const).map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => setAiConfigTab(tab)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                        aiConfigTab === tab ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'
+                      }`}
+                    >
+                      {tab === 'cline' ? 'Cline' : tab === 'cursor' ? 'Cursor' : 'Claude Code'}
+                    </button>
+                  ))}
+                </div>
+                <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm text-green-400">
+                  {aiConfigTab === 'cline' && (
+                    <div>
+                      <p className="text-gray-500 mb-1"># Cline 配置 → Settings → API Provider → Anthropic</p>
+                      <p>Base URL: {process.env.NEXT_PUBLIC_AI_API_URL || 'https://api.cardvela.com'}</p>
+                      <p>API Key: {aiKeys[0]?.apiKey}</p>
+                    </div>
+                  )}
+                  {aiConfigTab === 'cursor' && (
+                    <div>
+                      <p className="text-gray-500 mb-1"># Cursor 配置 → Settings → Models → Override OpenAI Base URL</p>
+                      <p>Base URL: {process.env.NEXT_PUBLIC_AI_API_URL || 'https://api.cardvela.com'}/v1</p>
+                      <p>API Key: {aiKeys[0]?.apiKey}</p>
+                    </div>
+                  )}
+                  {aiConfigTab === 'claudecode' && (
+                    <div>
+                      <p className="text-gray-500 mb-1"># Claude Code 环境变量</p>
+                      <p>export ANTHROPIC_BASE_URL={process.env.NEXT_PUBLIC_AI_API_URL || 'https://api.cardvela.com'}</p>
+                      <p>export ANTHROPIC_API_KEY={aiKeys[0]?.apiKey}</p>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    const baseUrl = process.env.NEXT_PUBLIC_AI_API_URL || 'https://api.cardvela.com';
+                    const key = aiKeys[0]?.apiKey || '';
+                    let text = '';
+                    if (aiConfigTab === 'cline') text = `Base URL: ${baseUrl}\nAPI Key: ${key}`;
+                    else if (aiConfigTab === 'cursor') text = `Base URL: ${baseUrl}/v1\nAPI Key: ${key}`;
+                    else text = `export ANTHROPIC_BASE_URL=${baseUrl}\nexport ANTHROPIC_API_KEY=${key}`;
+                    navigator.clipboard.writeText(text);
+                    setMessage({ type: 'success', text: '配置信息已复制！' });
+                  }}
+                  className="mt-3 bg-slate-700 px-4 py-2 rounded-lg hover:bg-slate-600 text-sm"
+                >
+                  📋 一键复制配置
+                </button>
+              </div>
+            )}
+
+            {/* 用量图表 */}
+            {aiUsage && aiUsage.daily && aiUsage.daily.length > 0 && (
+              <div className="bg-slate-800 rounded-xl p-6">
+                <h2 className="text-xl font-bold mb-4">📊 用量趋势（最近 30 天）</h2>
+                <div className="space-y-2">
+                  {aiUsage.daily.map((day: any) => {
+                    const maxCost = Math.max(...aiUsage.daily.map((d: any) => d.cost), 1);
+                    return (
+                      <div key={day.date} className="flex items-center gap-3 text-sm">
+                        <span className="text-gray-400 w-24">{day.date.slice(5)}</span>
+                        <div className="flex-1 bg-slate-700 rounded-full h-5 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full flex items-center px-2"
+                            style={{ width: `${Math.max((day.cost / maxCost) * 100, 2)}%` }}
+                          >
+                            {day.cost > 0 && <span className="text-xs text-white font-medium">${day.cost.toFixed(2)}</span>}
+                          </div>
+                        </div>
+                        <span className="text-gray-400 w-16 text-right">{day.count} 次</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 企业管理（仅企业账户显示） */}
+            {user?.role === 'enterprise' && (
+              <div className="bg-slate-800 rounded-xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold">🏢 企业子账户管理</h2>
+                  <button
+                    onClick={() => setShowAddSubAccount(true)}
+                    className="bg-purple-600 px-4 py-2 rounded-lg hover:bg-purple-700 text-sm font-medium"
+                  >
+                    + 添加子账户
+                  </button>
+                </div>
+
+                {enterpriseSubAccounts.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400">
+                    <p>暂无子账户</p>
+                    <p className="text-sm mt-1">添加团队成员的邮箱来创建子账户</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-gray-400 border-b border-slate-700">
+                          <th className="text-left py-2 px-3">用户名</th>
+                          <th className="text-left py-2 px-3">邮箱</th>
+                          <th className="text-right py-2 px-3">本月消费</th>
+                          <th className="text-right py-2 px-3">月预算</th>
+                          <th className="text-right py-2 px-3">活跃Key</th>
+                          <th className="text-center py-2 px-3">状态</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {enterpriseSubAccounts.map((sa: any) => (
+                          <tr key={sa.id} className="border-b border-slate-700/50">
+                            <td className="py-3 px-3">{sa.user?.username}</td>
+                            <td className="py-3 px-3 text-gray-400">{sa.user?.email}</td>
+                            <td className="py-3 px-3 text-right">${sa.user?.monthUsed?.toFixed(2) || '0.00'}</td>
+                            <td className="py-3 px-3 text-right">{sa.monthlyBudget ? `$${sa.monthlyBudget}` : '不限'}</td>
+                            <td className="py-3 px-3 text-right">{sa.user?.activeKeys || 0}</td>
+                            <td className="py-3 px-3 text-center">
+                              <span className={`text-xs px-2 py-0.5 rounded ${sa.isActive ? 'bg-green-600/20 text-green-400' : 'bg-red-600/20 text-red-400'}`}>
+                                {sa.isActive ? '正常' : '已停用'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 套餐说明 */}
+            {aiTiers.length > 0 && (
+              <div className="bg-slate-800 rounded-xl p-6">
+                <h2 className="text-xl font-bold mb-4">📋 套餐说明</h2>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {aiTiers.map((tier: any) => (
+                    <div key={tier.id} className={`rounded-xl p-5 border ${
+                      tier.name === 'stable' ? 'border-green-500/30 bg-green-500/5' : 'border-blue-500/30 bg-blue-500/5'
+                    }`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-lg">{tier.name === 'stable' ? '🛡️' : '⚡'}</span>
+                        <span className="font-bold text-lg">{tier.displayName}</span>
+                      </div>
+                      <p className="text-sm text-gray-400 mb-3">{tier.description}</p>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Input 价格</span>
+                          <span>${tier.pricePerMillionInput}/百万 tokens</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Output 价格</span>
+                          <span>${tier.pricePerMillionOutput}/百万 tokens</span>
+                        </div>
+                      </div>
+                      {tier.features && tier.features.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-slate-700">
+                          {tier.features.map((f: string, i: number) => (
+                            <div key={i} className="text-sm text-gray-300 flex items-center gap-1.5">
+                              <span className="text-green-400">✓</span> {f}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* 创建 AI Key 弹窗 */}
+      {showCreateKey && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 p-6 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold mb-4">🔑 创建 API Key</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Key 名称 *</label>
+                <input
+                  type="text"
+                  value={newKeyName}
+                  onChange={(e) => setNewKeyName(e.target.value)}
+                  placeholder="例如：生产环境、测试用"
+                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">选择套餐 *</label>
+                <div className="grid gap-3">
+                  {aiTiers.map((tier: any) => (
+                    <div
+                      key={tier.id}
+                      onClick={() => setNewKeyTier(tier.id)}
+                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                        newKeyTier === tier.id
+                          ? 'border-blue-500 bg-blue-500/10'
+                          : 'border-slate-600 bg-slate-700 hover:border-slate-500'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="font-medium">{tier.displayName}</span>
+                        <span className="text-sm text-green-400">
+                          输入 ${tier.pricePerMillionInput}/M · 输出 ${tier.pricePerMillionOutput}/M
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {tier.parsedFeatures?.map((f: string, i: number) => (
+                          <span key={i} className="text-xs bg-slate-600 px-2 py-0.5 rounded">{f}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">月度限额 (USD，留空不限)</label>
+                <input
+                  type="number"
+                  value={newKeyLimit}
+                  onChange={(e) => setNewKeyLimit(e.target.value)}
+                  placeholder="例如：100"
+                  min="0"
+                  step="1"
+                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleCreateKey}
+                disabled={creatingKey || !newKeyName.trim() || !newKeyTier}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-2 rounded-lg font-medium transition"
+              >
+                {creatingKey ? '创建中...' : '创建 Key'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowCreateKey(false);
+                  setNewKeyName('');
+                  setNewKeyTier('');
+                  setNewKeyLimit('');
+                }}
+                className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded-lg font-medium transition"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 添加子账户弹窗 */}
+      {showAddSubAccount && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 p-6 rounded-xl w-full max-w-md">
+            <h3 className="text-lg font-bold mb-4">👥 添加子账户</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">子账户邮箱 *</label>
+                <input
+                  type="email"
+                  value={subAccountEmail}
+                  onChange={(e) => setSubAccountEmail(e.target.value)}
+                  placeholder="请输入已注册用户的邮箱"
+                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">子账户必须是已注册的 CardVela 用户</p>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">月度预算 (USD，留空不限)</label>
+                <input
+                  type="number"
+                  value={subAccountBudget}
+                  onChange={(e) => setSubAccountBudget(e.target.value)}
+                  placeholder="例如：500"
+                  min="0"
+                  step="1"
+                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleAddSubAccount}
+                disabled={!subAccountEmail.trim()}
+                className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-2 rounded-lg font-medium transition"
+              >
+                添加子账户
+              </button>
+              <button
+                onClick={() => {
+                  setShowAddSubAccount(false);
+                  setSubAccountEmail('');
+                  setSubAccountBudget('');
+                }}
+                className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded-lg font-medium transition"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 卡充值/提现弹窗 */}
       {selectedCardForRecharge && (
