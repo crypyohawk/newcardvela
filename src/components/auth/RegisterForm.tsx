@@ -95,7 +95,7 @@ export default function RegisterForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          placeholder="至少8位，含大写、小写字母和特殊字符"
+          placeholder="8-10位，含大写、小写字母和特殊字符"
           className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
         />
       </div>

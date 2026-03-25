@@ -58,8 +58,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 密码强度验证
-    if (password.length < 8) {
-      return NextResponse.json({ error: '密码长度至少8位' }, { status: 400 });
+    if (password.length < 8 || password.length > 10) {
+      return NextResponse.json({ error: '密码长度必须为8-10位' }, { status: 400 });
     }
     if (!/[A-Z]/.test(password)) {
       return NextResponse.json({ error: '密码必须包含至少一个大写字母' }, { status: 400 });

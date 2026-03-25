@@ -10,6 +10,7 @@ function RegisterContent() {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [code, setCode] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -21,6 +22,17 @@ function RegisterContent() {
   const searchParams = useSearchParams();
   const { refreshUser } = useAuth();
 
+  // 密码验证规则
+  const pwRules = {
+    length: password.length >= 8 && password.length <= 10,
+    upper: /[A-Z]/.test(password),
+    lower: /[a-z]/.test(password),
+    special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password),
+  };
+  const passwordValid = pwRules.length && pwRules.upper && pwRules.lower && pwRules.special;
+  const confirmMatch = confirmPassword.length > 0 && password === confirmPassword;
+  const canSendCode = email.trim().length > 0 && passwordValid && confirmMatch;
+
   // Auto fill referral code from URL
   useEffect(() => {
     const ref = searchParams.get('ref');
@@ -28,10 +40,7 @@ function RegisterContent() {
   }, [searchParams]);
 
   const sendCode = async () => {
-    if (!email.trim()) {
-      setMessage({ type: 'error', text: 'Please enter your email address.' });
-      return;
-    }
+    if (!canSendCode) return;
 
     setCodeLoading(true);
     try {
@@ -156,11 +165,53 @@ function RegisterContent() {
               <label className="block text-sm text-gray-400 mb-1.5">密码</label>
               <input
                 type="password"
-                placeholder="至少8位，含大写、小写字母和特殊字符"
+                placeholder="8-10位，含大写、小写字母和特殊字符"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value.slice(0, 10))}
+                maxLength={10}
                 className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25 transition"
               />
+              {password.length > 0 && (
+                <div className="mt-2 grid grid-cols-2 gap-1 text-xs">
+                  <span className={pwRules.length ? 'text-green-400' : 'text-gray-500'}>
+                    {pwRules.length ? '✓' : '○'} 8-10位字符
+                  </span>
+                  <span className={pwRules.upper ? 'text-green-400' : 'text-gray-500'}>
+                    {pwRules.upper ? '✓' : '○'} 含大写字母
+                  </span>
+                  <span className={pwRules.lower ? 'text-green-400' : 'text-gray-500'}>
+                    {pwRules.lower ? '✓' : '○'} 含小写字母
+                  </span>
+                  <span className={pwRules.special ? 'text-green-400' : 'text-gray-500'}>
+                    {pwRules.special ? '✓' : '○'} 含特殊字符
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Confirm Password */}
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">确认密码</label>
+              <input
+                type="password"
+                placeholder="请再次输入密码"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value.slice(0, 10))}
+                maxLength={10}
+                className={`w-full px-4 py-2.5 bg-white/5 border rounded-xl text-white placeholder-gray-500 focus:outline-none transition ${
+                  confirmPassword.length === 0
+                    ? 'border-white/10 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25'
+                    : confirmMatch
+                      ? 'border-green-500/50 focus:border-green-500/50 focus:ring-1 focus:ring-green-500/25'
+                      : 'border-red-500/50 focus:border-red-500/50 focus:ring-1 focus:ring-red-500/25'
+                }`}
+              />
+              {confirmPassword.length > 0 && !confirmMatch && (
+                <p className="mt-1 text-xs text-red-400">两次密码输入不一致</p>
+              )}
+              {confirmMatch && (
+                <p className="mt-1 text-xs text-green-400">✓ 密码一致</p>
+              )}
             </div>
 
             {/* Email Verification Code */}
@@ -176,8 +227,9 @@ function RegisterContent() {
                 />
                 <button
                   onClick={sendCode}
-                  disabled={codeLoading || codeSent}
+                  disabled={codeLoading || codeSent || !canSendCode}
                   className="bg-white/10 border border-white/10 text-white px-4 py-2.5 rounded-xl hover:bg-white/15 disabled:opacity-50 whitespace-nowrap text-sm font-medium transition"
+                  title={!canSendCode ? '请先正确填写邮箱、密码并确认密码一致' : ''}
                 >
                   {codeLoading ? '发送中...' : codeSent ? '已发送' : '获取验证码'}
                 </button>
