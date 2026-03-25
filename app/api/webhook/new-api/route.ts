@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '../../../../../src/lib/db';
-import { quotaToUSD } from '../../../../../src/lib/newapi';
+import { db } from '../../../../src/lib/db';
+import { quotaToUSD } from '../../../../src/lib/newapi';
 
 export const dynamic = 'force-dynamic';
 

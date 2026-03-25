@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '../../../../../src/lib/db';
-import { verifyAdmin } from '../../../../../src/lib/adminAuth';
+import { db } from '../../../../src/lib/db';
+import { verifyAdmin } from '../../../../src/lib/adminAuth';
 
 // 获取所有用户的 Key（管理员）
 export async function GET(request: NextRequest) {

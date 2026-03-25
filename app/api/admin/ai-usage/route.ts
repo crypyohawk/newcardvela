@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '../../../../../src/lib/db';
-import { verifyAdmin } from '../../../../../src/lib/adminAuth';
+import { db } from '../../../../src/lib/db';
+import { verifyAdmin } from '../../../../src/lib/adminAuth';
 
 // 全局 AI 用量统计
 export async function GET(request: NextRequest) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '../../../../../../src/lib/db';
-import { verifyToken, getTokenFromRequest } from '../../../../../../src/lib/auth';
+import { db } from '../../../../../src/lib/db';
+import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
 
 // 获取企业所有子账户的用量汇总
 export async function GET(request: NextRequest) {

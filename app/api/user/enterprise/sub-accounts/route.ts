@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '../../../../../../src/lib/db';
-import { verifyToken, getTokenFromRequest } from '../../../../../../src/lib/auth';
+import { db } from '../../../../../src/lib/db';
+import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
 
 // 获取企业子账户列表
 export async function GET(request: NextRequest) {

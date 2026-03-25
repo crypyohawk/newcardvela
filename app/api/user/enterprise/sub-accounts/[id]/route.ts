@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '../../../../../../../src/lib/db';
-import { verifyToken, getTokenFromRequest } from '../../../../../../../src/lib/auth';
+import { db } from '../../../../../../src/lib/db';
+import { verifyToken, getTokenFromRequest } from '../../../../../../src/lib/auth';
 
 // 更新子账户（预算/状态）
 export async function PUT(

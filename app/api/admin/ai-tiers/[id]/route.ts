@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '../../../../../../src/lib/db';
-import { verifyAdmin } from '../../../../../../src/lib/adminAuth';
+import { db } from '../../../../../src/lib/db';
+import { verifyAdmin } from '../../../../../src/lib/adminAuth';
 
 // 更新套餐
 export async function PUT(
