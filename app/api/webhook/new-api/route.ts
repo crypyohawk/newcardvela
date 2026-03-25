@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../src/lib/db';
+import { updateNewApiToken } from '../../../../src/lib/newapi';
 
 export const dynamic = 'force-dynamic';
+
+// 同步禁用 new-api 侧的 token，防止用户继续调用上游
+async function disableKeyOnNewApi(newApiTokenId: number | null) {
+  if (!newApiTokenId) return;
+  try {
+    await updateNewApiToken(newApiTokenId, { status: 2 });
+  } catch (e) {
+    console.error(`[用量同步] 同步禁用 new-api token ${newApiTokenId} 失败:`, e);
+  }
+}
 
 /**
  * new-api 用量同步 webhook
@@ -73,7 +84,31 @@ export async function POST(request: NextRequest) {
           where: { id: aiKey.id },
           data: { status: 'disabled' },
         });
-        console.log(`[用量同步] Key ${aiKey.id} 超出月度预算，已自动禁用`);
+        await disableKeyOnNewApi(aiKey.newApiTokenId);
+        console.log(`[用量同步] Key ${aiKey.id} 超出月度预算，已自动禁用（含new-api侧）`);
+        skipped++;
+        continue;
+      }
+
+      // 扣费前检查余额：如果余额已经不足以覆盖本次消费，禁用所有Key
+      const currentUser = await db.user.findUnique({
+        where: { id: aiKey.userId },
+        select: { balance: true },
+      });
+      if (!currentUser || currentUser.balance < cost) {
+        // 余额不足，禁用该用户所有活跃Key（CardVela侧 + new-api侧）
+        const activeKeys = await db.aIKey.findMany({
+          where: { userId: aiKey.userId, status: 'active' },
+          select: { id: true, newApiTokenId: true },
+        });
+        await db.aIKey.updateMany({
+          where: { userId: aiKey.userId, status: 'active' },
+          data: { status: 'disabled' },
+        });
+        for (const k of activeKeys) {
+          await disableKeyOnNewApi(k.newApiTokenId);
+        }
+        console.log(`[用量同步] 用户 ${aiKey.userId} 余额不足($${currentUser?.balance?.toFixed(4)}), 费用$${cost}, 已禁用所有Key（含new-api侧）`);
         skipped++;
         continue;
       }
@@ -109,17 +144,24 @@ export async function POST(request: NextRequest) {
       totalCostDeducted += cost;
       synced++;
 
-      // 检查余额是否不足，自动禁用 Key
+      // 扣费后再次检查余额，处理并发导致的余额透支
       const updatedUser = await db.user.findUnique({
         where: { id: aiKey.userId },
         select: { balance: true },
       });
       if (updatedUser && updatedUser.balance <= 0) {
+        const activeKeys = await db.aIKey.findMany({
+          where: { userId: aiKey.userId, status: 'active' },
+          select: { id: true, newApiTokenId: true },
+        });
         await db.aIKey.updateMany({
           where: { userId: aiKey.userId, status: 'active' },
           data: { status: 'disabled' },
         });
-        console.log(`[用量同步] 用户 ${aiKey.userId} 余额不足，已自动禁用所有 Key`);
+        for (const k of activeKeys) {
+          await disableKeyOnNewApi(k.newApiTokenId);
+        }
+        console.log(`[用量同步] 用户 ${aiKey.userId} 扣费后余额不足($${updatedUser.balance.toFixed(4)})，已禁用所有 Key（含new-api侧）`);
       }
     }
 
