@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
+const JWT_SECRET = process.env.JWT_SECRET!;
 
 interface JwtPayload {
   userId: string;
@@ -60,6 +60,6 @@ export async function verifyAuth(request: NextRequest) {
 export async function requireAdmin(request: NextRequest) {
   const user = await verifyAuth(request);
   if (!user) return NextResponse.json({ error: '未登录' }, { status: 401 });
-  if (user.role !== 'ADMIN') return NextResponse.json({ error: '无权限' }, { status: 403 });
+  if (user.role !== 'admin') return NextResponse.json({ error: '无权限' }, { status: 403 });
   return user;
 }

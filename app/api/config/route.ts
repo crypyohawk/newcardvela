@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     if (authHeader?.startsWith('Bearer ')) {
       try {
         const token = authHeader.substring(7);
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
         if (decoded?.userId) {
           const user = await prisma.user.findUnique({
             where: { id: decoded.userId },

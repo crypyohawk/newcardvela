@@ -1,8 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateKeyPair } from '../../../../src/lib/gsalary';
+import { verifyToken, getTokenFromRequest } from '../../../../src/lib/auth';
+import { db } from '../../../../src/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
+    // 管理员认证
+    const token = getTokenFromRequest(request);
+    if (!token) {
+      return NextResponse.json({ error: '未授权' }, { status: 401 });
+    }
+    const payload = verifyToken(token);
+    if (!payload) {
+      return NextResponse.json({ error: '无效的令牌' }, { status: 401 });
+    }
+    const user = await db.user.findUnique({ where: { id: payload.userId } });
+    if (!user || user.role !== 'admin') {
+      return NextResponse.json({ error: '无管理员权限' }, { status: 403 });
+    }
+
     const { publicKey, privateKey } = generateKeyPair();
     
     // 转换为 .env 格式（换行符替换为 \n）

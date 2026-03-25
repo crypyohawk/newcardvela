@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../../../src/lib/prisma';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET!;
 
 // 防暴力破解：记录每个 IP 的登录失败次数
 const loginAttempts = new Map<string, { count: number; resetTime: number }>();

@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../../../src/lib/prisma';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET!;
 
 // 简单的内存限流
 const registerAttempts = new Map<string, { count: number; lastAttempt: number }>();
@@ -55,6 +55,20 @@ export async function POST(request: NextRequest) {
 
     if (!cleanUsername || !cleanEmail || !password || !code) {
       return NextResponse.json({ error: '请填写所有必填字段' }, { status: 400 });
+    }
+
+    // 密码强度验证
+    if (password.length < 8) {
+      return NextResponse.json({ error: '密码长度至少8位' }, { status: 400 });
+    }
+    if (!/[A-Z]/.test(password)) {
+      return NextResponse.json({ error: '密码必须包含至少一个大写字母' }, { status: 400 });
+    }
+    if (!/[a-z]/.test(password)) {
+      return NextResponse.json({ error: '密码必须包含至少一个小写字母' }, { status: 400 });
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password)) {
+      return NextResponse.json({ error: '密码必须包含至少一个特殊字符' }, { status: 400 });
     }
 
     const emailLower = cleanEmail.toLowerCase();

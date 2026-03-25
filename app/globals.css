@@ -41,26 +41,3 @@ a {
   font-family: '思源黑体', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
-
-export interface Card {
-  id: string;
-  cardNumber: string;
-  cardName: string;
-  cardType: string;
-  balance: number;
-  expireDate: string;
-  cvv: string;
-  status: string;
-  userId: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface CreateCardRequest {
-  cardNumber: string;
-  cardName: string;
-  cardType: string;
-  balance: number;
-  expireDate: string;
-  cvv: string;
-}
