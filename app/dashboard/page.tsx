@@ -114,6 +114,7 @@ export default function DashboardPage() {
     billingAddress: string;
   }>>([]);
   const [agreedToNotices, setAgreedToNotices] = useState(false);
+  const [noticeExpanded, setNoticeExpanded] = useState(false);
 
   // 固定提现配置（不从后台读取）
     const [withdrawConfig, setWithdrawConfig] = useState<WithdrawConfig>({
@@ -702,10 +703,31 @@ export default function DashboardPage() {
         {/* 订阅公告 - 仅在卡片和开卡页面显示 */}
         {subscriptionGuide && (activeTab === 'cards' || activeTab === 'open') && (
           <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 mb-6">
-            <h3 className="font-bold text-blue-400 mb-3 flex items-center gap-2">
-              <span>📌</span> 订阅公告
+            <h3 
+              className="font-bold text-blue-400 flex items-center justify-between cursor-pointer select-none"
+              onClick={() => setNoticeExpanded(!noticeExpanded)}
+            >
+              <span className="flex items-center gap-2">
+                <span>📌</span> 订阅公告
+              </span>
+              <span className={`text-gray-400 text-sm transition-transform duration-200 ${noticeExpanded ? 'rotate-180' : ''}`}>
+                ▼
+              </span>
             </h3>
-            <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{subscriptionGuide}</div>
+            <div className={`relative overflow-hidden transition-all duration-300 ease-in-out ${noticeExpanded ? 'max-h-[2000px] mt-3' : 'max-h-[72px] mt-2'}`}>
+              <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{subscriptionGuide}</div>
+              {!noticeExpanded && (
+                <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-slate-800 to-transparent pointer-events-none" />
+              )}
+            </div>
+            {!noticeExpanded && (
+              <button 
+                onClick={() => setNoticeExpanded(true)}
+                className="text-xs text-blue-400 hover:text-blue-300 mt-1 transition"
+              >
+                展开全部 ↓
+              </button>
+            )}
           </div>
         )}
 
