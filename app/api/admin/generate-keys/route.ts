@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { generateKeyPair } from '../../../../src/lib/gsalary';
 import { verifyToken, getTokenFromRequest } from '../../../../src/lib/auth';
