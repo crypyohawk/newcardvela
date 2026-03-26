@@ -100,7 +100,10 @@ export async function POST(request: NextRequest) {
       newApiTokenId = result.id;
     } catch (e: any) {
       console.error('new-api 创建 token 失败:', e.message);
-      // new-api 未部署时不阻断，Key 仍可创建
+      return NextResponse.json({
+        error: 'AI Key 同步到网关失败，请检查 new-api 管理认证配置',
+        details: e.message,
+      }, { status: 502 });
     }
 
     // 存入数据库

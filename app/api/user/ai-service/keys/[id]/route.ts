@@ -71,6 +71,10 @@ export async function PUT(
           });
         } catch (e: any) {
           console.error('同步 new-api 状态失败:', e.message);
+          return NextResponse.json({
+            error: '同步网关状态失败，请检查 new-api 管理认证配置',
+            details: e.message,
+          }, { status: 502 });
         }
       }
     }
@@ -109,6 +113,10 @@ export async function DELETE(
         await deleteNewApiToken(aiKey.newApiTokenId);
       } catch (e: any) {
         console.error('删除 new-api token 失败:', e.message);
+        return NextResponse.json({
+          error: '删除网关 Key 失败，请检查 new-api 管理认证配置',
+          details: e.message,
+        }, { status: 502 });
       }
     }
 

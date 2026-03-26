@@ -5,11 +5,30 @@
 
 const NEW_API_BASE = process.env.NEW_API_BASE_URL || 'http://127.0.0.1:3001';
 const NEW_API_TOKEN = process.env.NEW_API_ADMIN_TOKEN || '';
+const NEW_API_COOKIE = process.env.NEW_API_ADMIN_COOKIE || '';
 
 interface NewApiResponse<T = any> {
   success: boolean;
   message: string;
   data?: T;
+}
+
+function getNewApiAuthHeaders(): Record<string, string> {
+  const cookie = NEW_API_COOKIE.trim();
+  const token = NEW_API_TOKEN.trim();
+
+  if (cookie) {
+    return { 'Cookie': cookie.startsWith('session=') ? cookie : `session=${cookie}` };
+  }
+
+  if (token) {
+    if (/^(session|token|jwt)=/i.test(token)) {
+      return { 'Cookie': token };
+    }
+    return { 'Authorization': `Bearer ${token}` };
+  }
+
+  throw new Error('未配置 new-api 管理认证，请设置 NEW_API_ADMIN_COOKIE 或 NEW_API_ADMIN_TOKEN');
 }
 
 async function newApiRequest(path: string, options: RequestInit = {}): Promise<any> {
@@ -18,7 +37,7 @@ async function newApiRequest(path: string, options: RequestInit = {}): Promise<a
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${NEW_API_TOKEN}`,
+      ...getNewApiAuthHeaders(),
       ...options.headers,
     },
   });
