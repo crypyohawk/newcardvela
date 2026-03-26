@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
 
     // 在 new-api 创建对应 token
     let newApiTokenId: number | null = null;
+    let actualApiKey = apiKey;
     try {
       // 配额设为用户余额的2倍或月度限额，取较小值，防止上游被过度消耗
       const maxQuota = monthlyLimit ? Math.min(monthlyLimit, user.balance * 2) : Math.min(user.balance * 2, 100);
@@ -98,6 +99,7 @@ export async function POST(request: NextRequest) {
         group: tier.channelGroup || 'default',
       });
       newApiTokenId = result.id;
+      actualApiKey = result.key || apiKey;
     } catch (e: any) {
       console.error('new-api 创建 token 失败:', e.message);
       return NextResponse.json({
@@ -112,7 +114,7 @@ export async function POST(request: NextRequest) {
         userId: payload.userId,
         tierId,
         keyName: keyName.trim(),
-        apiKey,
+        apiKey: actualApiKey,
         newApiTokenId,
         status: 'active',
         monthlyLimit: monthlyLimit || null,

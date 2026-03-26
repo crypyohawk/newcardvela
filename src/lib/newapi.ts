@@ -198,10 +198,10 @@ export function usdToQuota(usd: number): number {
 }
 
 /**
- * 生成 CardVela 格式的 API Key
+ * 生成与 new-api 兼容的 API Key。
  */
 export function generateApiKey(): string {
-  const prefix = process.env.AI_KEY_PREFIX || 'sk-cardvela';
+  const prefix = process.env.AI_KEY_PREFIX || 'sk';
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let key = '';
   const crypto = require('crypto');
