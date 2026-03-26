@@ -29,7 +29,7 @@ function getNewApiAuthHeaders(): Record<string, string> {
     if (/^(session|token|jwt)=/i.test(token)) {
       return { 'Cookie': token };
     }
-    return { 'Authorization': `Bearer ${token}` };
+    return { 'Authorization': `Bearer ${token}`, 'New-Api-User': NEW_API_USER };
   }
 
   throw new Error('未配置 new-api 管理认证，请设置 NEW_API_ADMIN_COOKIE 或 NEW_API_ADMIN_TOKEN');
