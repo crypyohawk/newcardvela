@@ -61,15 +61,16 @@ async function newApiRequest(path: string, options: RequestInit = {}): Promise<a
  */
 export async function createNewApiToken(params: {
   name: string;
-  remainQuota: number;   // 配额（new-api 单位：$额度 × 500000）
-  modelLimits?: string;  // 限制可用模型，逗号分隔
-  group?: string;        // 渠道分组，对应 Tier
+  key: string;           // sk-xxxx 格式
+  remainQuota: number;
+  modelLimits?: string;
+  group?: string;
 }): Promise<{ id: number; key: string }> {
-  // 不传 key，让 new-api 自己生成，避免 new-api 改写导致两端不一致
   const data = await newApiRequest('/api/token/', {
     method: 'POST',
     body: JSON.stringify({
       name: params.name,
+      key: params.key,
       remain_quota: params.remainQuota,
       unlimited_quota: params.remainQuota <= 0,
       model_limits_enabled: !!params.modelLimits,
@@ -78,8 +79,9 @@ export async function createNewApiToken(params: {
     }),
   });
 
-  console.log('[newapi] POST /api/token/ response:', JSON.stringify(data));
-  return { id: data.data?.id, key: data.data?.key || '' };
+  console.log('[newapi] createToken response:', JSON.stringify(data));
+  // new-api 不会通过 API 返回完整 key，直接用我们传入的 key
+  return { id: data.data?.id, key: params.key };
 }
 
 /**
@@ -213,7 +215,7 @@ export function usdToQuota(usd: number): number {
  * 生成与 new-api 兼容的 API Key。
  */
 export function generateApiKey(): string {
-  const prefix = process.env.AI_KEY_PREFIX || 'sk';
+  // 必须用 sk- 前缀，new-api 只认这个格式，不读环境变量避免配成 sk-cardvela 导致不兼容
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let key = '';
   const crypto = require('crypto');
@@ -221,5 +223,5 @@ export function generateApiKey(): string {
   for (let i = 0; i < 48; i++) {
     key += chars[bytes[i] % chars.length];
   }
-  return `${prefix}-${key}`;
+  return `sk-${key}`;
 }

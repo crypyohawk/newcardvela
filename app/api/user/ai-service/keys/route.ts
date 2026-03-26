@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
-import { createNewApiToken, getNewApiTokenDetail, deleteNewApiToken, usdToQuota } from '../../../../../src/lib/newapi';
+import { createNewApiToken, getNewApiTokenDetail, deleteNewApiToken, usdToQuota, generateApiKey } from '../../../../../src/lib/newapi';
 
 /** 生成混淆名称，防止上游识别客户身份 */
 function obfuscateKeyName(userId: string, keyName: string): string {
@@ -84,33 +84,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '每个用户最多创建 10 个 Key' }, { status: 400 });
     }
 
-    // 在 new-api 创建 token，让 new-api 自己生成 key
+    // 生成 sk-xxxx 格式的 key，传给 new-api 并直接保存
+    const apiKey = generateApiKey();
     let newApiTokenId: number | null = null;
-    let actualApiKey = '';
     try {
-      // 配额设为用户余额的2倍或月度限额，取较小值，防止上游被过度消耗
       const maxQuota = monthlyLimit ? Math.min(monthlyLimit, user.balance * 2) : Math.min(user.balance * 2, 100);
       const quotaAmount = usdToQuota(maxQuota);
       const result = await createNewApiToken({
         name: obfuscateKeyName(payload.userId, keyName.trim()),
+        key: apiKey,
         remainQuota: quotaAmount,
         group: tier.channelGroup || 'default',
       });
       newApiTokenId = result.id;
-      actualApiKey = result.key;  // 创建响应里的完整 key
-      console.log(`[key-create] POST result: id=${result.id}, key=${result.key}, keyLength=${result.key?.length}`);
-      // 如果创建响应没返回 key 或返回了脱敏 key（含*），通过详情接口回查
-      if ((!actualApiKey || actualApiKey.includes('*')) && newApiTokenId) {
-        const tokenDetail = await getNewApiTokenDetail(newApiTokenId);
-        console.log(`[key-create] GET detail: key=${tokenDetail.key}, keyLength=${tokenDetail.key?.length}`);
-        if (tokenDetail.key && !tokenDetail.key.includes('*')) {
-          actualApiKey = tokenDetail.key;
-        }
-      }
-      console.log(`[key-create] final actualApiKey=${actualApiKey}, contains*=${actualApiKey?.includes('*')}`);
-      if (!actualApiKey || actualApiKey.includes('*')) {
-        throw new Error('new-api 未返回完整的 API Key（返回了脱敏值），请在 new-api 管理面板手动复制 key');
-      }
+      console.log(`[key-create] success: id=${result.id}, key=${apiKey.slice(0,8)}...${apiKey.slice(-4)}`);
     } catch (e: any) {
       console.error('new-api 创建 token 失败:', e.message);
       return NextResponse.json({
@@ -125,7 +112,7 @@ export async function POST(request: NextRequest) {
         userId: payload.userId,
         tierId,
         keyName: keyName.trim(),
-        apiKey: actualApiKey,
+        apiKey: apiKey,
         newApiTokenId,
         status: 'active',
         monthlyLimit: monthlyLimit || null,

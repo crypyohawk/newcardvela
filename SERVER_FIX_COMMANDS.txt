@@ -1,30 +1,22 @@
-===== 服务器部署步骤 =====
+===== 服务器重新部署（上次git pull失败了）=====
 
-# 1. 拉代码
+# 1. 强制重置本地改动再拉代码
 cd ~/cardvela
+git checkout -- .
+git clean -fd .next/
 git pull
 
-# 2. 构建重启
+# 2. 确认代码已更新（两行都应该有输出）
+grep "force-dynamic" app/api/user/ai-service/keys/route.ts
+grep "key-create" app/api/user/ai-service/keys/route.ts
+
+# 3. 构建重启
 rm -rf .next
 npm install
 npm run build
 pm2 restart cardvela
 
-# 3. new-api 渠道分组查询结果:
-# 渠道名: poloapi
-# 渠道分组: default,Claude-官
-# 状态: 启用
-#
-# 结论: Claude-官 分组有权限限制导致 403
-# 解决: 管理后台把套餐的"渠道分组"改为 default
+# 4. 用户端删除所有旧 key，创建一个新 key
 
-# 4. 管理后台操作
-# 编辑套餐 -> 渠道分组 -> 改为 default -> 保存
-
-# 5. 用户端操作
-# 删除所有旧 key -> 创建新 key
-
-# 6. 用新 key 测试
-# Base URL: https://api.cardvela.com
-# Model: claude-opus-4-6
-# API Key: 用户端新创建的 key
+# 5. 查看日志
+pm2 logs cardvela --lines 30 --nostream
