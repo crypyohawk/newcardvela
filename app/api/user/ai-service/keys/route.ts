@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
         name: obfuscateKeyName(payload.userId, keyName.trim()),
         key: apiKey,
         remainQuota: quotaAmount,
-        group: tier.name,
+        group: tier.channelGroup || 'default',
       });
       newApiTokenId = result.id;
     } catch (e: any) {

@@ -1,0 +1,11 @@
+排查1 - 查看数据库里的tier名称:
+cd ~/cardvela && node -e "const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.aIServiceTier.findMany().then(t=>{console.log(JSON.stringify(t,null,2));p.\$disconnect()})"
+
+排查2 - 查看数据库里已创建的Key:
+cd ~/cardvela && node -e "const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.aIKey.findMany().then(k=>{console.log(JSON.stringify(k,null,2));p.\$disconnect()})"
+
+排查3 - 查看new-api渠道的分组:
+curl -s http://127.0.0.1:3001/api/channel/ -H "Authorization: Bearer f8LgDOYLDP4Nq7WRA2vhj1PE64YGhBsp" -H "New-Api-User: 1" | python3 -c "import sys,json;d=json.load(sys.stdin);[print(f'id={c[\"id\"]} name={c[\"name\"]} group={c[\"group\"]} status={c[\"status\"]}') for c in d['data']['items']]"
+
+排查4 - 查看new-api里token的分组:
+curl -s http://127.0.0.1:3001/api/token/ -H "Authorization: Bearer f8LgDOYLDP4Nq7WRA2vhj1PE64YGhBsp" -H "New-Api-User: 1" | python3 -c "import sys,json;d=json.load(sys.stdin);[print(f'id={t[\"id\"]} name={t[\"name\"]} group={t[\"group\"]} key={t[\"key\"]}') for t in d['data']['items']]"
