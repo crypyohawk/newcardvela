@@ -6,6 +6,7 @@
 const NEW_API_BASE = process.env.NEW_API_BASE_URL || 'http://127.0.0.1:3001';
 const NEW_API_TOKEN = process.env.NEW_API_ADMIN_TOKEN || '';
 const NEW_API_COOKIE = process.env.NEW_API_ADMIN_COOKIE || '';
+const NEW_API_USER = process.env.NEW_API_ADMIN_USER || '1';
 
 interface NewApiResponse<T = any> {
   success: boolean;
@@ -18,7 +19,10 @@ function getNewApiAuthHeaders(): Record<string, string> {
   const token = NEW_API_TOKEN.trim();
 
   if (cookie) {
-    return { 'Cookie': cookie.startsWith('session=') ? cookie : `session=${cookie}` };
+    return {
+      'Cookie': cookie.startsWith('session=') ? cookie : `session=${cookie}`,
+      'New-Api-User': NEW_API_USER,
+    };
   }
 
   if (token) {
