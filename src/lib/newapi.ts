@@ -83,6 +83,17 @@ export async function createNewApiToken(params: {
 }
 
 /**
+ * 查询 new-api token 详情。
+ */
+export async function getNewApiTokenDetail(tokenId: number): Promise<{ id: number; key: string }> {
+  const data = await newApiRequest(`/api/token/${tokenId}`);
+  return {
+    id: data.data?.id || tokenId,
+    key: data.data?.key || '',
+  };
+}
+
+/**
  * 更新 new-api token 状态
  */
 export async function updateNewApiToken(tokenId: number, params: {

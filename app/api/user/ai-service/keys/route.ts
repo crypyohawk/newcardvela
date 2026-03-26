@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
-import { generateApiKey, createNewApiToken, deleteNewApiToken, usdToQuota } from '../../../../../src/lib/newapi';
+import { generateApiKey, createNewApiToken, getNewApiTokenDetail, deleteNewApiToken, usdToQuota } from '../../../../../src/lib/newapi';
 
 /** 生成混淆名称，防止上游识别客户身份 */
 function obfuscateKeyName(userId: string, keyName: string): string {
@@ -100,6 +100,10 @@ export async function POST(request: NextRequest) {
       });
       newApiTokenId = result.id;
       actualApiKey = result.key || apiKey;
+      if (newApiTokenId) {
+        const tokenDetail = await getNewApiTokenDetail(newApiTokenId);
+        actualApiKey = tokenDetail.key || actualApiKey;
+      }
     } catch (e: any) {
       console.error('new-api 创建 token 失败:', e.message);
       return NextResponse.json({
