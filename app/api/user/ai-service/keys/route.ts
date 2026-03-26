@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
-import { generateApiKey, createNewApiToken, getNewApiTokenDetail, deleteNewApiToken, usdToQuota } from '../../../../../src/lib/newapi';
+import { createNewApiToken, getNewApiTokenDetail, deleteNewApiToken, usdToQuota } from '../../../../../src/lib/newapi';
 
 /** 生成混淆名称，防止上游识别客户身份 */
 function obfuscateKeyName(userId: string, keyName: string): string {
@@ -82,27 +82,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '每个用户最多创建 10 个 Key' }, { status: 400 });
     }
 
-    // 生成 API Key
-    const apiKey = generateApiKey();
-
-    // 在 new-api 创建对应 token
+    // 在 new-api 创建 token，让 new-api 自己生成 key
     let newApiTokenId: number | null = null;
-    let actualApiKey = apiKey;
+    let actualApiKey = '';
     try {
       // 配额设为用户余额的2倍或月度限额，取较小值，防止上游被过度消耗
       const maxQuota = monthlyLimit ? Math.min(monthlyLimit, user.balance * 2) : Math.min(user.balance * 2, 100);
       const quotaAmount = usdToQuota(maxQuota);
       const result = await createNewApiToken({
         name: obfuscateKeyName(payload.userId, keyName.trim()),
-        key: apiKey,
         remainQuota: quotaAmount,
         group: tier.channelGroup || 'default',
       });
       newApiTokenId = result.id;
-      actualApiKey = result.key || apiKey;
-      if (newApiTokenId) {
+      actualApiKey = result.key;  // 创建响应里的完整 key
+      // 如果创建响应没返回 key，通过详情接口回查
+      if (!actualApiKey && newApiTokenId) {
         const tokenDetail = await getNewApiTokenDetail(newApiTokenId);
-        actualApiKey = tokenDetail.key || actualApiKey;
+        actualApiKey = tokenDetail.key;
+      }
+      if (!actualApiKey) {
+        throw new Error('new-api 未返回有效的 API Key');
       }
     } catch (e: any) {
       console.error('new-api 创建 token 失败:', e.message);

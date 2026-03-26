@@ -61,16 +61,15 @@ async function newApiRequest(path: string, options: RequestInit = {}): Promise<a
  */
 export async function createNewApiToken(params: {
   name: string;
-  key: string;           // sk-cardvela-xxxx
   remainQuota: number;   // 配额（new-api 单位：$额度 × 500000）
   modelLimits?: string;  // 限制可用模型，逗号分隔
   group?: string;        // 渠道分组，对应 Tier
 }): Promise<{ id: number; key: string }> {
+  // 不传 key，让 new-api 自己生成，避免 new-api 改写导致两端不一致
   const data = await newApiRequest('/api/token/', {
     method: 'POST',
     body: JSON.stringify({
       name: params.name,
-      key: params.key,
       remain_quota: params.remainQuota,
       unlimited_quota: params.remainQuota <= 0,
       model_limits_enabled: !!params.modelLimits,
@@ -79,7 +78,7 @@ export async function createNewApiToken(params: {
     }),
   });
 
-  return { id: data.data?.id, key: data.data?.key || params.key };
+  return { id: data.data?.id, key: data.data?.key || '' };
 }
 
 /**
