@@ -1,36 +1,30 @@
-===== 服务器部署命令 (直接复制执行) =====
+===== 服务器部署步骤 =====
 
-# 步骤1 - 拉取最新代码
+# 1. 拉代码
 cd ~/cardvela
 git pull
 
-# 步骤2 - 构建并重启
+# 2. 构建重启
 rm -rf .next
 npm install
 npm run build
 pm2 restart cardvela
 
-# 步骤3 - 删除旧 key
-# 在用户后台把之前创建的旧 key 全部删掉
+# 3. new-api 渠道分组查询结果:
+# 渠道名: poloapi
+# 渠道分组: default,Claude-官
+# 状态: 启用
+#
+# 结论: Claude-官 分组有权限限制导致 403
+# 解决: 管理后台把套餐的"渠道分组"改为 default
 
-# 步骤4 - 创建新 key
-# 在用户后台重新创建一个全新的 key
+# 4. 管理后台操作
+# 编辑套餐 -> 渠道分组 -> 改为 default -> 保存
 
-# 步骤5 - 检查 new-api 里的 token
-curl -s "http://127.0.0.1:3001/api/token/?p=0&size=20" \
-  -H "Authorization: Bearer f8LgDOYLDP4Nq7WRA2vhj1PE64YGhBsp" \
-  -H "New-Api-User: 1" | python3 -c "
-import sys,json
-d=json.load(sys.stdin)
-data=d.get('data')
-items=(data.get('items',[]) if isinstance(data,dict) else data) or []
-for t in items[:10]:
-    print(f'name={t.get(\"name\")} key={t.get(\"key\")} group={t.get(\"group\")} id={t.get(\"id\")}')
-"
+# 5. 用户端操作
+# 删除所有旧 key -> 创建新 key
 
-# 步骤6 - 核对: 用户端显示的 key 和 new-api 里的 key 应该完全一致
-
-# 步骤7 - 测试
+# 6. 用新 key 测试
 # Base URL: https://api.cardvela.com
 # Model: claude-opus-4-6
-# API Key: 用户端刚创建的新 key
+# API Key: 用户端新创建的 key

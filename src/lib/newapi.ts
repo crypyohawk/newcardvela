@@ -78,6 +78,7 @@ export async function createNewApiToken(params: {
     }),
   });
 
+  console.log('[newapi] POST /api/token/ response:', JSON.stringify(data));
   return { id: data.data?.id, key: data.data?.key || '' };
 }
 
@@ -86,6 +87,7 @@ export async function createNewApiToken(params: {
  */
 export async function getNewApiTokenDetail(tokenId: number): Promise<{ id: number; key: string }> {
   const data = await newApiRequest(`/api/token/${tokenId}`);
+  console.log(`[newapi] GET /api/token/${tokenId} response:`, JSON.stringify(data));
   return {
     id: data.data?.id || tokenId,
     key: data.data?.key || '',

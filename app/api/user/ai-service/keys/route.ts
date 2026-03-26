@@ -98,13 +98,18 @@ export async function POST(request: NextRequest) {
       });
       newApiTokenId = result.id;
       actualApiKey = result.key;  // 创建响应里的完整 key
-      // 如果创建响应没返回 key，通过详情接口回查
-      if (!actualApiKey && newApiTokenId) {
+      console.log(`[key-create] POST result: id=${result.id}, key=${result.key}, keyLength=${result.key?.length}`);
+      // 如果创建响应没返回 key 或返回了脱敏 key（含*），通过详情接口回查
+      if ((!actualApiKey || actualApiKey.includes('*')) && newApiTokenId) {
         const tokenDetail = await getNewApiTokenDetail(newApiTokenId);
-        actualApiKey = tokenDetail.key;
+        console.log(`[key-create] GET detail: key=${tokenDetail.key}, keyLength=${tokenDetail.key?.length}`);
+        if (tokenDetail.key && !tokenDetail.key.includes('*')) {
+          actualApiKey = tokenDetail.key;
+        }
       }
-      if (!actualApiKey) {
-        throw new Error('new-api 未返回有效的 API Key');
+      console.log(`[key-create] final actualApiKey=${actualApiKey}, contains*=${actualApiKey?.includes('*')}`);
+      if (!actualApiKey || actualApiKey.includes('*')) {
+        throw new Error('new-api 未返回完整的 API Key（返回了脱敏值），请在 new-api 管理面板手动复制 key');
       }
     } catch (e: any) {
       console.error('new-api 创建 token 失败:', e.message);
