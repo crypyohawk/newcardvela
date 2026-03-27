@@ -169,8 +169,8 @@ async function handleCardTransaction(data: any) {
   // 1. 实时同步卡余额
   await syncCardBalance(userCard);
 
-  // 2. 处理退款交易（兼容多种状态值：AUTHORIZED/SETTLED/SUCCESS/COMPLETED）
-  const refundStatuses = ['AUTHORIZED', 'SETTLED', 'SUCCESS', 'COMPLETED'];
+  // 2. 处理退款交易（兼容多种状态值）
+  const refundStatuses = ['AUTHORIZED', 'SETTLED', 'SUCCESS', 'SUCCEED', 'COMPLETED'];
   if (biz_type === 'REFUND' && refundStatuses.includes(status?.toUpperCase())) {
     await handleRefundTransaction(userCard, data);
   }
