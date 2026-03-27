@@ -2040,7 +2040,7 @@ export default function DashboardPage() {
                 {/* 员工 Key 列表 */}
                 <div className="bg-slate-800 rounded-xl p-6">
                   <h2 className="text-xl font-bold mb-4">🏢 员工 Key 管理</h2>
-                  <p className="text-sm text-gray-400 mb-4">创建 Key 时用员工名称命名（如"员工A"、"设计部-张三"），分配给对应员工使用，所有费用从企业账户余额扣除。</p>
+                  <p className="text-sm text-gray-400 mb-4">创建 Key 时用员工名称命名（如：员工A、设计部-张三），分配给对应员工使用，所有费用从企业账户余额扣除。</p>
 
                   {aiKeys.length === 0 ? (
                     <div className="text-center py-8 text-gray-400">

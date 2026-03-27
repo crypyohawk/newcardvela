@@ -1,6 +1,17 @@
 ===== 服务器更新命令 =====
 
-cd /home/ubuntu/yeka
+cd /home/ubuntu/cardvela
 git pull origin main
 npm run build
 pm2 restart all
+
+===== 排查502错误 =====
+
+pm2 logs cardvela --lines 50
+
+===== 修复构建问题 =====
+
+cd /home/ubuntu/cardvela
+pm2 stop all
+npm run build
+pm2 start all
