@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../src/lib/db';
-import { updateNewApiToken } from '../../../../src/lib/newapi';
+import { updateNewApiToken, findNewApiTokenIdByName } from '../../../../src/lib/newapi';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,16 +59,30 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // 通过 token_name 精确匹配 AIKey
-      const aiKey = await db.aIKey.findFirst({
-        where: {
-          OR: [
-            { apiKey: token_name },
-            { keyName: token_name },
-          ],
-        },
+      // 通过 token_name 匹配 AIKey
+      // new-api 日志中的 token_name 是混淆名（如 proj-xxxx）
+      let aiKey: any = await db.aIKey.findFirst({
+        where: { newApiTokenName: token_name } as any,
         include: { tier: true },
       });
+
+      // 兼容旧数据：通过 new-api SQLite 查 token ID 反查
+      if (!aiKey) {
+        const tokenId = findNewApiTokenIdByName(token_name);
+        if (tokenId) {
+          aiKey = await db.aIKey.findFirst({
+            where: { newApiTokenId: tokenId },
+            include: { tier: true },
+          });
+          // 回填 newApiTokenName 避免下次再查 SQLite
+          if (aiKey) {
+            await db.aIKey.update({
+              where: { id: aiKey.id },
+              data: { newApiTokenName: token_name } as any,
+            });
+          }
+        }
+      }
 
       if (!aiKey) {
         skipped++;

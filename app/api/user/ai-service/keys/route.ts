@@ -87,11 +87,12 @@ export async function POST(request: NextRequest) {
     // 在 new-api 创建 token，获取 new-api 实际生成的 key
     let newApiTokenId: number | null = null;
     let apiKey: string = '';
+    const tokenName = obfuscateKeyName(payload.userId, keyName.trim());
     try {
       const maxQuota = monthlyLimit ? Math.min(monthlyLimit, user.balance * 2) : Math.min(user.balance * 2, 100);
       const quotaAmount = usdToQuota(maxQuota);
       const result = await createNewApiToken({
-        name: obfuscateKeyName(payload.userId, keyName.trim()),
+        name: tokenName,
         remainQuota: quotaAmount,
         group: tier.channelGroup || 'default',
       });
@@ -107,16 +108,18 @@ export async function POST(request: NextRequest) {
     }
 
     // 存入数据库
+    const createData: any = {
+      userId: payload.userId,
+      tierId,
+      keyName: keyName.trim(),
+      apiKey: apiKey,
+      newApiTokenId,
+      newApiTokenName: tokenName,
+      status: 'active',
+      monthlyLimit: monthlyLimit || null,
+    };
     const aiKey = await db.aIKey.create({
-      data: {
-        userId: payload.userId,
-        tierId,
-        keyName: keyName.trim(),
-        apiKey: apiKey,
-        newApiTokenId,
-        status: 'active',
-        monthlyLimit: monthlyLimit || null,
-      },
+      data: createData,
       include: { tier: { select: { name: true, displayName: true } } },
     });
 

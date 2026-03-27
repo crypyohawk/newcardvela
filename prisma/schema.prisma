@@ -381,6 +381,7 @@ model AIKey {
   apiKey          String   @unique              // proxy: sk-cardvela-xxxx / reseller: 上游原始Key
   hashedKey       String?                       // 哈希后的 Key（安全存储）
   newApiTokenId   Int?                          // new-api 侧的 token ID（proxy模式）
+  newApiTokenName String?                       // new-api 侧的 token 名称（混淆名，用于 webhook 匹配）
   
   status          String   @default("active")   // active | disabled | expired
   monthlyLimit    Float?                        // 每月用量上限 (USD)，null=不限
@@ -397,6 +398,7 @@ model AIKey {
   @@index([userId])
   @@index([apiKey])
   @@index([status])
+  @@index([newApiTokenName])
 }
 
 // API 调用日志

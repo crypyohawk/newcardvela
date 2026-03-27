@@ -1,19 +1,25 @@
-===== 部署修复代码 =====
+===== 部署修复：webhook 匹配 + 安全修复 =====
 
-# 本地已 push 到 GitHub 后，在服务器执行：
-
-# 步骤1：拉取最新代码
 cd /home/ubuntu/cardvela
 git pull origin main
 
-# 步骤2：安装依赖并构建
-npm install
+# 数据库迁移（添加 newApiTokenName 字段）
+npx prisma db push
+
+# 回填已有 key 的 newApiTokenName（通过 new-api SQLite 数据关联）
+python3 -c "
+import sqlite3, json
+conn = sqlite3.connect('/home/ubuntu/new-api/data/one-api.db')
+c = conn.cursor()
+c.execute('SELECT id, name FROM tokens')
+mapping = {r[0]: r[1] for r in c.fetchall()}
+conn.close()
+print(json.dumps(mapping))
+"
+
+# 构建并重启
 npm run build
-
-# 步骤3：重启服务
 pm2 restart cardvela
-
-# 步骤4：测试创建 key（查看日志确认 key 是否正确读取）
-pm2 logs cardvela --lines 20
+pm2 logs cardvela --lines 10
 
 # 把输出完整复制给我

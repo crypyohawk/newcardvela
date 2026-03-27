@@ -134,6 +134,33 @@ export async function createNewApiToken(params: {
 }
 
 /**
+ * 从 new-api SQLite 通过 token name 查找 token ID（用于 webhook 兼容旧数据）
+ */
+export function findNewApiTokenIdByName(name: string): number | null {
+  try {
+    const nameB64 = Buffer.from(name).toString('base64');
+    const pyScript = [
+      'import sqlite3, json, base64',
+      `name = base64.b64decode("${nameB64}").decode()`,
+      `conn = sqlite3.connect("${NEW_API_SQLITE_PATH}")`,
+      'c = conn.cursor()',
+      'c.execute("SELECT id FROM tokens WHERE name=? ORDER BY id DESC LIMIT 1", (name,))',
+      'r = c.fetchone()',
+      'conn.close()',
+      'print(r[0] if r else "")',
+    ].join('; ');
+    const result = execSync(`python3 -c '${pyScript}'`, {
+      timeout: 5000,
+      encoding: 'utf-8',
+    }).trim();
+    return result ? parseInt(result, 10) : null;
+  } catch (e: any) {
+    console.error('[newapi] SQLite 查找 token ID 失败:', e.message);
+    return null;
+  }
+}
+
+/**
  * 查询 new-api token 详情。
  */
 export async function getNewApiTokenDetail(tokenId: number): Promise<{ id: number; key: string }> {
