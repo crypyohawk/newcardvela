@@ -39,12 +39,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: '无日志需要同步' });
     }
 
+    // 信用额度配置只查一次（移出循环）
+    const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
+    const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
+
     let synced = 0;
     let skipped = 0;
+    let duplicated = 0;
     let totalCostDeducted = 0;
 
     for (const log of logs) {
-      const { token_name, model_name, prompt_tokens, completion_tokens } = log;
+      const { id: externalId, token_name, model_name, prompt_tokens, completion_tokens } = log;
 
       // 验证必要字段
       if (!token_name || !model_name) {
@@ -59,8 +64,18 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      // 幂等性检查：如果 externalLogId 已存在则跳过
+      if (externalId) {
+        const existing = await db.aIUsageLog.findUnique({
+          where: { externalLogId: Number(externalId) },
+        });
+        if (existing) {
+          duplicated++;
+          continue;
+        }
+      }
+
       // 通过 token_name 匹配 AIKey
-      // new-api 日志中的 token_name 是混淆名（如 proj-xxxx）
       let aiKey: any = await db.aIKey.findFirst({
         where: { newApiTokenName: token_name } as any,
         include: { tier: true },
@@ -110,20 +125,14 @@ export async function POST(request: NextRequest) {
       const cost = Math.round((inputCost + outputCost) * 10000) / 10000;
 
       // 检查月度预算（超限禁用Key，但不跳过计费——请求已完成必须收费）
-      let keyBudgetExceeded = false;
       if (aiKey.monthlyLimit != null && aiKey.monthUsed + cost > aiKey.monthlyLimit) {
         await db.aIKey.update({
           where: { id: aiKey.id },
           data: { status: 'disabled' },
         });
         await disableKeyOnNewApi(aiKey.newApiTokenId);
-        keyBudgetExceeded = true;
         console.log(`[用量同步] Key ${aiKey.id} 超出月度预算 $${aiKey.monthlyLimit}，已自动禁用（含new-api侧）。此次调用仍正常扣费。`);
       }
-
-      // 获取信用额度配置（默认允许透支 $1）
-      const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
-      const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
 
       // 查当前余额
       const currentUser = await db.user.findUnique({
@@ -136,7 +145,6 @@ export async function POST(request: NextRequest) {
       }
 
       // 如果余额已经低于信用下限（如 -$5），禁用所有 Key 并跳过
-      // 注意：请求已完成但用户欠太多了，不再记账避免无底洞
       if (currentUser.balance <= -creditLimit) {
         const activeKeys = await db.aIKey.findMany({
           where: { userId: aiKey.userId, status: 'active' },
@@ -156,12 +164,13 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // 无论余额是否足够，都要扣费（请求已经完成，上游已经扣了我们的钱）
+      // 事务性扣费（含幂等性 externalLogId）
       await db.$transaction([
         db.aIUsageLog.create({
           data: {
             userId: aiKey.userId,
             aiKeyId: aiKey.id,
+            externalLogId: externalId ? Number(externalId) : null,
             model: model_name,
             inputTokens,
             outputTokens,
@@ -212,6 +221,7 @@ export async function POST(request: NextRequest) {
       success: true,
       synced,
       skipped,
+      duplicated,
       totalCostDeducted: Math.round(totalCostDeducted * 10000) / 10000,
     });
   } catch (error: any) {

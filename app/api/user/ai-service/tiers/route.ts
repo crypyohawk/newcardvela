@@ -19,7 +19,6 @@ export async function GET(request: NextRequest) {
         features: true,
         sortOrder: true,
         modelGroup: true,
-        channelGroup: true,
         provider: { select: { id: true, name: true, displayName: true, type: true } },
       },
     });

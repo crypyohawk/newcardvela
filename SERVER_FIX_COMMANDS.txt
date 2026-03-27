@@ -2,6 +2,8 @@
 
 cd /home/ubuntu/cardvela
 git pull origin main
+npm install
+npx prisma db push
 npm run build
 pm2 restart all
 
@@ -15,3 +17,45 @@ cd /home/ubuntu/cardvela
 pm2 stop all
 npm run build
 pm2 start all
+
+===== AI板块安全修复 (2026-03-27) =====
+
+修改清单:
+  1. src/lib/newapi.ts  - execSync+Python 改为 better-sqlite3，消除命令注入
+  2. app/api/admin/ai-keys/route.ts - 管理员禁用/启用Key时同步到new-api网关
+  3. app/api/webhook/new-api/route.ts - 添加幂等性去重 + 信用额度查询移出循环
+  4. app/api/user/ai-service/tiers/route.ts - 公开接口移除内部channelGroup字段
+  5. app/api/user/ai-service/usage/route.ts - 总量统计改用数据库聚合，不再截断
+  6. prisma/schema.prisma - AIUsageLog新增externalLogId字段(幂等去重)
+
+部署步骤:
+
+  # 1. 登录服务器
+  ssh ubuntu@你的服务器IP
+
+  # 2. 进入项目目录
+  cd /home/ubuntu/cardvela
+
+  # 3. 拉取代码
+  git pull origin main
+
+  # 4. 安装依赖（新增了 better-sqlite3，需要编译环境）
+  # 如果服务器没有 build-essential，先装: sudo apt install build-essential python3 -y
+  npm install
+
+  # 5. 推送数据库变更（给 AIUsageLog 表加 externalLogId 字段）
+  npx prisma db push
+
+  # 6. 构建
+  npm run build
+
+  # 7. 重启
+  pm2 restart all
+
+  # 8. 验证
+  pm2 logs cardvela --lines 20
+
+注意事项:
+  - better-sqlite3 是 C++ 原生模块，服务器必须有 build-essential 和 python3
+  - prisma db push 会在 AIUsageLog 表添加 externalLogId 列（可为空，有唯一索引）
+  - 不会影响已有数据，旧日志的 externalLogId 为 NULL

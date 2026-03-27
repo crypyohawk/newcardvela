@@ -3,7 +3,7 @@
  * 负责与 new-api 管理 API 通信：创建/管理 token、查询用量、管理渠道
  */
 
-import { execSync } from 'child_process';
+import Database from 'better-sqlite3';
 
 const NEW_API_BASE = process.env.NEW_API_BASE_URL || 'http://127.0.0.1:3001';
 const NEW_API_TOKEN = process.env.NEW_API_ADMIN_TOKEN || '';
@@ -60,35 +60,31 @@ async function newApiRequest(path: string, options: RequestInit = {}): Promise<a
 // ==================== Token 管理 ====================
 
 /**
+ * 获取 SQLite 数据库连接（只读模式）
+ */
+function getSqliteDb(): Database.Database {
+  return new Database(NEW_API_SQLITE_PATH, { readonly: true, fileMustExist: true });
+}
+
+/**
  * 从 new-api 的 SQLite 数据库直接读取 token 信息。
  * new-api 的创建 API 不返回 key，只能从数据库读。
+ * 使用 better-sqlite3 参数化查询，避免 SQL 注入。
  */
 function readTokenFromSqlite(name: string): { id: number; key: string } | null {
+  let sqliteDb: Database.Database | null = null;
   try {
-    // 用 base64 传参避免引号注入
-    const nameB64 = Buffer.from(name).toString('base64');
-    const pyScript = [
-      'import sqlite3, json, base64, sys',
-      `name = base64.b64decode("${nameB64}").decode()`,
-      `conn = sqlite3.connect("${NEW_API_SQLITE_PATH}")`,
-      'c = conn.cursor()',
-      'c.execute("SELECT id, key FROM tokens WHERE name=? ORDER BY id DESC LIMIT 1", (name,))',
-      'r = c.fetchone()',
-      'conn.close()',
-      'print(json.dumps({"id": r[0], "key": r[1]} if r else None))',
-    ].join('; ');
-    const result = execSync(`python3 -c '${pyScript}'`, {
-      timeout: 5000,
-      encoding: 'utf-8',
-    }).trim();
-    const parsed = JSON.parse(result);
-    if (parsed && parsed.id && parsed.key) {
-      return { id: parsed.id, key: `sk-${parsed.key}` };
+    sqliteDb = getSqliteDb();
+    const row = sqliteDb.prepare('SELECT id, key FROM tokens WHERE name = ? ORDER BY id DESC LIMIT 1').get(name) as { id: number; key: string } | undefined;
+    if (row && row.id && row.key) {
+      return { id: row.id, key: `sk-${row.key}` };
     }
     return null;
   } catch (e: any) {
     console.error('[newapi] SQLite 读取失败:', e.message);
     return null;
+  } finally {
+    sqliteDb?.close();
   }
 }
 
@@ -137,26 +133,16 @@ export async function createNewApiToken(params: {
  * 从 new-api SQLite 通过 token name 查找 token ID（用于 webhook 兼容旧数据）
  */
 export function findNewApiTokenIdByName(name: string): number | null {
+  let sqliteDb: Database.Database | null = null;
   try {
-    const nameB64 = Buffer.from(name).toString('base64');
-    const pyScript = [
-      'import sqlite3, json, base64',
-      `name = base64.b64decode("${nameB64}").decode()`,
-      `conn = sqlite3.connect("${NEW_API_SQLITE_PATH}")`,
-      'c = conn.cursor()',
-      'c.execute("SELECT id FROM tokens WHERE name=? ORDER BY id DESC LIMIT 1", (name,))',
-      'r = c.fetchone()',
-      'conn.close()',
-      'print(r[0] if r else "")',
-    ].join('; ');
-    const result = execSync(`python3 -c '${pyScript}'`, {
-      timeout: 5000,
-      encoding: 'utf-8',
-    }).trim();
-    return result ? parseInt(result, 10) : null;
+    sqliteDb = getSqliteDb();
+    const row = sqliteDb.prepare('SELECT id FROM tokens WHERE name = ? ORDER BY id DESC LIMIT 1').get(name) as { id: number } | undefined;
+    return row ? row.id : null;
   } catch (e: any) {
     console.error('[newapi] SQLite 查找 token ID 失败:', e.message);
     return null;
+  } finally {
+    sqliteDb?.close();
   }
 }
 

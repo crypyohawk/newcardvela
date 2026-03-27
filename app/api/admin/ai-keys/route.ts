@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../src/lib/db';
 import { verifyAdmin } from '../../../../src/lib/adminAuth';
+import { updateNewApiToken } from '../../../../src/lib/newapi';
 
 // 获取所有用户的 Key（管理员）
 export async function GET(request: NextRequest) {
@@ -66,6 +67,26 @@ export async function PUT(request: NextRequest) {
 
     if (!keyId || !['active', 'disabled'].includes(status)) {
       return NextResponse.json({ error: '参数无效' }, { status: 400 });
+    }
+
+    // 查询 Key 获取 newApiTokenId 用于同步
+    const existingKey = await db.aIKey.findUnique({
+      where: { id: keyId },
+      select: { newApiTokenId: true },
+    });
+    if (!existingKey) {
+      return NextResponse.json({ error: 'Key 不存在' }, { status: 404 });
+    }
+
+    // 同步状态到 new-api 网关
+    if (existingKey.newApiTokenId) {
+      try {
+        await updateNewApiToken(existingKey.newApiTokenId, {
+          status: status === 'active' ? 1 : 2,
+        });
+      } catch (e: any) {
+        console.error('[admin] 同步 new-api 状态失败:', e.message);
+      }
     }
 
     const updated = await db.aIKey.update({

@@ -33,14 +33,34 @@ export async function GET(request: NextRequest) {
     };
     if (keyId) where.aiKeyId = keyId;
 
-    // 获取日志
-    const logs = await db.aIUsageLog.findMany({
+    // 总量聚合（数据库端完成，不受条数限制）
+    const totals = await db.aIUsageLog.aggregate({
       where,
-      orderBy: { createdAt: 'desc' },
-      take: 1000,
+      _sum: { cost: true, inputTokens: true, outputTokens: true },
+      _count: true,
     });
 
-    // 按天聚合
+    // 按模型聚合
+    const byModelRaw = await db.aIUsageLog.groupBy({
+      by: ['model'],
+      where,
+      _sum: { cost: true },
+      _count: true,
+    });
+    const byModel = byModelRaw.map(m => ({
+      model: m.model,
+      cost: Math.round((m._sum.cost || 0) * 100) / 100,
+      count: m._count,
+    }));
+
+    // 按天聚合：取最近日志做内存聚合（保留前端图表所需格式）
+    const logs = await db.aIUsageLog.findMany({
+      where,
+      select: { createdAt: true, cost: true, inputTokens: true, outputTokens: true },
+      orderBy: { createdAt: 'desc' },
+      take: 5000,
+    });
+
     const dailyMap = new Map<string, { cost: number; inputTokens: number; outputTokens: number; count: number }>();
     for (const log of logs) {
       const day = log.createdAt.toISOString().slice(0, 10);
@@ -56,26 +76,11 @@ export async function GET(request: NextRequest) {
       .map(([date, data]) => ({ date, ...data }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // 按模型聚合
-    const modelMap = new Map<string, { cost: number; count: number }>();
-    for (const log of logs) {
-      const existing = modelMap.get(log.model) || { cost: 0, count: 0 };
-      existing.cost += log.cost;
-      existing.count += 1;
-      modelMap.set(log.model, existing);
-    }
-    const byModel = Array.from(modelMap.entries())
-      .map(([model, data]) => ({ model, ...data }));
-
-    // 汇总
-    const totalCost = logs.reduce((sum, l) => sum + l.cost, 0);
-    const totalTokens = logs.reduce((sum, l) => sum + l.inputTokens + l.outputTokens, 0);
-
     return NextResponse.json({
       period,
-      totalCost: Math.round(totalCost * 100) / 100,
-      totalTokens,
-      totalRequests: logs.length,
+      totalCost: Math.round((totals._sum.cost || 0) * 100) / 100,
+      totalTokens: (totals._sum.inputTokens || 0) + (totals._sum.outputTokens || 0),
+      totalRequests: totals._count,
       daily,
       byModel,
     });

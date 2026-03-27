@@ -408,6 +408,7 @@ model AIUsageLog {
   aiKeyId         String
   aiKey           AIKey    @relation(fields: [aiKeyId], references: [id], onDelete: Cascade)
 
+  externalLogId   Int?     @unique              // new-api 侧的日志 ID，用于幂等性去重
   model           String                        // claude-sonnet-4-20250514 等
   inputTokens     Int
   outputTokens    Int
