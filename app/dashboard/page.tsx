@@ -1914,7 +1914,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-xl font-bold flex items-center gap-2">🏢 企业账户</h2>
-                    <p className="text-sm text-gray-400 mt-1">升级为企业账户，解锁子账户管理、用量分析等高级功能</p>
+                    <p className="text-sm text-gray-400 mt-1">升级为企业账户，解锁员工 Key 管理、用量分析等高级功能</p>
                   </div>
                   {(() => {
                     const latestApp = enterpriseApps[0];
@@ -1961,8 +1961,8 @@ export default function DashboardPage() {
                     <div className="grid grid-cols-3 gap-4 text-center">
                       <div className="bg-slate-700/50 rounded-lg p-3">
                         <div className="text-purple-400 text-lg mb-1">👥</div>
-                        <div className="text-sm font-medium">子账户管理</div>
-                        <div className="text-xs text-gray-400">团队成员独立 Key</div>
+                        <div className="text-sm font-medium">员工 Key 管理</div>
+                        <div className="text-xs text-gray-400">按员工分配独立 Key</div>
                       </div>
                       <div className="bg-slate-700/50 rounded-lg p-3">
                         <div className="text-purple-400 text-lg mb-1">📊</div>
@@ -1972,7 +1972,7 @@ export default function DashboardPage() {
                       <div className="bg-slate-700/50 rounded-lg p-3">
                         <div className="text-purple-400 text-lg mb-1">💰</div>
                         <div className="text-sm font-medium">预算管控</div>
-                        <div className="text-xs text-gray-400">子账户月度预算</div>
+                        <div className="text-xs text-gray-400">按 Key 设置月度限额</div>
                       </div>
                     </div>
                   );
