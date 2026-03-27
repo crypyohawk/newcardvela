@@ -17,6 +17,7 @@ function RegisterContent() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [codeSent, setCodeSent] = useState(false);
   const [codeLoading, setCodeLoading] = useState(false);
+  const [codeTip, setCodeTip] = useState('');
   
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -226,14 +227,33 @@ function RegisterContent() {
                   className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25 transition"
                 />
                 <button
-                  onClick={sendCode}
-                  disabled={codeLoading || codeSent || !canSendCode}
+                  onClick={() => {
+                    if (!canSendCode) {
+                      const tips: string[] = [];
+                      if (!email.trim()) tips.push('请填写邮箱');
+                      if (!pwRules.length) tips.push('密码需8-10位');
+                      if (!pwRules.upper) tips.push('密码需含大写字母');
+                      if (!pwRules.lower) tips.push('密码需含小写字母');
+                      if (!pwRules.special) tips.push('密码需含特殊字符');
+                      if (!confirmMatch) tips.push('两次密码不一致');
+                      setCodeTip(tips.join('；'));
+                      setTimeout(() => setCodeTip(''), 4000);
+                      return;
+                    }
+                    setCodeTip('');
+                    sendCode();
+                  }}
+                  disabled={codeLoading || codeSent}
                   className="bg-white/10 border border-white/10 text-white px-4 py-2.5 rounded-xl hover:bg-white/15 disabled:opacity-50 whitespace-nowrap text-sm font-medium transition"
-                  title={!canSendCode ? '请先正确填写邮箱、密码并确认密码一致' : ''}
                 >
                   {codeLoading ? '发送中...' : codeSent ? '已发送' : '获取验证码'}
                 </button>
               </div>
+              {codeTip && (
+                <div className="mt-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs leading-relaxed">
+                  ⚠ {codeTip}
+                </div>
+              )}
             </div>
 
             {/* Referral Code */}
