@@ -128,18 +128,7 @@ export default function DashboardPage() {
   const [creatingKey, setCreatingKey] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [aiConfigTab, setAiConfigTab] = useState<'cline' | 'cursor' | 'claudecode' | 'openai'>('cline');
-  // 企业管理
-  const [enterpriseSubAccounts, setEnterpriseSubAccounts] = useState<any[]>([]);
-  const [showAddSubAccount, setShowAddSubAccount] = useState(false);
-  const [subAccountEmail, setSubAccountEmail] = useState('');
-  const [subAccountBudget, setSubAccountBudget] = useState('');
-  // 子账户编辑
-  const [editingSubAccount, setEditingSubAccount] = useState<any>(null);
-  const [editBudgetForm, setEditBudgetForm] = useState({ dailyBudget: '', weeklyBudget: '', monthlyBudget: '' });
-  // 子账户用量详情
-  const [selectedSubAccount, setSelectedSubAccount] = useState<any>(null);
-  const [subAccountUsage, setSubAccountUsage] = useState<any>(null);
-  const [usageRange, setUsageRange] = useState('7d');
+
   // 企业用量
   const [enterpriseUsage, setEnterpriseUsage] = useState<any>(null);
   // 企业申请
@@ -273,10 +262,6 @@ export default function DashboardPage() {
       if (summaryRes.ok) { const d = await summaryRes.json(); setAiSummary(d); }
       if (usageRes.ok) { const d = await usageRes.json(); setAiUsage(d); }
 
-      // 企业子账户
-      const subRes = await fetch('/api/user/enterprise/sub-accounts', { headers });
-      if (subRes.ok) { const d = await subRes.json(); setEnterpriseSubAccounts(d.subAccounts || []); }
-
       // 企业用量（企业/管理员才拉）
       const entUsageRes = await fetch('/api/user/enterprise/usage', { headers });
       if (entUsageRes.ok) { const d = await entUsageRes.json(); setEnterpriseUsage(d); }
@@ -346,112 +331,6 @@ export default function DashboardPage() {
         body: JSON.stringify({ status: currentStatus === 'active' ? 'disabled' : 'active' }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-      fetchAIData();
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error.message });
-    }
-  };
-
-  const handleAddSubAccount = async () => {
-    if (!subAccountEmail.trim()) {
-      setMessage({ type: 'error', text: '请输入子账户邮箱' });
-      return;
-    }
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/user/enterprise/sub-accounts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({
-          email: subAccountEmail.trim(),
-          monthlyBudget: subAccountBudget ? parseFloat(subAccountBudget) : null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setMessage({ type: 'success', text: '子账户添加成功' });
-      setShowAddSubAccount(false);
-      setSubAccountEmail('');
-      setSubAccountBudget('');
-      fetchAIData();
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error.message });
-    }
-  };
-
-  // 编辑子账户限额
-  const handleEditSubAccount = async () => {
-    if (!editingSubAccount) return;
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/user/enterprise/sub-accounts/${editingSubAccount.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({
-          dailyBudget: editBudgetForm.dailyBudget || null,
-          weeklyBudget: editBudgetForm.weeklyBudget || null,
-          monthlyBudget: editBudgetForm.monthlyBudget || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setMessage({ type: 'success', text: '限额设置已更新' });
-      setEditingSubAccount(null);
-      fetchAIData();
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error.message });
-    }
-  };
-
-  // 切换子账户启用/停用
-  const handleToggleSubAccount = async (sa: any) => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/user/enterprise/sub-accounts/${sa.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ isActive: !sa.isActive }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setMessage({ type: 'success', text: sa.isActive ? '已停用' : '已启用' });
-      fetchAIData();
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error.message });
-    }
-  };
-
-  // 获取子账户用量详情
-  const fetchSubAccountUsage = async (saId: string, range: string = '7d') => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/user/enterprise/sub-accounts/${saId}/usage?range=${range}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setSubAccountUsage(data);
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error.message });
-    }
-  };
-
-  // 删除子账户
-  const handleRemoveSubAccount = async (saId: string) => {
-    if (!confirm('确定要移除该子账户吗？')) return;
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/user/enterprise/sub-accounts/${saId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setMessage({ type: 'success', text: '子账户已移除' });
-      if (selectedSubAccount?.id === saId) {
-        setSelectedSubAccount(null);
-        setSubAccountUsage(null);
-      }
       fetchAIData();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
@@ -2122,36 +2001,33 @@ export default function DashboardPage() {
                         <div className="text-2xl font-bold text-purple-400">{((enterpriseUsage.month?.tokens || 0) / 1000).toFixed(1)}K</div>
                       </div>
                       <div className="bg-slate-700/50 rounded-lg p-4 border border-slate-600/30">
-                        <div className="text-sm text-gray-400">子账户数</div>
-                        <div className="text-2xl font-bold text-cyan-400">{enterpriseUsage.subAccountCount || 0}</div>
+                        <div className="text-sm text-gray-400">员工 Key 数</div>
+                        <div className="text-2xl font-bold text-cyan-400">{enterpriseUsage.keyCount || 0}</div>
                       </div>
                     </div>
 
-                    {/* 按成员用量柱状图 */}
-                    {enterpriseUsage.perUser && enterpriseUsage.perUser.length > 0 && (
+                    {/* 按 Key（员工）用量柱状图 */}
+                    {enterpriseUsage.perKey && enterpriseUsage.perKey.length > 0 && (
                       <div>
-                        <h3 className="text-sm font-medium text-gray-400 mb-3">成员本月用量分布</h3>
+                        <h3 className="text-sm font-medium text-gray-400 mb-3">员工 Key 本月用量分布</h3>
                         <div className="space-y-2">
                           {(() => {
-                            const maxCost = Math.max(...enterpriseUsage.perUser.map((u: any) => u.monthCost || 0), 0.01);
-                            // 匹配子账户信息
-                            const getUserName = (uid: string) => {
-                              if (uid === user?.id) return `${user?.username || '我'}（主账户）`;
-                              const sa = enterpriseSubAccounts.find((s: any) => s.subUserId === uid);
-                              return sa?.user?.username || uid.slice(0, 8);
-                            };
-                            return enterpriseUsage.perUser.map((pu: any) => (
-                              <div key={pu.userId} className="flex items-center gap-3 text-sm">
-                                <span className="text-gray-300 w-32 truncate">{getUserName(pu.userId)}</span>
+                            const maxCost = Math.max(...enterpriseUsage.perKey.map((k: any) => k.monthCost || 0), 0.01);
+                            return enterpriseUsage.perKey.map((pk: any) => (
+                              <div key={pk.keyId} className="flex items-center gap-3 text-sm">
+                                <span className="text-gray-300 w-36 truncate" title={pk.keyName}>{pk.keyName}</span>
                                 <div className="flex-1 bg-slate-700 rounded-full h-6 overflow-hidden">
                                   <div
                                     className="h-full bg-gradient-to-r from-purple-500 to-cyan-400 rounded-full flex items-center px-2"
-                                    style={{ width: `${Math.max(((pu.monthCost || 0) / maxCost) * 100, 3)}%` }}
+                                    style={{ width: `${Math.max(((pk.monthCost || 0) / maxCost) * 100, 3)}%` }}
                                   >
-                                    {(pu.monthCost || 0) > 0 && <span className="text-xs text-white font-medium whitespace-nowrap">${(pu.monthCost || 0).toFixed(2)}</span>}
+                                    {(pk.monthCost || 0) > 0 && <span className="text-xs text-white font-medium whitespace-nowrap">${(pk.monthCost || 0).toFixed(2)}</span>}
                                   </div>
                                 </div>
-                                <span className="text-gray-400 w-16 text-right">{pu.requestCount || 0} 次</span>
+                                <span className="text-gray-400 w-16 text-right">{pk.requestCount || 0} 次</span>
+                                {pk.monthlyLimit && (
+                                  <span className="text-xs text-yellow-400 w-20 text-right">限${pk.monthlyLimit}</span>
+                                )}
                               </div>
                             ));
                           })()}
@@ -2161,290 +2037,50 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                {/* 子账户管理 */}
+                {/* 员工 Key 列表 */}
                 <div className="bg-slate-800 rounded-xl p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold">🏢 企业子账户管理</h2>
-                    <button
-                      onClick={() => setShowAddSubAccount(true)}
-                      className="bg-purple-600 px-4 py-2 rounded-lg hover:bg-purple-700 text-sm font-medium"
-                    >
-                      + 添加子账户
-                    </button>
-                  </div>
+                  <h2 className="text-xl font-bold mb-4">🏢 员工 Key 管理</h2>
+                  <p className="text-sm text-gray-400 mb-4">创建 Key 时用员工名称命名（如"员工A"、"设计部-张三"），分配给对应员工使用，所有费用从企业账户余额扣除。</p>
 
-                  {enterpriseSubAccounts.length === 0 ? (
+                  {aiKeys.length === 0 ? (
                     <div className="text-center py-8 text-gray-400">
-                      <p>暂无子账户</p>
-                      <p className="text-sm mt-1">添加团队成员的邮箱来创建子账户</p>
+                      <p>暂无 Key</p>
+                      <p className="text-sm mt-1">在上方创建 Key，用员工名称命名方便管理</p>
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-gray-400 border-b border-slate-700">
-                            <th className="text-left py-2 px-3">用户名</th>
-                            <th className="text-left py-2 px-3">邮箱</th>
+                            <th className="text-left py-2 px-3">Key 名称（员工）</th>
                             <th className="text-right py-2 px-3">本月消费</th>
-                            <th className="text-right py-2 px-3">天限额</th>
-                            <th className="text-right py-2 px-3">周限额</th>
                             <th className="text-right py-2 px-3">月限额</th>
+                            <th className="text-right py-2 px-3">累计消费</th>
                             <th className="text-center py-2 px-3">状态</th>
-                            <th className="text-center py-2 px-3">操作</th>
+                            <th className="text-left py-2 px-3">最后使用</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {enterpriseSubAccounts.map((sa: any) => {
-                            const userUsage = enterpriseUsage?.perUser?.find((p: any) => p.userId === sa.subUserId);
-                            const monthCost = userUsage?.monthCost || 0;
-                            return (
-                              <tr key={sa.id} className={`border-b border-slate-700/50 hover:bg-slate-700/30 cursor-pointer transition ${selectedSubAccount?.id === sa.id ? 'bg-slate-700/50' : ''}`}
-                                onClick={() => { setSelectedSubAccount(sa); setUsageRange('7d'); fetchSubAccountUsage(sa.id, '7d'); }}>
-                                <td className="py-3 px-3 font-medium">{sa.user?.username}</td>
-                                <td className="py-3 px-3 text-gray-400">{sa.user?.email}</td>
-                                <td className="py-3 px-3 text-right font-medium">${monthCost.toFixed(2)}</td>
-                                <td className="py-3 px-3 text-right text-sm">{sa.dailyBudget ? `$${sa.dailyBudget}` : <span className="text-gray-500">不限</span>}</td>
-                                <td className="py-3 px-3 text-right text-sm">{sa.weeklyBudget ? `$${sa.weeklyBudget}` : <span className="text-gray-500">不限</span>}</td>
-                                <td className="py-3 px-3 text-right text-sm">{sa.monthlyBudget ? `$${sa.monthlyBudget}` : <span className="text-gray-500">不限</span>}</td>
-                                <td className="py-3 px-3 text-center">
-                                  <span className={`text-xs px-2 py-0.5 rounded ${sa.isActive ? 'bg-green-600/20 text-green-400' : 'bg-red-600/20 text-red-400'}`}>
-                                    {sa.isActive ? '正常' : '已停用'}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-3 text-center" onClick={e => e.stopPropagation()}>
-                                  <div className="flex items-center justify-center gap-2">
-                                    <button onClick={() => {
-                                      setEditingSubAccount(sa);
-                                      setEditBudgetForm({
-                                        dailyBudget: sa.dailyBudget?.toString() || '',
-                                        weeklyBudget: sa.weeklyBudget?.toString() || '',
-                                        monthlyBudget: sa.monthlyBudget?.toString() || '',
-                                      });
-                                    }} className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-blue-600/20 text-blue-400 hover:bg-blue-600/40 text-xs font-medium transition">
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                                      限额
-                                    </button>
-                                    <button onClick={() => handleToggleSubAccount(sa)}
-                                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition ${sa.isActive ? 'bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/40' : 'bg-green-600/20 text-green-400 hover:bg-green-600/40'}`}>
-                                      {sa.isActive ? (
-                                        <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>停用</>
-                                      ) : (
-                                        <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>启用</>
-                                      )}
-                                    </button>
-                                    <button onClick={() => handleRemoveSubAccount(sa.id)}
-                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-red-600/20 text-red-400 hover:bg-red-600/40 text-xs font-medium transition">
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                      移除
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
+                          {aiKeys.map((key: any) => (
+                            <tr key={key.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition">
+                              <td className="py-3 px-3 font-medium">{key.keyName}</td>
+                              <td className="py-3 px-3 text-right text-blue-400">${(key.monthUsed || 0).toFixed(4)}</td>
+                              <td className="py-3 px-3 text-right">
+                                {key.monthlyLimit ? <span className="text-yellow-400">${key.monthlyLimit}</span> : <span className="text-gray-500">不限</span>}
+                              </td>
+                              <td className="py-3 px-3 text-right text-gray-300">${(key.totalUsed || 0).toFixed(2)}</td>
+                              <td className="py-3 px-3 text-center">
+                                <span className={`text-xs px-2 py-0.5 rounded ${key.status === 'active' ? 'bg-green-600/20 text-green-400' : 'bg-red-600/20 text-red-400'}`}>
+                                  {key.status === 'active' ? '正常' : '已停用'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 text-gray-400 text-sm">
+                                {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString('zh-CN') : '从未使用'}
+                              </td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
-                    </div>
-                  )}
-
-                  {/* 子账户用量详情面板 */}
-                  {selectedSubAccount && subAccountUsage && (
-                    <div className="mt-6 border-t border-slate-700 pt-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-bold">
-                          📊 {selectedSubAccount.user?.username} 的用量详情
-                        </h3>
-                        <div className="flex items-center gap-2">
-                          {['7d', '30d', '90d'].map(r => (
-                            <button key={r} onClick={() => { setUsageRange(r); fetchSubAccountUsage(selectedSubAccount.id, r); }}
-                              className={`px-3 py-1 rounded text-xs font-medium transition ${usageRange === r ? 'bg-blue-600 text-white' : 'bg-slate-700 text-gray-400 hover:text-white'}`}>
-                              {r === '7d' ? '近7天' : r === '30d' ? '近30天' : '近90天'}
-                            </button>
-                          ))}
-                          <button onClick={() => { setSelectedSubAccount(null); setSubAccountUsage(null); }}
-                            className="text-gray-400 hover:text-white ml-2">✕</button>
-                        </div>
-                      </div>
-
-                      {/* 用量概览卡片 */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                        <div className="bg-slate-700/50 rounded-lg p-3">
-                          <div className="text-xs text-gray-400">今日消费</div>
-                          <div className="text-lg font-bold text-orange-400">${subAccountUsage.today?.cost?.toFixed(4)}</div>
-                          <div className="text-xs text-gray-500">{subAccountUsage.today?.requests} 次请求</div>
-                          {selectedSubAccount.dailyBudget && (
-                            <div className="mt-1">
-                              <div className="flex justify-between text-xs"><span className="text-gray-500">限额</span><span>${selectedSubAccount.dailyBudget}</span></div>
-                              <div className="bg-slate-600 rounded-full h-1.5 mt-1 overflow-hidden">
-                                <div className={`h-full rounded-full ${(subAccountUsage.today?.cost / selectedSubAccount.dailyBudget) > 0.8 ? 'bg-red-500' : 'bg-green-500'}`}
-                                  style={{ width: `${Math.min((subAccountUsage.today?.cost / selectedSubAccount.dailyBudget) * 100, 100)}%` }}/>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        <div className="bg-slate-700/50 rounded-lg p-3">
-                          <div className="text-xs text-gray-400">本周消费</div>
-                          <div className="text-lg font-bold text-blue-400">${subAccountUsage.week?.cost?.toFixed(4)}</div>
-                          <div className="text-xs text-gray-500">{subAccountUsage.week?.requests} 次请求</div>
-                          {selectedSubAccount.weeklyBudget && (
-                            <div className="mt-1">
-                              <div className="flex justify-between text-xs"><span className="text-gray-500">限额</span><span>${selectedSubAccount.weeklyBudget}</span></div>
-                              <div className="bg-slate-600 rounded-full h-1.5 mt-1 overflow-hidden">
-                                <div className={`h-full rounded-full ${(subAccountUsage.week?.cost / selectedSubAccount.weeklyBudget) > 0.8 ? 'bg-red-500' : 'bg-blue-500'}`}
-                                  style={{ width: `${Math.min((subAccountUsage.week?.cost / selectedSubAccount.weeklyBudget) * 100, 100)}%` }}/>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        <div className="bg-slate-700/50 rounded-lg p-3">
-                          <div className="text-xs text-gray-400">本月消费</div>
-                          <div className="text-lg font-bold text-green-400">${subAccountUsage.month?.cost?.toFixed(4)}</div>
-                          <div className="text-xs text-gray-500">{subAccountUsage.month?.requests} 次请求</div>
-                          {selectedSubAccount.monthlyBudget && (
-                            <div className="mt-1">
-                              <div className="flex justify-between text-xs"><span className="text-gray-500">限额</span><span>${selectedSubAccount.monthlyBudget}</span></div>
-                              <div className="bg-slate-600 rounded-full h-1.5 mt-1 overflow-hidden">
-                                <div className={`h-full rounded-full ${(subAccountUsage.month?.cost / selectedSubAccount.monthlyBudget) > 0.8 ? 'bg-red-500' : 'bg-purple-500'}`}
-                                  style={{ width: `${Math.min((subAccountUsage.month?.cost / selectedSubAccount.monthlyBudget) * 100, 100)}%` }}/>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        <div className="bg-slate-700/50 rounded-lg p-3">
-                          <div className="text-xs text-gray-400">本月 Tokens</div>
-                          <div className="text-lg font-bold text-purple-400">{subAccountUsage.month?.tokens >= 1000000 ? `${(subAccountUsage.month.tokens / 1000000).toFixed(1)}M` : subAccountUsage.month?.tokens >= 1000 ? `${(subAccountUsage.month.tokens / 1000).toFixed(1)}K` : subAccountUsage.month?.tokens || 0}</div>
-                          <div className="text-xs text-gray-500">累计 ${subAccountUsage.total?.cost?.toFixed(2)}</div>
-                        </div>
-                      </div>
-
-                      {/* 模型消耗分布 */}
-                      {subAccountUsage.modelBreakdown?.length > 0 && (
-                        <div className="mb-6">
-                          <h4 className="text-sm font-semibold text-gray-300 mb-3">🔬 模型消耗分布</h4>
-                          <div className="space-y-2">
-                            {(() => {
-                              const totalCost = subAccountUsage.modelBreakdown.reduce((s: number, m: any) => s + m.cost, 0);
-                              const colors = ['bg-pink-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-cyan-500', 'bg-orange-500'];
-                              return subAccountUsage.modelBreakdown.map((m: any, i: number) => {
-                                const pct = totalCost > 0 ? (m.cost / totalCost) * 100 : 0;
-                                return (
-                                  <div key={m.model} className="flex items-center gap-3">
-                                    <div className={`w-3 h-3 rounded-sm ${colors[i % colors.length]}`}/>
-                                    <span className="text-sm w-48 truncate" title={m.model}>{m.model}</span>
-                                    <div className="flex-1 bg-slate-700 rounded-full h-4 overflow-hidden relative">
-                                      <div className={`h-full ${colors[i % colors.length]} rounded-full transition-all`} style={{ width: `${pct}%` }}/>
-                                      {pct > 15 && <span className="absolute inset-0 flex items-center justify-center text-xs text-white font-medium">${m.cost.toFixed(4)}</span>}
-                                    </div>
-                                    <span className="text-xs text-gray-400 w-12 text-right">{pct.toFixed(1)}%</span>
-                                    <span className="text-xs text-gray-500 w-16 text-right">{m.requests} 次</span>
-                                  </div>
-                                );
-                              });
-                            })()}
-                          </div>
-                          {/* 模型详细表 */}
-                          <div className="mt-3 bg-slate-700/30 rounded-lg overflow-hidden">
-                            <table className="w-full text-xs">
-                              <thead><tr className="text-gray-500 border-b border-slate-600">
-                                <th className="text-left py-2 px-3">模型</th>
-                                <th className="text-right py-2 px-3">费用</th>
-                                <th className="text-right py-2 px-3">请求数</th>
-                                <th className="text-right py-2 px-3">Input Tokens</th>
-                                <th className="text-right py-2 px-3">Output Tokens</th>
-                              </tr></thead>
-                              <tbody>
-                                {subAccountUsage.modelBreakdown.map((m: any) => (
-                                  <tr key={m.model} className="border-b border-slate-700/30">
-                                    <td className="py-2 px-3 font-medium">{m.model}</td>
-                                    <td className="py-2 px-3 text-right text-orange-400">${m.cost.toFixed(4)}</td>
-                                    <td className="py-2 px-3 text-right">{m.requests}</td>
-                                    <td className="py-2 px-3 text-right text-gray-400">{m.inputTokens.toLocaleString()}</td>
-                                    <td className="py-2 px-3 text-right text-gray-400">{m.outputTokens.toLocaleString()}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 消费趋势图 */}
-                      {subAccountUsage.trend?.length > 0 && (
-                        <div>
-                          <h4 className="text-sm font-semibold text-gray-300 mb-3">📈 消费趋势</h4>
-                          <div className="bg-slate-700/30 rounded-lg p-4">
-                            {(() => {
-                              const trend = subAccountUsage.trend;
-                              const maxCost = Math.max(...trend.map((t: any) => t.cost), 0.01);
-                              const chartHeight = 160;
-                              // 收集所有模型
-                              const allModels = new Set<string>();
-                              trend.forEach((t: any) => Object.keys(t.models || {}).forEach(m => allModels.add(m)));
-                              const modelList = Array.from(allModels);
-                              const barColors = ['#ec4899', '#3b82f6', '#22c55e', '#eab308', '#a855f7', '#06b6d4', '#f97316'];
-                              return (
-                                <div>
-                                  <div className="flex items-end gap-1" style={{ height: chartHeight }}>
-                                    {trend.map((t: any, i: number) => {
-                                      const barHeight = Math.max((t.cost / maxCost) * chartHeight, 2);
-                                      // 按模型分段
-                                      const segments = modelList.map((model, mi) => ({
-                                        model,
-                                        cost: t.models?.[model] || 0,
-                                        color: barColors[mi % barColors.length],
-                                      })).filter(s => s.cost > 0);
-                                      const segTotal = segments.reduce((s, seg) => s + seg.cost, 0);
-                                      return (
-                                        <div key={i} className="flex-1 flex flex-col items-center justify-end group relative">
-                                          <div className="absolute bottom-full mb-1 hidden group-hover:block bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs whitespace-nowrap z-10">
-                                            <div className="font-medium mb-1">{t.date}</div>
-                                            {segments.map(s => (
-                                              <div key={s.model} className="flex items-center gap-1">
-                                                <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: s.color }}/>
-                                                <span>{s.model}: ${s.cost.toFixed(4)}</span>
-                                              </div>
-                                            ))}
-                                            <div className="border-t border-slate-600 mt-1 pt-1">总计: ${t.cost.toFixed(4)} | {t.requests} 次</div>
-                                          </div>
-                                          <div className="w-full rounded-t overflow-hidden flex flex-col justify-end" style={{ height: barHeight }}>
-                                            {segments.map((s, si) => (
-                                              <div key={si} style={{ height: `${segTotal > 0 ? (s.cost / segTotal) * 100 : 0}%`, backgroundColor: s.color, minHeight: '1px' }}/>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                  {/* X轴日期 */}
-                                  <div className="flex gap-1 mt-1">
-                                    {trend.map((t: any, i: number) => (
-                                      <div key={i} className="flex-1 text-center text-[10px] text-gray-500 truncate">
-                                        {trend.length <= 14 ? t.date.slice(5) : (i % Math.ceil(trend.length / 10) === 0 ? t.date.slice(5) : '')}
-                                      </div>
-                                    ))}
-                                  </div>
-                                  {/* 图例 */}
-                                  <div className="flex flex-wrap gap-3 mt-3">
-                                    {modelList.map((model, mi) => (
-                                      <div key={model} className="flex items-center gap-1 text-xs text-gray-400">
-                                        <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: barColors[mi % barColors.length] }}/>
-                                        {model}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 无数据提示 */}
-                      {(!subAccountUsage.modelBreakdown || subAccountUsage.modelBreakdown.length === 0) && (
-                        <div className="text-center py-8 text-gray-500">
-                          <p>📭 该时间范围内暂无使用数据</p>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
@@ -2595,110 +2231,6 @@ export default function DashboardPage() {
                   setNewKeyTier('');
                   setNewKeyLimit('');
                 }}
-                className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded-lg font-medium transition"
-              >
-                取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 添加子账户弹窗 */}
-      {showAddSubAccount && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 p-6 rounded-xl w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4">👥 添加子账户</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">子账户邮箱 *</label>
-                <input
-                  type="email"
-                  value={subAccountEmail}
-                  onChange={(e) => setSubAccountEmail(e.target.value)}
-                  placeholder="请输入已注册用户的邮箱"
-                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">子账户必须是已注册的 CardVela 用户</p>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={handleAddSubAccount}
-                disabled={!subAccountEmail.trim()}
-                className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-2 rounded-lg font-medium transition"
-              >
-                添加子账户
-              </button>
-              <button
-                onClick={() => {
-                  setShowAddSubAccount(false);
-                  setSubAccountEmail('');
-                  setSubAccountBudget('');
-                }}
-                className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded-lg font-medium transition"
-              >
-                取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 编辑子账户限额弹窗 */}
-      {editingSubAccount && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 p-6 rounded-xl w-full max-w-md">
-            <h3 className="text-lg font-bold mb-1">⚙️ 设置限额</h3>
-            <p className="text-sm text-gray-400 mb-4">{editingSubAccount.user?.username} ({editingSubAccount.user?.email})</p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">日限额 (USD)</label>
-                <input
-                  type="number"
-                  value={editBudgetForm.dailyBudget}
-                  onChange={(e) => setEditBudgetForm(f => ({ ...f, dailyBudget: e.target.value }))}
-                  placeholder="留空不限"
-                  min="0"
-                  step="0.01"
-                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">周限额 (USD)</label>
-                <input
-                  type="number"
-                  value={editBudgetForm.weeklyBudget}
-                  onChange={(e) => setEditBudgetForm(f => ({ ...f, weeklyBudget: e.target.value }))}
-                  placeholder="留空不限"
-                  min="0"
-                  step="0.01"
-                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">月限额 (USD)</label>
-                <input
-                  type="number"
-                  value={editBudgetForm.monthlyBudget}
-                  onChange={(e) => setEditBudgetForm(f => ({ ...f, monthlyBudget: e.target.value }))}
-                  placeholder="留空不限"
-                  min="0"
-                  step="0.01"
-                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={handleEditSubAccount}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-medium transition"
-              >
-                保存设置
-              </button>
-              <button
-                onClick={() => setEditingSubAccount(null)}
                 className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded-lg font-medium transition"
               >
                 取消

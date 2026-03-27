@@ -78,10 +78,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '账户余额不足，请先充值' }, { status: 400 });
     }
 
-    // 限制每个用户最多 10 个 Key
+    // 限制 Key 数量：企业账户/管理员最多 50 个，普通用户最多 10 个
+    const isEnterprise = user.role === 'enterprise' || user.role === 'admin' || user.role === 'ADMIN';
+    const maxKeys = isEnterprise ? 50 : 10;
     const existingCount = await db.aIKey.count({ where: { userId: payload.userId } });
-    if (existingCount >= 10) {
-      return NextResponse.json({ error: '每个用户最多创建 10 个 Key' }, { status: 400 });
+    if (existingCount >= maxKeys) {
+      return NextResponse.json({ error: `最多创建 ${maxKeys} 个 Key` }, { status: 400 });
     }
 
     // 在 new-api 创建 token，获取 new-api 实际生成的 key

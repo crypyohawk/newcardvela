@@ -1,25 +1,6 @@
-===== 部署修复：webhook 匹配 + 安全修复 =====
+===== 服务器更新命令 =====
 
-cd /home/ubuntu/cardvela
+cd /home/ubuntu/yeka
 git pull origin main
-
-# 数据库迁移（添加 newApiTokenName 字段）
-npx prisma db push
-
-# 回填已有 key 的 newApiTokenName（通过 new-api SQLite 数据关联）
-python3 -c "
-import sqlite3, json
-conn = sqlite3.connect('/home/ubuntu/new-api/data/one-api.db')
-c = conn.cursor()
-c.execute('SELECT id, name FROM tokens')
-mapping = {r[0]: r[1] for r in c.fetchall()}
-conn.close()
-print(json.dumps(mapping))
-"
-
-# 构建并重启
 npm run build
-pm2 restart cardvela
-pm2 logs cardvela --lines 10
-
-# 把输出完整复制给我
+pm2 restart all

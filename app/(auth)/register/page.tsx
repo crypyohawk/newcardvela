@@ -32,7 +32,8 @@ function RegisterContent() {
   };
   const passwordValid = pwRules.length && pwRules.upper && pwRules.lower && pwRules.special;
   const confirmMatch = confirmPassword.length > 0 && password === confirmPassword;
-  const canSendCode = email.trim().length > 0 && passwordValid && confirmMatch;
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const canSendCode = emailValid && passwordValid && confirmMatch;
 
   // Auto fill referral code from URL
   useEffect(() => {
@@ -231,6 +232,7 @@ function RegisterContent() {
                     if (!canSendCode) {
                       const tips: string[] = [];
                       if (!email.trim()) tips.push('请填写邮箱');
+                      else if (!emailValid) tips.push('邮箱格式不正确');
                       if (!pwRules.length) tips.push('密码需8-10位');
                       if (!pwRules.upper) tips.push('密码需含大写字母');
                       if (!pwRules.lower) tips.push('密码需含小写字母');
