@@ -90,6 +90,8 @@ export default function AdminPage() {
   const [subscriptionGuideSaving, setSubscriptionGuideSaving] = useState(false);
   const [welfareGuide, setWelfareGuide] = useState('');
   const [welfareGuideSaving, setWelfareGuideSaving] = useState(false);
+  const [welfareQrcode, setWelfareQrcode] = useState('');
+  const [welfareQrcodeSaving, setWelfareQrcodeSaving] = useState(false);
   const [billingAddress, setBillingAddress] = useState({
     name: 'Michael Johnson',
     address: '1209 Orange Street',
@@ -648,6 +650,7 @@ export default function AdminPage() {
         if (data.support_email) setSupportEmail(data.support_email);
         if (data.configs?.subscription_guide) setSubscriptionGuide(data.configs.subscription_guide);
         if (data.configs?.welfare_guide) setWelfareGuide(data.configs.welfare_guide);
+        if (data.configs?.welfare_qrcode) setWelfareQrcode(data.configs.welfare_qrcode);
       }
     } catch (error) {
       console.error('获取系统配置失败:', error);
@@ -1164,6 +1167,56 @@ export default function AdminPage() {
                 >
                   {welfareGuideSaving ? '保存中...' : '保存指南'}
                 </button>
+              </div>
+
+              {/* 二维码配置 */}
+              <div className="mt-6 pt-6 border-t border-slate-700">
+                <h3 className="text-sm font-semibold text-gray-300 mb-2">📱 群二维码（显示在福利指南底部）</h3>
+                <p className="text-xs text-gray-500 mb-3">粘贴二维码图片链接，用户展开福利指南后可看到。留空则不显示。</p>
+                <div className="flex gap-3 items-start">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={welfareQrcode}
+                      onChange={(e) => setWelfareQrcode(e.target.value)}
+                      placeholder="https://example.com/qrcode.png"
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-sm"
+                    />
+                    <button
+                      onClick={async () => {
+                        setWelfareQrcodeSaving(true);
+                        try {
+                          const res = await fetch('/api/admin/config', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${getToken()}`,
+                            },
+                            body: JSON.stringify({ key: 'welfare_qrcode', value: welfareQrcode }),
+                          });
+                          if (res.ok) {
+                            setMessage({ type: 'success', text: '二维码已保存' });
+                          } else {
+                            setMessage({ type: 'error', text: '保存失败' });
+                          }
+                        } catch {
+                          setMessage({ type: 'error', text: '保存失败' });
+                        } finally {
+                          setWelfareQrcodeSaving(false);
+                        }
+                      }}
+                      disabled={welfareQrcodeSaving}
+                      className="mt-2 bg-green-600 px-4 py-1.5 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {welfareQrcodeSaving ? '保存中...' : '保存二维码'}
+                    </button>
+                  </div>
+                  {welfareQrcode && (
+                    <div className="flex-shrink-0">
+                      <img src={welfareQrcode} alt="预览" className="w-20 h-20 rounded-lg bg-white p-1 object-contain" />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

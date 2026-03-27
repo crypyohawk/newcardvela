@@ -101,6 +101,7 @@ export async function GET(request: NextRequest) {
       supportEmail: supportEmailConfig?.value || '',
       subscriptionGuide: configMap['subscription_guide'] || '',
       welfareGuide: configMap['welfare_guide'] || '',
+      welfareQrcode: configMap['welfare_qrcode'] || '',
       aiApiBaseUrl: configMap['ai_api_base_url'] || '',
     });
   } catch (error) {

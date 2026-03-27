@@ -162,6 +162,7 @@ export default function DashboardPage() {
   const [supportEmail, setSupportEmail] = useState('');
   const [subscriptionGuide, setSubscriptionGuide] = useState('');
   const [welfareGuide, setWelfareGuide] = useState('');
+  const [welfareQrcode, setWelfareQrcode] = useState('');
   const [welfareExpanded, setWelfareExpanded] = useState(false);
   const [platformApiUrl, setPlatformApiUrl] = useState('');
 
@@ -226,6 +227,9 @@ export default function DashboardPage() {
       // 获取福利指南
       if (configData.welfareGuide) {
         setWelfareGuide(configData.welfareGuide);
+      }
+      if (configData.welfareQrcode) {
+        setWelfareQrcode(configData.welfareQrcode);
       }
       
     } catch (error) {
@@ -1066,6 +1070,15 @@ export default function DashboardPage() {
                 </h3>
                 <div className={`relative overflow-hidden transition-all duration-300 ease-in-out ${welfareExpanded ? 'max-h-[2000px] mt-3' : 'max-h-[72px] mt-2'}`}>
                   <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{welfareGuide}</div>
+                  {welfareExpanded && welfareQrcode && (
+                    <div className="mt-3 flex items-center gap-3 pt-3 border-t border-slate-700">
+                      <img src={welfareQrcode} alt="扫码进群" className="w-20 h-20 rounded-lg bg-white p-1" />
+                      <div className="text-xs text-gray-400">
+                        <p className="text-green-400 font-semibold mb-1">📱 扫码进群</p>
+                        <p>扫描二维码加入咨询群</p>
+                      </div>
+                    </div>
+                  )}
                   {!welfareExpanded && (
                     <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-slate-800 to-transparent pointer-events-none" />
                   )}
