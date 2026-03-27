@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '../../../../src/lib/prisma';
 import { sendVerificationCodeForward } from '../../../../src/lib/email';
-import { getCardDetail, withdrawFromCard } from '../../../../src/lib/gsalary';
+import { getCardDetail } from '../../../../src/lib/gsalary';
 
 // 验证码类型
 const OTP_BUSINESS_TYPES = [
@@ -164,13 +164,14 @@ async function handleCardTransaction(data: any) {
     return;
   }
 
-  console.log(`[卡交易] 卡 ${userCard.id} 用户 ${userCard.user?.username} 交易: biz_type=${biz_type}, status=${status}, 商户=${merchant_name}`);
+  console.log(`[卡交易] 卡 ${userCard.id} 用户 ${userCard.user?.username} 交易: biz_type=${biz_type}, status=${status}, 商户=${merchant_name}, amount=${JSON.stringify(transaction_amount)}`);
 
   // 1. 实时同步卡余额
   await syncCardBalance(userCard);
 
-  // 2. 处理退款交易
-  if (biz_type === 'REFUND' && (status === 'AUTHORIZED' || status === 'SETTLED')) {
+  // 2. 处理退款交易（兼容多种状态值：AUTHORIZED/SETTLED/SUCCESS/COMPLETED）
+  const refundStatuses = ['AUTHORIZED', 'SETTLED', 'SUCCESS', 'COMPLETED'];
+  if (biz_type === 'REFUND' && refundStatuses.includes(status?.toUpperCase())) {
     await handleRefundTransaction(userCard, data);
   }
 }
@@ -197,9 +198,13 @@ async function syncCardBalance(userCard: any) {
 // ==================== 退款处理 ====================
 async function handleRefundTransaction(userCard: any, data: any) {
   const { transaction_amount, merchant_name } = data;
-  const refundAmount = transaction_amount?.amount || 0;
+  // 退款金额可能为负数（上游以负数表示），取绝对值
+  const rawAmount = transaction_amount?.amount || 0;
+  const refundAmount = Math.abs(rawAmount);
 
   if (refundAmount <= 0) return;
+
+  console.log(`[退款] 原始金额=${rawAmount}, 处理金额=${refundAmount}`);
 
   const user = userCard.user;
   const cardType = userCard.cardType as any;
@@ -229,78 +234,39 @@ async function handleRefundTransaction(userCard: any, data: any) {
     return;
   }
 
+  // 上游退款流程：退款金额先到卡上，然后上游自动扣回（扣除上游手续费后）回收到商户账户
+  // 用户卡上净变化=0，钱在商户里
+  // 创建待处理记录，等用户发邮件申请退款后，管理员在GSalary商户后台手动调额退回用户
+
+  // 计算预计手续费（供管理员参考）
+  let estimatedFee = 0;
   if (refundAmount < feeConfig.largeRefundThreshold) {
-    // ===== 小额退款：自动扣手续费 =====
-    const fee = feeConfig.smallRefundFee;
-    const netAmount = Math.max(refundAmount - fee, 0);
-
-    console.log(`[退款] 小额退款 $${refundAmount} < $${feeConfig.largeRefundThreshold}，自动扣手续费 $${fee}，实际到账 $${netAmount}`);
-
-    // 实际从卡余额中扣除手续费
-    let deductSuccess = false;
-    try {
-      if (userCard.gsalaryCardId && fee > 0) {
-        await withdrawFromCard(userCard.gsalaryCardId, fee);
-        deductSuccess = true;
-        console.log(`[退款] 已从卡 ${userCard.gsalaryCardId} 扣除手续费 $${fee}`);
-      }
-    } catch (deductError: any) {
-      console.error(`[退款] 从卡扣除手续费失败: ${deductError.message}`);
-    }
-
-    // 记录退款交易
-    await prisma.transaction.create({
-      data: {
-        userId: user!.id,
-        type: 'refund_hold',
-        amount: refundAmount,
-        status: 'completed',
-        txHash: JSON.stringify({
-          userCardId: userCard.id,
-          gsalaryCardId: userCard.gsalaryCardId,
-          merchantName: merchant_name,
-          autoProcessed: true,
-          fee: fee,
-          netAmount: netAmount,
-          feeDeducted: deductSuccess,
-        }),
-        paymentProof: JSON.stringify({
-          action: 'auto_deduct_fee',
-          originalAmount: refundAmount,
-          deductedFee: fee,
-          netAmount: netAmount,
-          feeDeducted: deductSuccess,
-          processedAt: new Date().toISOString(),
-        }),
-      },
-    });
-
-    console.log(`[退款] 小额退款自动处理完成, 手续费${deductSuccess ? '已扣除' : '扣除失败'}`);
+    estimatedFee = feeConfig.smallRefundFee;
   } else {
-    // ===== 大额退款：创建待审核记录，等待管理员处理 =====
     const percentFee = refundAmount * (feeConfig.refundFeePercent / 100);
-    const estimatedFee = Math.max(percentFee, feeConfig.refundFeeMin);
-
-    console.log(`[退款] 大额退款 $${refundAmount} >= $${feeConfig.largeRefundThreshold}，等待管理员审核，预计手续费 $${estimatedFee.toFixed(2)}`);
-
-    await prisma.transaction.create({
-      data: {
-        userId: user!.id,
-        type: 'refund_hold',
-        amount: refundAmount,
-        status: 'pending',
-        txHash: JSON.stringify({
-          userCardId: userCard.id,
-          gsalaryCardId: userCard.gsalaryCardId,
-          merchantName: merchant_name,
-          autoProcessed: false,
-          estimatedFee: estimatedFee,
-        }),
-      },
-    });
-
-    console.log(`[退款] 大额退款待审核记录已创建`);
+    estimatedFee = Math.max(percentFee, feeConfig.refundFeeMin);
   }
+  const estimatedRefund = Math.max(refundAmount - estimatedFee, 0);
+
+  console.log(`[退款] 退款 $${refundAmount}，预计手续费 $${estimatedFee.toFixed(2)}，预计退回 $${estimatedRefund.toFixed(2)}，等待用户申请`);
+
+  await prisma.transaction.create({
+    data: {
+      userId: user!.id,
+      type: 'refund_hold',
+      amount: refundAmount,
+      status: 'pending',
+      txHash: JSON.stringify({
+        userCardId: userCard.id,
+        gsalaryCardId: userCard.gsalaryCardId,
+        merchantName: merchant_name,
+        estimatedFee: estimatedFee,
+        estimatedRefund: estimatedRefund,
+      }),
+    },
+  });
+
+  console.log(`[退款] 退款待处理记录已创建，等待用户邮件申请`);
 }
 
 // ==================== 卡状态更新 ====================

@@ -815,7 +815,7 @@ export default function AdminPage() {
     }
   };
 
-  const handleRefundAction = async (refundId: string, action: 'deduct' | 'approve' | 'reject', deductFee?: number) => {
+  const handleRefundAction = async (refundId: string, action: 'confirm' | 'reject', deductFee?: number) => {
     try {
       const res = await fetch('/api/admin/refunds', {
         method: 'POST',
@@ -1874,7 +1874,7 @@ export default function AdminPage() {
           <div className="bg-slate-800 rounded-xl p-6">
             <h2 className="text-xl font-bold mb-6">退款管理</h2>
             <p className="text-gray-400 text-sm mb-4">
-              💡 说明：退款金额已由上游直接退到用户卡内，这里处理我们的手续费扣除
+              💡 说明：退款金额已由上游自动回收到商户账户，用户发邮件申请退款后，请在GSalary商户后台手动调额退回用户卡，然后在此确认退款记录
             </p>
             {refunds.length === 0 ? (
               <p className="text-gray-400 text-center py-8">暂无退款记录</p>
@@ -1885,9 +1885,9 @@ export default function AdminPage() {
                     <tr className="text-left text-gray-400 border-b border-slate-700">
                       <th className="pb-3">用户</th>
                       <th className="pb-3">退款金额</th>
-                      <th className="pb-3">应扣手续费</th>
-                      <th className="pb-3">用户实得</th>
-                      <th className="pb-3">卡片信息</th>
+                      <th className="pb-3">建议手续费</th>
+                      <th className="pb-3">建议退回</th>
+                      <th className="pb-3">商户/卡片</th>
                       <th className="pb-3">状态</th>
                       <th className="pb-3">时间</th>
                       <th className="pb-3">操作</th>
@@ -1916,9 +1916,12 @@ export default function AdminPage() {
                           ${refund.netAmount?.toFixed(2) || refund.amount}
                         </td>
                         <td className="py-4 text-xs">
+                          {refund.cardInfo?.merchantName && (
+                            <div className="text-gray-300 mb-1">{refund.cardInfo.merchantName}</div>
+                          )}
                           {refund.cardInfo?.gsalaryCardId ? (
                             <span className="text-gray-400">
-                              {refund.cardInfo.gsalaryCardId.slice(0, 8)}...
+                              卡ID: {refund.cardInfo.gsalaryCardId.slice(0, 8)}...
                             </span>
                           ) : (
                             <span className="text-yellow-400">无卡片信息</span>
@@ -1930,8 +1933,8 @@ export default function AdminPage() {
                             refund.status === 'pending' ? 'bg-yellow-600' :
                             'bg-red-600'
                           }`}>
-                            {refund.status === 'completed' ? '已处理' :
-                             refund.status === 'pending' ? '待处理' : '异常'}
+                            {refund.status === 'completed' ? '已退款' :
+                             refund.status === 'pending' ? '待退款' : '已拒绝'}
                           </span>
                         </td>
                         <td className="py-4 text-gray-400 text-sm">
@@ -1941,6 +1944,7 @@ export default function AdminPage() {
                           {refund.status === 'pending' && (
                             <div className="flex flex-col gap-2">
                               <div className="flex gap-2 items-center">
+                                <span className="text-xs text-gray-400">手续费:</span>
                                 <input
                                   type="number"
                                   step="0.01"
@@ -1952,28 +1956,21 @@ export default function AdminPage() {
                                     [refund.id]: e.target.value 
                                   }))}
                                 />
-                                <button
-                                  onClick={() => handleRefundAction(refund.id, 'deduct', parseFloat(deductFees[refund.id] || refund.calculatedFee || '0'))}
-                                  className="bg-orange-600 px-2 py-1 rounded text-xs hover:bg-orange-700"
-                                  title="从卡片扣除手续费"
-                                >
-                                  扣费
-                                </button>
                               </div>
                               <div className="flex gap-2">
                                 <button
-                                  onClick={() => handleRefundAction(refund.id, 'approve')}
-                                  className="bg-green-600 px-2 py-1 rounded text-xs hover:bg-green-700"
-                                  title="不扣费直接通过"
+                                  onClick={() => handleRefundAction(refund.id, 'confirm', parseFloat(deductFees[refund.id] || refund.calculatedFee || '0'))}
+                                  className="bg-blue-600 px-2 py-1 rounded text-xs hover:bg-blue-700"
+                                  title="已在商户后台手动退款，确认此记录"
                                 >
-                                  通过
+                                  确认已退
                                 </button>
                                 <button
                                   onClick={() => handleRefundAction(refund.id, 'reject')}
                                   className="bg-red-600 px-2 py-1 rounded text-xs hover:bg-red-700"
-                                  title="标记为异常"
+                                  title="拒绝退款"
                                 >
-                                  异常
+                                  拒绝
                                 </button>
                               </div>
                             </div>
@@ -1983,12 +1980,12 @@ export default function AdminPage() {
                               {(() => {
                                 try {
                                   const proof = JSON.parse(refund.paymentProof);
-                                  if (proof.deductedFee) {
-                                    return `已扣 $${proof.deductedFee}`;
+                                  if (proof.ourFee) {
+                                    return `手续费 $${proof.ourFee}，退回 $${proof.refundedToUser?.toFixed(2)}`;
                                   }
-                                  return '已处理';
+                                  return '已退款';
                                 } catch {
-                                  return '已处理';
+                                  return '已退款';
                                 }
                               })()}
                             </div>
