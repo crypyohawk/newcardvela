@@ -3,10 +3,13 @@
  * 负责与 new-api 管理 API 通信：创建/管理 token、查询用量、管理渠道
  */
 
+import { execSync } from 'child_process';
+
 const NEW_API_BASE = process.env.NEW_API_BASE_URL || 'http://127.0.0.1:3001';
 const NEW_API_TOKEN = process.env.NEW_API_ADMIN_TOKEN || '';
 const NEW_API_COOKIE = process.env.NEW_API_ADMIN_COOKIE || '';
 const NEW_API_USER = process.env.NEW_API_ADMIN_USER || '1';
+const NEW_API_SQLITE_PATH = process.env.NEW_API_SQLITE_PATH || '/home/ubuntu/new-api/data/one-api.db';
 
 interface NewApiResponse<T = any> {
   success: boolean;
@@ -57,11 +60,44 @@ async function newApiRequest(path: string, options: RequestInit = {}): Promise<a
 // ==================== Token 管理 ====================
 
 /**
- * 在 new-api 中创建 token（对应用户的 API Key）
+ * 从 new-api 的 SQLite 数据库直接读取 token 信息。
+ * new-api 的创建 API 不返回 key，只能从数据库读。
+ */
+function readTokenFromSqlite(name: string): { id: number; key: string } | null {
+  try {
+    // 用 base64 传参避免引号注入
+    const nameB64 = Buffer.from(name).toString('base64');
+    const pyScript = [
+      'import sqlite3, json, base64, sys',
+      `name = base64.b64decode("${nameB64}").decode()`,
+      `conn = sqlite3.connect("${NEW_API_SQLITE_PATH}")`,
+      'c = conn.cursor()',
+      'c.execute("SELECT id, key FROM tokens WHERE name=? ORDER BY id DESC LIMIT 1", (name,))',
+      'r = c.fetchone()',
+      'conn.close()',
+      'print(json.dumps({"id": r[0], "key": r[1]} if r else None))',
+    ].join('; ');
+    const result = execSync(`python3 -c '${pyScript}'`, {
+      timeout: 5000,
+      encoding: 'utf-8',
+    }).trim();
+    const parsed = JSON.parse(result);
+    if (parsed && parsed.id && parsed.key) {
+      return { id: parsed.id, key: `sk-${parsed.key}` };
+    }
+    return null;
+  } catch (e: any) {
+    console.error('[newapi] SQLite 读取失败:', e.message);
+    return null;
+  }
+}
+
+/**
+ * 在 new-api 中创建 token（对应用户的 API Key）。
+ * 流程：通过 API 创建 → 从 SQLite 读取实际生成的 key。
  */
 export async function createNewApiToken(params: {
   name: string;
-  key: string;           // sk-xxxx 格式
   remainQuota: number;
   modelLimits?: string;
   group?: string;
@@ -70,7 +106,6 @@ export async function createNewApiToken(params: {
     method: 'POST',
     body: JSON.stringify({
       name: params.name,
-      key: params.key,
       remain_quota: params.remainQuota,
       unlimited_quota: params.remainQuota <= 0,
       model_limits_enabled: !!params.modelLimits,
@@ -79,9 +114,23 @@ export async function createNewApiToken(params: {
     }),
   });
 
-  console.log('[newapi] createToken response:', JSON.stringify(data));
-  // new-api 不会通过 API 返回完整 key，直接用我们传入的 key
-  return { id: data.data?.id, key: params.key };
+  console.log('[newapi] createToken API response:', JSON.stringify(data));
+
+  if (!data.success) {
+    throw new Error(`new-api 创建 token 失败: ${data.message}`);
+  }
+
+  // API 不返回 key，从 SQLite 直接读取
+  // 短暂等待确保数据写入
+  await new Promise(r => setTimeout(r, 200));
+
+  const fromDb = readTokenFromSqlite(params.name);
+  if (!fromDb) {
+    throw new Error('new-api 创建 token 成功但无法从数据库读取 key，请检查 NEW_API_SQLITE_PATH 配置');
+  }
+
+  console.log(`[newapi] createToken result: id=${fromDb.id}, key=${fromDb.key.slice(0, 8)}...${fromDb.key.slice(-4)}`);
+  return fromDb;
 }
 
 /**

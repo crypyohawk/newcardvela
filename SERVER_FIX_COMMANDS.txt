@@ -1,22 +1,19 @@
-===== 服务器重新部署（上次git pull失败了）=====
+===== 部署修复代码 =====
 
-# 1. 强制重置本地改动再拉代码
-cd ~/cardvela
-git checkout -- .
-git clean -fd .next/
-git pull
+# 本地已 push 到 GitHub 后，在服务器执行：
 
-# 2. 确认代码已更新（两行都应该有输出）
-grep "force-dynamic" app/api/user/ai-service/keys/route.ts
-grep "key-create" app/api/user/ai-service/keys/route.ts
+# 步骤1：拉取最新代码
+cd /home/ubuntu/cardvela
+git pull origin main
 
-# 3. 构建重启
-rm -rf .next
+# 步骤2：安装依赖并构建
 npm install
 npm run build
+
+# 步骤3：重启服务
 pm2 restart cardvela
 
-# 4. 用户端删除所有旧 key，创建一个新 key
+# 步骤4：测试创建 key（查看日志确认 key 是否正确读取）
+pm2 logs cardvela --lines 20
 
-# 5. 查看日志
-pm2 logs cardvela --lines 30 --nostream
+# 把输出完整复制给我

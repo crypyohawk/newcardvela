@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
-import { createNewApiToken, getNewApiTokenDetail, deleteNewApiToken, usdToQuota, generateApiKey } from '../../../../../src/lib/newapi';
+import { createNewApiToken, getNewApiTokenDetail, deleteNewApiToken, usdToQuota } from '../../../../../src/lib/newapi';
 
 /** 生成混淆名称，防止上游识别客户身份 */
 function obfuscateKeyName(userId: string, keyName: string): string {
@@ -84,19 +84,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '每个用户最多创建 10 个 Key' }, { status: 400 });
     }
 
-    // 生成 sk-xxxx 格式的 key，传给 new-api 并直接保存
-    const apiKey = generateApiKey();
+    // 在 new-api 创建 token，获取 new-api 实际生成的 key
     let newApiTokenId: number | null = null;
+    let apiKey: string = '';
     try {
       const maxQuota = monthlyLimit ? Math.min(monthlyLimit, user.balance * 2) : Math.min(user.balance * 2, 100);
       const quotaAmount = usdToQuota(maxQuota);
       const result = await createNewApiToken({
         name: obfuscateKeyName(payload.userId, keyName.trim()),
-        key: apiKey,
         remainQuota: quotaAmount,
         group: tier.channelGroup || 'default',
       });
       newApiTokenId = result.id;
+      apiKey = result.key;  // 使用 new-api 实际返回的 key
       console.log(`[key-create] success: id=${result.id}, key=${apiKey.slice(0,8)}...${apiKey.slice(-4)}`);
     } catch (e: any) {
       console.error('new-api 创建 token 失败:', e.message);
