@@ -164,6 +164,7 @@ export default function DashboardPage() {
   const [welfareGuide, setWelfareGuide] = useState('');
   const [welfareQrcode, setWelfareQrcode] = useState('');
   const [welfareExpanded, setWelfareExpanded] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
   const [platformApiUrl, setPlatformApiUrl] = useState('');
 
   useEffect(() => {
@@ -1072,10 +1073,16 @@ export default function DashboardPage() {
                   <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{welfareGuide}</div>
                   {welfareExpanded && welfareQrcode && (
                     <div className="mt-3 flex items-center gap-3 pt-3 border-t border-slate-700">
-                      <img src={welfareQrcode} alt="扫码进群" className="w-20 h-20 rounded-lg bg-white p-1" />
+                      <img 
+                        src={welfareQrcode} 
+                        alt="扫码进群" 
+                        className="w-24 h-24 rounded-lg bg-white p-1.5 cursor-pointer hover:opacity-80 transition" 
+                        onClick={() => setShowQrModal(true)}
+                      />
                       <div className="text-xs text-gray-400">
                         <p className="text-green-400 font-semibold mb-1">📱 扫码进群</p>
                         <p>扫描二维码加入咨询群</p>
+                        <p className="text-gray-500 mt-1">点击图片放大查看</p>
                       </div>
                     </div>
                   )}
@@ -1239,6 +1246,29 @@ export default function DashboardPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* 二维码放大弹窗 */}
+        {showQrModal && welfareQrcode && (
+          <div 
+            className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 cursor-pointer"
+            onClick={() => setShowQrModal(false)}
+          >
+            <div className="relative" onClick={(e) => e.stopPropagation()}>
+              <img 
+                src={welfareQrcode} 
+                alt="扫码进群" 
+                className="w-72 h-72 sm:w-80 sm:h-80 rounded-2xl bg-white p-3 shadow-2xl" 
+              />
+              <button 
+                onClick={() => setShowQrModal(false)}
+                className="absolute -top-3 -right-3 w-8 h-8 bg-slate-700 hover:bg-slate-600 rounded-full flex items-center justify-center text-gray-300 text-lg transition"
+              >
+                ✕
+              </button>
+              <p className="text-center text-gray-300 text-sm mt-3">长按或扫描二维码加入咨询群</p>
+            </div>
           </div>
         )}
 
