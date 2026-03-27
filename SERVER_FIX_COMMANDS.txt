@@ -30,17 +30,17 @@ pm2 start all
 
 部署步骤:
 
-  # 1. 登录服务器
-  ssh ubuntu@你的服务器IP
+  # 1. 进入项目目录
+  cd ~/cardvela
 
-  # 2. 进入项目目录
-  cd /home/ubuntu/cardvela
-
-  # 3. 拉取代码
+  # 2. 丢弃本地 package-lock 冲突再拉代码
+  git checkout -- package-lock.json
   git pull origin main
 
-  # 4. 安装依赖（新增了 better-sqlite3，需要编译环境）
-  # 如果服务器没有 build-essential，先装: sudo apt install build-essential python3 -y
+  # 3. 安装编译环境（better-sqlite3 需要，只需装一次）
+  sudo apt install build-essential python3 -y
+
+  # 4. 安装依赖
   npm install
 
   # 5. 推送数据库变更（给 AIUsageLog 表加 externalLogId 字段）

@@ -3,8 +3,6 @@
  * 负责与 new-api 管理 API 通信：创建/管理 token、查询用量、管理渠道
  */
 
-import Database from 'better-sqlite3';
-
 const NEW_API_BASE = process.env.NEW_API_BASE_URL || 'http://127.0.0.1:3001';
 const NEW_API_TOKEN = process.env.NEW_API_ADMIN_TOKEN || '';
 const NEW_API_COOKIE = process.env.NEW_API_ADMIN_COOKIE || '';
@@ -62,8 +60,10 @@ async function newApiRequest(path: string, options: RequestInit = {}): Promise<a
 /**
  * 获取 SQLite 数据库连接（只读模式）
  */
-function getSqliteDb(): Database.Database {
-  return new Database(NEW_API_SQLITE_PATH, { readonly: true, fileMustExist: true });
+function getSqliteDb() {
+  // 动态加载避免 Next.js webpack 打包报错
+  const BetterSqlite3 = require('better-sqlite3');
+  return new BetterSqlite3(NEW_API_SQLITE_PATH, { readonly: true, fileMustExist: true });
 }
 
 /**
@@ -72,7 +72,7 @@ function getSqliteDb(): Database.Database {
  * 使用 better-sqlite3 参数化查询，避免 SQL 注入。
  */
 function readTokenFromSqlite(name: string): { id: number; key: string } | null {
-  let sqliteDb: Database.Database | null = null;
+  let sqliteDb: any = null;
   try {
     sqliteDb = getSqliteDb();
     const row = sqliteDb.prepare('SELECT id, key FROM tokens WHERE name = ? ORDER BY id DESC LIMIT 1').get(name) as { id: number; key: string } | undefined;
@@ -133,7 +133,7 @@ export async function createNewApiToken(params: {
  * 从 new-api SQLite 通过 token name 查找 token ID（用于 webhook 兼容旧数据）
  */
 export function findNewApiTokenIdByName(name: string): number | null {
-  let sqliteDb: Database.Database | null = null;
+  let sqliteDb: any = null;
   try {
     sqliteDb = getSqliteDb();
     const row = sqliteDb.prepare('SELECT id FROM tokens WHERE name = ? ORDER BY id DESC LIMIT 1').get(name) as { id: number } | undefined;
