@@ -1172,48 +1172,87 @@ export default function AdminPage() {
               {/* 二维码配置 */}
               <div className="mt-6 pt-6 border-t border-slate-700">
                 <h3 className="text-sm font-semibold text-gray-300 mb-2">📱 群二维码（显示在福利指南底部）</h3>
-                <p className="text-xs text-gray-500 mb-3">粘贴二维码图片链接，用户展开福利指南后可看到。留空则不显示。</p>
+                <p className="text-xs text-gray-500 mb-3">上传微信群二维码图片，用户展开福利指南后可看到。删除图片则不显示。</p>
                 <div className="flex gap-3 items-start">
                   <div className="flex-1">
                     <input
-                      type="text"
-                      value={welfareQrcode}
-                      onChange={(e) => setWelfareQrcode(e.target.value)}
-                      placeholder="https://example.com/qrcode.png"
-                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-sm"
-                    />
-                    <button
-                      onClick={async () => {
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 2 * 1024 * 1024) {
+                          setMessage({ type: 'error', text: '图片大小不能超过 2MB' });
+                          return;
+                        }
                         setWelfareQrcodeSaving(true);
                         try {
+                          const formData = new FormData();
+                          formData.append('file', file);
+                          const uploadRes = await fetch('/api/admin/upload', {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${getToken()}` },
+                            body: formData,
+                          });
+                          if (!uploadRes.ok) throw new Error('上传失败');
+                          const { url } = await uploadRes.json();
+                          // 保存到配置
                           const res = await fetch('/api/admin/config', {
                             method: 'POST',
                             headers: {
                               'Content-Type': 'application/json',
                               'Authorization': `Bearer ${getToken()}`,
                             },
-                            body: JSON.stringify({ key: 'welfare_qrcode', value: welfareQrcode }),
+                            body: JSON.stringify({ key: 'welfare_qrcode', value: url }),
                           });
                           if (res.ok) {
-                            setMessage({ type: 'success', text: '二维码已保存' });
+                            setWelfareQrcode(url);
+                            setMessage({ type: 'success', text: '二维码已上传保存' });
                           } else {
                             setMessage({ type: 'error', text: '保存失败' });
                           }
                         } catch {
-                          setMessage({ type: 'error', text: '保存失败' });
+                          setMessage({ type: 'error', text: '上传失败' });
                         } finally {
                           setWelfareQrcodeSaving(false);
+                          e.target.value = '';
                         }
                       }}
-                      disabled={welfareQrcodeSaving}
-                      className="mt-2 bg-green-600 px-4 py-1.5 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
-                    >
-                      {welfareQrcodeSaving ? '保存中...' : '保存二维码'}
-                    </button>
+                      className="text-sm text-gray-400 file:mr-3 file:py-1.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:bg-green-600 file:text-white file:cursor-pointer hover:file:bg-green-700"
+                    />
+                    {welfareQrcodeSaving && <p className="text-xs text-yellow-400 mt-2">上传中...</p>}
+                    {welfareQrcode && (
+                      <button
+                        onClick={async () => {
+                          setWelfareQrcodeSaving(true);
+                          try {
+                            const res = await fetch('/api/admin/config', {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${getToken()}`,
+                              },
+                              body: JSON.stringify({ key: 'welfare_qrcode', value: '' }),
+                            });
+                            if (res.ok) {
+                              setWelfareQrcode('');
+                              setMessage({ type: 'success', text: '二维码已删除' });
+                            }
+                          } catch {
+                            setMessage({ type: 'error', text: '删除失败' });
+                          } finally {
+                            setWelfareQrcodeSaving(false);
+                          }
+                        }}
+                        className="mt-2 text-xs text-red-400 hover:text-red-300"
+                      >
+                        删除当前二维码
+                      </button>
+                    )}
                   </div>
                   {welfareQrcode && (
                     <div className="flex-shrink-0">
-                      <img src={welfareQrcode} alt="预览" className="w-20 h-20 rounded-lg bg-white p-1 object-contain" />
+                      <img src={welfareQrcode} alt="预览" className="w-24 h-24 rounded-lg bg-white p-1 object-contain" />
                     </div>
                   )}
                 </div>
