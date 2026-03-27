@@ -1181,8 +1181,8 @@ export default function AdminPage() {
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        if (file.size > 2 * 1024 * 1024) {
-                          setMessage({ type: 'error', text: '图片大小不能超过 2MB' });
+                        if (file.size > 500 * 1024) {
+                          setMessage({ type: 'error', text: '图片大小不能超过 500KB' });
                           return;
                         }
                         setWelfareQrcodeSaving(true);

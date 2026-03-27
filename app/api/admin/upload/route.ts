@@ -3,9 +3,6 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '../../../../src/lib/prisma';
 import jwt from 'jsonwebtoken';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
-import crypto from 'crypto';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 
@@ -42,24 +39,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '仅支持 PNG/JPG/GIF/WEBP 图片' }, { status: 400 });
     }
 
-    // 限制文件大小 2MB
-    if (file.size > 2 * 1024 * 1024) {
-      return NextResponse.json({ error: '图片大小不能超过 2MB' }, { status: 400 });
+    // 限制文件大小 500KB
+    if (file.size > 500 * 1024) {
+      return NextResponse.json({ error: '图片大小不能超过 500KB' }, { status: 400 });
     }
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+    const base64 = buffer.toString('base64');
+    const mimeType = file.type === 'image/jpg' ? 'image/jpeg' : file.type;
+    const dataUrl = `data:${mimeType};base64,${base64}`;
 
-    // 生成安全文件名
-    const ext = path.extname(file.name) || '.png';
-    const safeName = crypto.randomBytes(16).toString('hex') + ext;
-
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-    await mkdir(uploadDir, { recursive: true });
-    await writeFile(path.join(uploadDir, safeName), buffer);
-
-    const url = `/uploads/${safeName}`;
-    return NextResponse.json({ url });
+    return NextResponse.json({ url: dataUrl });
   } catch (error) {
     console.error('上传失败:', error);
     return NextResponse.json({ error: '上传失败' }, { status: 500 });
