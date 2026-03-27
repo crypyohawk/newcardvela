@@ -161,6 +161,8 @@ export default function DashboardPage() {
   // 添加客服邮箱状态
   const [supportEmail, setSupportEmail] = useState('');
   const [subscriptionGuide, setSubscriptionGuide] = useState('');
+  const [welfareGuide, setWelfareGuide] = useState('');
+  const [welfareExpanded, setWelfareExpanded] = useState(false);
   const [platformApiUrl, setPlatformApiUrl] = useState('');
 
   useEffect(() => {
@@ -219,6 +221,11 @@ export default function DashboardPage() {
       // 获取订阅公告
       if (configData.subscriptionGuide) {
         setSubscriptionGuide(configData.subscriptionGuide);
+      }
+
+      // 获取福利指南
+      if (configData.welfareGuide) {
+        setWelfareGuide(configData.welfareGuide);
       }
       
     } catch (error) {
@@ -1010,33 +1017,68 @@ export default function DashboardPage() {
           </div>
         </button>
 
-        {/* 订阅公告 - 仅在卡片和开卡页面显示 */}
-        {subscriptionGuide && (activeTab === 'cards' || activeTab === 'open') && (
-          <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 mb-6">
-            <h3 
-              className="font-bold text-blue-400 flex items-center justify-between cursor-pointer select-none"
-              onClick={() => setNoticeExpanded(!noticeExpanded)}
-            >
-              <span className="flex items-center gap-2">
-                <span>📌</span> 订阅公告
-              </span>
-              <span className={`text-gray-400 text-sm transition-transform duration-200 ${noticeExpanded ? 'rotate-180' : ''}`}>
-                ▼
-              </span>
-            </h3>
-            <div className={`relative overflow-hidden transition-all duration-300 ease-in-out ${noticeExpanded ? 'max-h-[2000px] mt-3' : 'max-h-[72px] mt-2'}`}>
-              <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{subscriptionGuide}</div>
-              {!noticeExpanded && (
-                <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-slate-800 to-transparent pointer-events-none" />
-              )}
-            </div>
-            {!noticeExpanded && (
-              <button 
-                onClick={() => setNoticeExpanded(true)}
-                className="text-xs text-blue-400 hover:text-blue-300 mt-1 transition"
-              >
-                展开全部 ↓
-              </button>
+        {/* 订阅公告 & 福利指南 - 仅在卡片和开卡页面显示 */}
+        {(subscriptionGuide || welfareGuide) && (activeTab === 'cards' || activeTab === 'open') && (
+          <div className={`grid gap-4 mb-6 ${subscriptionGuide && welfareGuide ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
+            {/* 订阅公告 */}
+            {subscriptionGuide && (
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+                <h3 
+                  className="font-bold text-blue-400 flex items-center justify-between cursor-pointer select-none"
+                  onClick={() => setNoticeExpanded(!noticeExpanded)}
+                >
+                  <span className="flex items-center gap-2">
+                    <span>📌</span> 订阅公告
+                  </span>
+                  <span className={`text-gray-400 text-sm transition-transform duration-200 ${noticeExpanded ? 'rotate-180' : ''}`}>
+                    ▼
+                  </span>
+                </h3>
+                <div className={`relative overflow-hidden transition-all duration-300 ease-in-out ${noticeExpanded ? 'max-h-[2000px] mt-3' : 'max-h-[72px] mt-2'}`}>
+                  <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{subscriptionGuide}</div>
+                  {!noticeExpanded && (
+                    <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-slate-800 to-transparent pointer-events-none" />
+                  )}
+                </div>
+                {!noticeExpanded && (
+                  <button 
+                    onClick={() => setNoticeExpanded(true)}
+                    className="text-xs text-blue-400 hover:text-blue-300 mt-1 transition"
+                  >
+                    展开全部 ↓
+                  </button>
+                )}
+              </div>
+            )}
+            {/* 福利指南 */}
+            {welfareGuide && (
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+                <h3 
+                  className="font-bold text-green-400 flex items-center justify-between cursor-pointer select-none"
+                  onClick={() => setWelfareExpanded(!welfareExpanded)}
+                >
+                  <span className="flex items-center gap-2">
+                    <span>🎁</span> 福利指南
+                  </span>
+                  <span className={`text-gray-400 text-sm transition-transform duration-200 ${welfareExpanded ? 'rotate-180' : ''}`}>
+                    ▼
+                  </span>
+                </h3>
+                <div className={`relative overflow-hidden transition-all duration-300 ease-in-out ${welfareExpanded ? 'max-h-[2000px] mt-3' : 'max-h-[72px] mt-2'}`}>
+                  <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{welfareGuide}</div>
+                  {!welfareExpanded && (
+                    <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-slate-800 to-transparent pointer-events-none" />
+                  )}
+                </div>
+                {!welfareExpanded && (
+                  <button 
+                    onClick={() => setWelfareExpanded(true)}
+                    className="text-xs text-green-400 hover:text-green-300 mt-1 transition"
+                  >
+                    展开全部 ↓
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}

@@ -88,6 +88,8 @@ export default function AdminPage() {
   const [newNotice, setNewNotice] = useState('');
   const [subscriptionGuide, setSubscriptionGuide] = useState('');
   const [subscriptionGuideSaving, setSubscriptionGuideSaving] = useState(false);
+  const [welfareGuide, setWelfareGuide] = useState('');
+  const [welfareGuideSaving, setWelfareGuideSaving] = useState(false);
   const [billingAddress, setBillingAddress] = useState({
     name: 'Michael Johnson',
     address: '1209 Orange Street',
@@ -645,6 +647,7 @@ export default function AdminPage() {
         const data = await res.json();
         if (data.support_email) setSupportEmail(data.support_email);
         if (data.configs?.subscription_guide) setSubscriptionGuide(data.configs.subscription_guide);
+        if (data.configs?.welfare_guide) setWelfareGuide(data.configs.welfare_guide);
       }
     } catch (error) {
       console.error('获取系统配置失败:', error);
@@ -1117,6 +1120,49 @@ export default function AdminPage() {
                   className="bg-blue-600 px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 >
                   {subscriptionGuideSaving ? '保存中...' : '保存公告'}
+                </button>
+              </div>
+            </div>
+
+            {/* 福利指南配置 */}
+            <div className="bg-slate-800 rounded-xl p-6">
+              <h2 className="text-xl font-bold mb-4">🎁 福利指南</h2>
+              <p className="text-sm text-gray-400 mb-4">编辑福利指南内容，将显示在用户前台卡片页面顶部（与订阅公告并排显示）。可以填写优惠活动、充值福利、新手引导等。</p>
+              <textarea
+                value={welfareGuide}
+                onChange={(e) => setWelfareGuide(e.target.value)}
+                rows={8}
+                placeholder="例如：&#10;1. 新用户首次充值满$50送$5&#10;2. 邀请好友注册开卡，双方各得$3奖励&#10;3. 每月消费满$100返现2%..."
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-sm leading-relaxed resize-y min-h-[120px]"
+              />
+              <div className="flex justify-end mt-4">
+                <button
+                  onClick={async () => {
+                    setWelfareGuideSaving(true);
+                    try {
+                      const res = await fetch('/api/admin/config', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${getToken()}`,
+                        },
+                        body: JSON.stringify({ key: 'welfare_guide', value: welfareGuide }),
+                      });
+                      if (res.ok) {
+                        setMessage({ type: 'success', text: '福利指南已保存' });
+                      } else {
+                        setMessage({ type: 'error', text: '保存失败' });
+                      }
+                    } catch {
+                      setMessage({ type: 'error', text: '保存失败' });
+                    } finally {
+                      setWelfareGuideSaving(false);
+                    }
+                  }}
+                  disabled={welfareGuideSaving}
+                  className="bg-green-600 px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  {welfareGuideSaving ? '保存中...' : '保存指南'}
                 </button>
               </div>
             </div>
