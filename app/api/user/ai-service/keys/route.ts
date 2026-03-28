@@ -137,6 +137,19 @@ export async function POST(request: NextRequest) {
         apiKey: aiKey.apiKey,
         modelGroup: tier.modelGroup,
         providerType,
+        envSetup: {
+          claudeCode: {
+            ANTHROPIC_API_KEY: aiKey.apiKey,
+            ANTHROPIC_BASE_URL: platformBaseUrl,
+            CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: '1',
+            note: 'Claude Code 用户必须设置 CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1，否则会因 beta 头不兼容导致调用失败',
+          },
+          cline: {
+            apiKey: aiKey.apiKey,
+            baseUrl: platformBaseUrl,
+            note: 'Cline 插件在设置中填入 API Key 和 Base URL 即可',
+          },
+        },
       },
     });
   } catch (error: any) {

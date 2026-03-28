@@ -59,3 +59,18 @@ pm2 start all
   - better-sqlite3 是 C++ 原生模块，服务器必须有 build-essential 和 python3
   - prisma db push 会在 AIUsageLog 表添加 externalLogId 列（可为空，有唯一索引）
   - 不会影响已有数据，旧日志的 externalLogId 为 NULL
+
+===== 退款逻辑修复 (2026-03-28) =====
+
+修改清单:
+  1. app/api/webhook/gsalary/route.ts - 修复退款金额负数+状态匹配, 统一创建pending记录
+  2. app/api/admin/refunds/route.ts - 改为纯记录管理, 去掉API调用
+  3. app/admin/page.tsx - 退款管理UI更新
+
+部署步骤:
+
+  cd ~/cardvela
+  git pull origin main
+  npm run build
+  pm2 restart all
+  pm2 logs cardvela --lines 20
