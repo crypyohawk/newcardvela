@@ -98,7 +98,17 @@ async function request(endpoint: string, method: string = 'POST', data?: Record<
   console.log('[GSalary] Body:', body);
 
   const response = await fetch(url, options);
-  const result = await response.json();
+  
+  // 防护：确保响应是JSON格式
+  const contentType = response.headers.get('content-type') || '';
+  let result: any;
+  try {
+    const text = await response.text();
+    result = JSON.parse(text);
+  } catch (parseErr) {
+    console.error(`[GSalary] 响应解析失败 (HTTP ${response.status}), Content-Type: ${contentType}`);
+    throw new Error(`GSalary 返回非JSON响应 (HTTP ${response.status})，可能服务端异常`);
+  }
   console.log('[GSalary] Response:', JSON.stringify(result, null, 2));
 
   if (!response.ok) {
@@ -175,43 +185,91 @@ export async function getCardApplyResult(requestId: string) {
   return request(`/v1/card_applies/${requestId}`, 'GET');
 }
 
-// 便捷开卡方法（自动选择可用持卡人）
+// 便捷开卡方法（自动选择可用持卡人，失败时自动重试）
 export async function quickApplyCard(data: {
   product_code: string;
   init_balance: number;
   card_holder_id?: string;
 }) {
-  const requestId = `REQ_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  
-  // 自动获取可用持卡人
-  const holderId = data.card_holder_id || await getAvailableCardHolderId();
-  
-  if (!holderId) {
-    throw new Error('无可用持卡人，请联系管理员');
+  const maxRetries = 3;
+  const triedHolderIds: string[] = [];
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const requestId = `REQ_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    
+    // 自动获取可用持卡人（排除已失败的）
+    let holderId: string;
+    try {
+      holderId = data.card_holder_id || await getAvailableCardHolderId(triedHolderIds);
+    } catch (err: any) {
+      console.error(`[开卡] 第${attempt + 1}次获取持卡人失败:`, err.message);
+      lastError = err;
+      break; // 没有可用持卡人了，不再重试
+    }
+    
+    if (!holderId) {
+      lastError = new Error('无可用持卡人，请联系管理员');
+      break;
+    }
+
+    try {
+      const result = await applyCard({
+        request_id: requestId,
+        product_code: data.product_code,
+        currency: 'USD',
+        card_holder_id: holderId,
+        init_balance: data.init_balance,
+      });
+
+      // 开卡成功，更新持卡人的开卡计数
+      try {
+        await db.cardHolder.update({
+          where: { gsalaryHolderId: holderId },
+          data: { cardCount: { increment: 1 } },
+        });
+      } catch (e) {
+        console.warn('[持卡人] 更新开卡计数失败:', e);
+      }
+
+      // 在结果中附带使用的持卡人ID，供轮询时使用
+      result._usedHolderId = holderId;
+      return result;
+    } catch (err: any) {
+      const errMsg = String(err?.message || '');
+      console.error(`[开卡] 第${attempt + 1}次尝试失败 (持卡人 ${holderId}):`, errMsg);
+      lastError = err;
+      triedHolderIds.push(holderId);
+
+      // 如果是持卡人满了或被上游拒绝，标记该持卡人为满并重试
+      const isHolderFull = errMsg.includes('card limit') || 
+                           errMsg.includes('exceed') ||
+                           errMsg.includes('maximum') ||
+                           errMsg.includes('card_holder') ||
+                           errMsg.includes('cards limit') ||
+                           errMsg.includes('capacity');
+      
+      if (isHolderFull) {
+        console.log(`[持卡人] 标记 ${holderId} 为已满（上游拒绝）`);
+        try {
+          await db.cardHolder.update({
+            where: { gsalaryHolderId: holderId },
+            data: { cardCount: 20 }, // 强制标记为满
+          });
+        } catch (updateErr) {
+          console.warn('[持卡人] 标记已满失败:', updateErr);
+        }
+        // 如果指定了固定持卡人ID，不重试
+        if (data.card_holder_id) break;
+        continue; // 用下一个持卡人重试
+      }
+
+      // 其他错误不重试
+      break;
+    }
   }
 
-  const result = await applyCard({
-    request_id: requestId,
-    product_code: data.product_code,
-    currency: 'USD',
-    card_holder_id: holderId,
-    init_balance: data.init_balance,
-  });
-
-  // 开卡成功后，更新持卡人的开卡计数
-  try {
-    await db.cardHolder.update({
-      where: { gsalaryHolderId: holderId },
-      data: { cardCount: { increment: 1 } },
-    });
-  } catch (e) {
-    console.warn('[持卡人] 更新开卡计数失败:', e);
-  }
-
-  // 在结果中附带使用的持卡人ID，供轮询时使用
-  result._usedHolderId = holderId;
-
-  return result;
+  throw lastError || new Error('开卡失败：所有持卡人均不可用');
 }
 
 // ==================== 持卡人自动管理 ====================
@@ -234,13 +292,14 @@ const US_ADDRESSES = [
   { address: '1013 Centre Road', city: 'Wilmington', state: 'DE', postcode: '19805' },
 ];
 
-// 获取可用持卡人ID（<20张卡的）
-async function getAvailableCardHolderId(): Promise<string> {
+// 获取可用持卡人ID（<20张卡的），可排除指定ID
+async function getAvailableCardHolderId(excludeIds: string[] = []): Promise<string> {
   // 1. 先从数据库找一个还有余量的持卡人
   const available = await db.cardHolder.findFirst({
     where: {
       isActive: true,
       cardCount: { lt: 20 },
+      ...(excludeIds.length > 0 ? { gsalaryHolderId: { notIn: excludeIds } } : {}),
     },
     orderBy: { cardCount: 'asc' }, // 优先选卡少的
   });
