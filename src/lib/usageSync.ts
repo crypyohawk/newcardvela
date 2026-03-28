@@ -45,109 +45,168 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
   let totalCostDeducted = 0;
 
   for (const log of logs) {
-    const { id: externalId, token_name, model_name, prompt_tokens, completion_tokens } = log;
+    try {
+      const { id: externalId, token_name, model_name, prompt_tokens, completion_tokens } = log;
 
-    // 验证必要字段
-    if (!token_name || !model_name) {
-      skipped++;
-      continue;
-    }
+      // 验证必要字段
+      if (!token_name || !model_name) {
+        skipped++;
+        continue;
+      }
 
-    const inputTokens = Math.max(0, Number(prompt_tokens) || 0);
-    const outputTokens = Math.max(0, Number(completion_tokens) || 0);
-    if (inputTokens === 0 && outputTokens === 0) {
-      skipped++;
-      continue;
-    }
+      const inputTokens = Math.max(0, Number(prompt_tokens) || 0);
+      const outputTokens = Math.max(0, Number(completion_tokens) || 0);
+      if (inputTokens === 0 && outputTokens === 0) {
+        skipped++;
+        continue;
+      }
 
-    // 幂等性检查：如果 externalLogId 已存在则跳过
-    if (externalId) {
-      const existing = await db.aIUsageLog.findUnique({
-        where: { externalLogId: Number(externalId) },
+      // 通过 token_name 匹配 AIKey
+      let aiKey: any = await db.aIKey.findFirst({
+        where: { newApiTokenName: token_name },
+        include: { tier: true },
       });
-      if (existing) {
+
+      // 兼容旧数据：通过 new-api SQLite 查 token ID 反查
+      if (!aiKey) {
+        const tokenId = findNewApiTokenIdByName(token_name);
+        if (tokenId) {
+          aiKey = await db.aIKey.findFirst({
+            where: { newApiTokenId: tokenId },
+            include: { tier: true },
+          });
+          // 回填 newApiTokenName 避免下次再查 SQLite
+          if (aiKey) {
+            await db.aIKey.update({
+              where: { id: aiKey.id },
+              data: { newApiTokenName: token_name },
+            });
+          }
+        }
+      }
+
+      if (!aiKey) {
+        console.warn(`[用量同步] 未找到匹配的 AIKey, token_name=${token_name}, externalId=${externalId}`);
+        skipped++;
+        continue;
+      }
+
+      // 月度懒重置：如果 Key 的 lastSyncAt 在上个月，重置 monthUsed
+      const now = new Date();
+      if (aiKey.lastSyncAt) {
+        const lastMonth = aiKey.lastSyncAt.getMonth();
+        const lastYear = aiKey.lastSyncAt.getFullYear();
+        if (lastMonth !== now.getMonth() || lastYear !== now.getFullYear()) {
+          await db.aIKey.update({
+            where: { id: aiKey.id },
+            data: { monthUsed: 0 },
+          });
+          aiKey.monthUsed = 0;
+          console.log(`[用量同步] Key ${aiKey.id} 跨月重置 monthUsed`);
+        }
+      }
+
+      // 计算费用
+      const inputCost = (inputTokens / 1000000) * aiKey.tier.pricePerMillionInput;
+      const outputCost = (outputTokens / 1000000) * aiKey.tier.pricePerMillionOutput;
+      const cost = Math.round((inputCost + outputCost) * 10000) / 10000;
+
+      // 检查月度预算（超限禁用Key，但不跳过计费——请求已完成必须收费）
+      if (aiKey.monthlyLimit != null && aiKey.monthUsed + cost > aiKey.monthlyLimit) {
+        await db.aIKey.update({
+          where: { id: aiKey.id },
+          data: { status: 'disabled' },
+        });
+        await disableKeyOnNewApi(aiKey.newApiTokenId);
+        console.log(`[用量同步] Key ${aiKey.id} 超出月度预算 $${aiKey.monthlyLimit}，已自动禁用。此次调用仍正常扣费。`);
+      }
+
+      // 查当前余额
+      const currentUser = await db.user.findUnique({
+        where: { id: aiKey.userId },
+        select: { balance: true },
+      });
+      if (!currentUser) {
+        skipped++;
+        continue;
+      }
+
+      // 如果余额已经低于信用下限，禁用所有 Key 并跳过
+      if (currentUser.balance <= -creditLimit) {
+        const activeKeys = await db.aIKey.findMany({
+          where: { userId: aiKey.userId, status: 'active' },
+          select: { id: true, newApiTokenId: true },
+        });
+        if (activeKeys.length > 0) {
+          await db.aIKey.updateMany({
+            where: { userId: aiKey.userId, status: 'active' },
+            data: { status: 'disabled' },
+          });
+          for (const k of activeKeys) {
+            await disableKeyOnNewApi(k.newApiTokenId);
+          }
+          console.log(`[用量同步] 用户 ${aiKey.userId} 已超出信用额度(余额$${currentUser.balance.toFixed(4)}, 信用上限-$${creditLimit})，禁用所有Key`);
+        }
+        skipped++;
+        continue;
+      }
+
+      // 事务性扣费（幂等性检查在事务内，防止并发双重扣费）
+      const txResult = await db.$transaction(async (tx) => {
+        // 幂等性检查必须在事务内，确保 check-then-write 原子性
+        if (externalId) {
+          const existing = await tx.aIUsageLog.findUnique({
+            where: { externalLogId: Number(externalId) },
+          });
+          if (existing) return 'duplicate';
+        }
+
+        await tx.aIUsageLog.create({
+          data: {
+            userId: aiKey.userId,
+            aiKeyId: aiKey.id,
+            externalLogId: externalId ? Number(externalId) : null,
+            model: model_name,
+            inputTokens,
+            outputTokens,
+            cost,
+            channel: log.channel ? String(log.channel) : null,
+          },
+        });
+        await tx.aIKey.update({
+          where: { id: aiKey.id },
+          data: {
+            monthUsed: { increment: cost },
+            totalUsed: { increment: cost },
+            lastUsedAt: new Date(),
+            lastSyncAt: new Date(),
+          },
+        });
+        await tx.user.update({
+          where: { id: aiKey.userId },
+          data: { balance: { decrement: cost } },
+        });
+        return 'created';
+      });
+
+      if (txResult === 'duplicate') {
         duplicated++;
         continue;
       }
-    }
 
-    // 通过 token_name 匹配 AIKey
-    let aiKey: any = await db.aIKey.findFirst({
-      where: { newApiTokenName: token_name } as any,
-      include: { tier: true },
-    });
+      totalCostDeducted += cost;
+      synced++;
 
-    // 兼容旧数据：通过 new-api SQLite 查 token ID 反查
-    if (!aiKey) {
-      const tokenId = findNewApiTokenIdByName(token_name);
-      if (tokenId) {
-        aiKey = await db.aIKey.findFirst({
-          where: { newApiTokenId: tokenId },
-          include: { tier: true },
-        });
-        // 回填 newApiTokenName 避免下次再查 SQLite
-        if (aiKey) {
-          await db.aIKey.update({
-            where: { id: aiKey.id },
-            data: { newApiTokenName: token_name } as any,
-          });
-        }
-      }
-    }
-
-    if (!aiKey) {
-      console.warn(`[用量同步] 未找到匹配的 AIKey, token_name=${token_name}, externalId=${externalId}`);
-      skipped++;
-      continue;
-    }
-
-    // 月度懒重置：如果 Key 的 lastSyncAt 在上个月，重置 monthUsed
-    const now = new Date();
-    if (aiKey.lastSyncAt) {
-      const lastMonth = aiKey.lastSyncAt.getMonth();
-      const lastYear = aiKey.lastSyncAt.getFullYear();
-      if (lastMonth !== now.getMonth() || lastYear !== now.getFullYear()) {
-        await db.aIKey.update({
-          where: { id: aiKey.id },
-          data: { monthUsed: 0 },
-        });
-        aiKey.monthUsed = 0;
-        console.log(`[用量同步] Key ${aiKey.id} 跨月重置 monthUsed`);
-      }
-    }
-
-    // 计算费用
-    const inputCost = (inputTokens / 1000000) * aiKey.tier.pricePerMillionInput;
-    const outputCost = (outputTokens / 1000000) * aiKey.tier.pricePerMillionOutput;
-    const cost = Math.round((inputCost + outputCost) * 10000) / 10000;
-
-    // 检查月度预算（超限禁用Key，但不跳过计费——请求已完成必须收费）
-    if (aiKey.monthlyLimit != null && aiKey.monthUsed + cost > aiKey.monthlyLimit) {
-      await db.aIKey.update({
-        where: { id: aiKey.id },
-        data: { status: 'disabled' },
+      // 扣费后检查：余额低于信用下限则禁用所有 Key
+      const updatedUser = await db.user.findUnique({
+        where: { id: aiKey.userId },
+        select: { balance: true },
       });
-      await disableKeyOnNewApi(aiKey.newApiTokenId);
-      console.log(`[用量同步] Key ${aiKey.id} 超出月度预算 $${aiKey.monthlyLimit}，已自动禁用。此次调用仍正常扣费。`);
-    }
-
-    // 查当前余额
-    const currentUser = await db.user.findUnique({
-      where: { id: aiKey.userId },
-      select: { balance: true },
-    });
-    if (!currentUser) {
-      skipped++;
-      continue;
-    }
-
-    // 如果余额已经低于信用下限，禁用所有 Key 并跳过
-    if (currentUser.balance <= -creditLimit) {
-      const activeKeys = await db.aIKey.findMany({
-        where: { userId: aiKey.userId, status: 'active' },
-        select: { id: true, newApiTokenId: true },
-      });
-      if (activeKeys.length > 0) {
+      if (updatedUser && updatedUser.balance <= -creditLimit) {
+        const activeKeys = await db.aIKey.findMany({
+          where: { userId: aiKey.userId, status: 'active' },
+          select: { id: true, newApiTokenId: true },
+        });
         await db.aIKey.updateMany({
           where: { userId: aiKey.userId, status: 'active' },
           data: { status: 'disabled' },
@@ -155,62 +214,17 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
         for (const k of activeKeys) {
           await disableKeyOnNewApi(k.newApiTokenId);
         }
-        console.log(`[用量同步] 用户 ${aiKey.userId} 已超出信用额度(余额$${currentUser.balance.toFixed(4)}, 信用上限-$${creditLimit})，禁用所有Key`);
+        console.log(`[用量同步] 用户 ${aiKey.userId} 扣费后超出信用额度(余额$${updatedUser.balance.toFixed(4)})，已禁用所有 Key`);
       }
-      skipped++;
-      continue;
-    }
-
-    // 事务性扣费（含幂等性 externalLogId）
-    await db.$transaction([
-      db.aIUsageLog.create({
-        data: {
-          userId: aiKey.userId,
-          aiKeyId: aiKey.id,
-          externalLogId: externalId ? Number(externalId) : null,
-          model: model_name,
-          inputTokens,
-          outputTokens,
-          cost,
-          channel: log.channel ? String(log.channel) : null,
-        },
-      }),
-      db.aIKey.update({
-        where: { id: aiKey.id },
-        data: {
-          monthUsed: { increment: cost },
-          totalUsed: { increment: cost },
-          lastUsedAt: new Date(),
-          lastSyncAt: new Date(),
-        },
-      }),
-      db.user.update({
-        where: { id: aiKey.userId },
-        data: { balance: { decrement: cost } },
-      }),
-    ]);
-
-    totalCostDeducted += cost;
-    synced++;
-
-    // 扣费后检查：余额低于信用下限则禁用所有 Key
-    const updatedUser = await db.user.findUnique({
-      where: { id: aiKey.userId },
-      select: { balance: true },
-    });
-    if (updatedUser && updatedUser.balance <= -creditLimit) {
-      const activeKeys = await db.aIKey.findMany({
-        where: { userId: aiKey.userId, status: 'active' },
-        select: { id: true, newApiTokenId: true },
-      });
-      await db.aIKey.updateMany({
-        where: { userId: aiKey.userId, status: 'active' },
-        data: { status: 'disabled' },
-      });
-      for (const k of activeKeys) {
-        await disableKeyOnNewApi(k.newApiTokenId);
+    } catch (logError: any) {
+      // 单条日志处理失败不应中断整个批次
+      // P2002 = Prisma unique constraint violation（并发重复插入）
+      if (logError.code === 'P2002') {
+        duplicated++;
+      } else {
+        console.error(`[用量同步] 处理日志失败 (id=${log.id}, token=${log.token_name}):`, logError.message);
+        skipped++;
       }
-      console.log(`[用量同步] 用户 ${aiKey.userId} 扣费后超出信用额度(余额$${updatedUser.balance.toFixed(4)})，已禁用所有 Key`);
     }
   }
 

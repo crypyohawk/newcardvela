@@ -233,10 +233,12 @@ export async function getNewApiLogs(params: {
   query.set('page_size', String(params.pageSize || 100));
 
   const data = await newApiRequest(`/api/log/self/?${query.toString()}`);
-  return {
-    logs: data.data?.logs || [],
-    total: data.data?.total || 0,
-  };
+  // 兼容不同 new-api 版本的响应格式：
+  // 有的返回 { data: { logs: [...], total: N } }，有的返回 { data: [...] }
+  const rawData = data.data;
+  const logs = Array.isArray(rawData) ? rawData : (rawData?.logs || rawData?.data || []);
+  const total = Array.isArray(rawData) ? rawData.length : (rawData?.total || logs.length);
+  return { logs, total };
 }
 
 // ==================== 渠道管理 ====================
