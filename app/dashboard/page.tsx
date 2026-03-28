@@ -1846,6 +1846,7 @@ export default function DashboardPage() {
                           <p className="text-gray-500 mb-1"># Claude Code 环境变量</p>
                           <p>export ANTHROPIC_BASE_URL={urlForTool('claudecode')}</p>
                           <p>export ANTHROPIC_API_KEY={apiKey}</p>
+                          <p>export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1</p>
                         </div>
                       )}
                       {aiConfigTab === 'openai' && (
@@ -1870,7 +1871,7 @@ export default function DashboardPage() {
                     let text = '';
                     if (aiConfigTab === 'cline') text = `Base URL: ${clean}\nAPI Key: ${key}`;
                     else if (aiConfigTab === 'cursor') text = `Base URL: ${clean}/v1\nAPI Key: ${key}`;
-                    else if (aiConfigTab === 'claudecode') text = `export ANTHROPIC_BASE_URL=${clean}\nexport ANTHROPIC_API_KEY=${key}`;
+                    else if (aiConfigTab === 'claudecode') text = `export ANTHROPIC_BASE_URL=${clean}\nexport ANTHROPIC_API_KEY=${key}\nexport CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1`;
                     else text = `Base URL: ${clean}/v1\nAPI Key: ${key}`;
                     navigator.clipboard.writeText(text);
                     setMessage({ type: 'success', text: '配置信息已复制！' });
