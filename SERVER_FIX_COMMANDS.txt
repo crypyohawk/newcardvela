@@ -73,4 +73,231 @@ pm2 start all
   git pull origin main
   npm run build
   pm2 restart all
+ 
+===== 用量同步扣费修复 (2026-03-28) =====
+
+问题根因:
+  设计文档要求每5分钟从 new-api 拉取用量日志并扣费，但定时同步任务从未实现。
+  getNewApiLogs() 函数已写好却从未被调用，webhook 等着被推送但无推送者。
+  导致用户有使用记录但后台无扣费。
+
+修改清单:
+  1. src/lib/usageSync.ts - 新建：提取扣费核心逻辑为共享模块
+  2. app/api/cron/sync-usage/route.ts - 新建：cron端点，主动从new-api拉取日志并扣费
+  3. app/api/webhook/new-api/route.ts - 简化为调用共享模块
+  4. src/lib/newapi.ts - 修复getNewApiLogs()响应格式兼容（支持两种new-api版本）
+
+安全修复:
+  - 幂等性检查移入事务内，防止并发双重扣费
+  - 每条日志独立try-catch，单条失败不中断整批
+  - 移除Prisma查询的 as any 强制断言
+
+部署步骤:
+
+  # 1. 拉取并构建
+  cd ~/cardvela
+  git pull origin main
+  npm run build
+  pm2 restart all
+
+  # 2. 验证服务启动
   pm2 logs cardvela --lines 20
+
+  # 3. 手动测试一次同步（用 NEW_API_WEBHOOK_SECRET 的值替换）
+  curl "http://localhost:3000/api/cron/sync-usage?secret=你的SECRET"
+
+  # 4. 配置 crontab 每5分钟自动同步
+  crontab -e
+  # 添加这行（把 你的SECRET 替换为 NEW_API_WEBHOOK_SECRET 或 CRON_SECRET 的值）:
+  */5 * * * * curl -s "http://localhost:3000/api/cron/sync-usage?secret=你的SECRET" >> /home/ubuntu/cardvela/sync.log 2>&1
+
+注意事项:
+  - CRON_SECRET 默认复用 NEW_API_WEBHOOK_SECRET 环境变量，也可单独设置 CRON_SECRET
+  - 首次运行最多回溯24小时日志，之后每次从上次同步时间戳开始
+  - 同步时间戳存储在 SystemConfig 表 key=usage_sync_last_timestamp
+  - sync.log 会记录每次同步结果，可用于排查
+
+===== 查看/设置 SECRET 以及配置 crontab 详细步骤 =====
+
+  # 1. 查看服务器上是否已有 NEW_API_WEBHOOK_SECRET
+  grep NEW_API_WEBHOOK_SECRET ~/cardvela/.env
+
+  # 2. 如果上面输出为空，说明从未配置，需要生成一个并写入：
+  echo "NEW_API_WEBHOOK_SECRET=$(openssl rand -hex 32)" >> ~/cardvela/.env
+
+  # 3. 再次查看确认已写入，复制等号后面的值
+  grep NEW_API_WEBHOOK_SECRET ~/cardvela/.env
+
+  # 4. 写入后必须重启让环境变量生效
+  cd ~/cardvela && pm2 restart all
+
+  # 5. 手动测试一次同步（把下面的 你的SECRET 替换为第3步看到的值）
+  curl "http://localhost:3000/api/cron/sync-usage?secret=你的SECRET"
+  # 正常返回示例: {"success":true,"fetched":15,"synced":12,"skipped":2,"duplicated":1,"totalCostDeducted":0.0834}
+  # 如果返回 {"error":"未授权"} 说明 secret 不对，重新检查第3步
+  # 如果返回 {"message":"无新日志","synced":0} 说明连接正常只是暂无日志
+
+  # 6. 配置 crontab 每5分钟自动同步
+  crontab -e
+  # 编辑器打开后，在文件最末尾添加下面这一行（替换 你的SECRET）:
+  */5 * * * * curl -s "http://localhost:3000/api/cron/sync-usage?secret=你的SECRET" >> /home/ubuntu/cardvela/sync.log 2>&1
+  # 保存退出: nano编辑器按 Ctrl+X -> Y -> Enter
+
+  # 7. 验证 crontab 已注册
+  crontab -l
+
+  # 8. 等5分钟后查看同步日志
+  tail -20 ~/cardvela/sync.log
+
+===== 排查"未授权"问题 =====
+
+  原因: pm2 restart 不一定重新加载 .env 环境变量
+
+  # 1. 确认 .env 中的值
+  cat ~/cardvela/.env | grep NEW_API_WEBHOOK_SECRET
+
+  # 2. 删除旧进程，重新启动（确保加载最新环境变量）
+  cd ~/cardvela
+  pm2 delete all
+  pm2 start npm --name cardvela -- start -- -p 3000
+
+  # 3. 等待启动完成（约10秒），检查状态
+  pm2 status
+
+  # 4. 再次测试同步（替换为你的实际 secret 值）
+  curl "http://localhost:3000/api/cron/sync-usage?secret=e653976865d6e6f63b46c8a8704a049c4609b5cf7fc240f2475735c5f5978ccd"
+
+  # 如果仍然返回"未授权"，检查 Next.js 是否读取了 .env：
+  pm2 logs cardvela --lines 30
+
+  # 重要：如果 .env 是在 npm run build 之后才添加的变量，必须重新构建！
+  # Next.js 在构建时会把 process.env 的值编译进代码，后加的变量不会生效。
+  cd ~/cardvela
+  npm run build
+  pm2 restart all
+
+  # 然后再测试
+  curl "http://localhost:3000/api/cron/sync-usage?secret=e653976865d6e6f63b46c8a8704a049c4609b5cf7fc240f2475735c5f5978ccd"
+
+===== 排查代码是否同步到服务器 =====
+
+  # 1. 查看服务器上最新的 git commit，和 GitHub 上对比
+  cd ~/cardvela
+  git log --oneline -5
+
+  # 2. 查看本地是否有未提交的修改挡住了 pull
+  git status
+
+  # 3. 如果有冲突或未提交修改，强制同步到远程最新（丢弃本地修改）
+  git fetch origin main
+  git reset --hard origin/main
+
+  # 4. 确认 cron 同步端点文件存在
+  ls -la app/api/cron/sync-usage/route.ts
+  cat app/api/cron/sync-usage/route.ts | head -20
+
+  # 5. 确认 usageSync 共享模块存在
+  ls -la src/lib/usageSync.ts
+
+  # 6. 确认 cron 端点代码中读取的是 process.env 而非编译时常量
+  grep "process.env" app/api/cron/sync-usage/route.ts
+
+  # 7. 确认同步后重新构建并重启
+  npm run build
+  pm2 restart all
+
+  # 8. 等10秒后再测试
+  curl "http://localhost:3000/api/cron/sync-usage?secret=e653976865d6e6f63b46c8a8704a049c4609b5cf7fc240f2475735c5f5978ccd"
+
+===== 排查"未授权"但代码已同步的问题 =====
+
+  # 代码已确认同步(a8efa57)，返回"未授权"而非"未配置"说明env有值但不匹配
+  
+  # 1. 检查是否存在 CRON_SECRET 覆盖了 NEW_API_WEBHOOK_SECRET
+  grep CRON_SECRET ~/cardvela/.env
+
+  # 2. 查看 .env 中所有包含 SECRET 或 WEBHOOK 的行（检查是否有重复或多余字符）
+  grep -n "SECRET\|WEBHOOK" ~/cardvela/.env
+
+  # 3. 用 xxd 查看是否有隐藏字符（比如 \r 回车符）
+  grep NEW_API_WEBHOOK_SECRET ~/cardvela/.env | xxd | tail -3
+
+  # 4. 最直接的调试方法：临时加一个简单的固定 secret 测试
+  # 在 .env 中加一行
+  echo "CRON_SECRET=test123" >> ~/cardvela/.env
+  
+  # 5. 重新构建并重启
+  cd ~/cardvela
+  npm run build
+  pm2 restart all
+
+  # 6. 用简单 secret 测试
+  curl "http://localhost:3000/api/cron/sync-usage?secret=test123"
+
+===== 找到原因：CRON_SECRET 已存在 =====
+
+  # .env 第13行已有 CRON_SECRET="CardVela-MonthlyFee-2026-Secret"
+  # 代码优先读 CRON_SECRET，所以 NEW_API_WEBHOOK_SECRET 被忽略了
+  # 直接用已有的 CRON_SECRET 值测试：
+  curl "http://localhost:3000/api/cron/sync-usage?secret=CardVela-MonthlyFee-2026-Secret"
+
+  # 配置 crontab 也用这个 secret：
+  crontab -e
+  # 添加：
+  */5 * * * * curl -s "http://localhost:3000/api/cron/sync-usage?secret=CardVela-MonthlyFee-2026-Secret" >> /home/ubuntu/cardvela/sync.log 2>&1
+
+===== crontab 配置完成后的下一步 =====
+
+  # crontab -e 弹出编辑器选择界面，输入 1 选 nano，回车
+  # 在文件末尾粘贴上面那行 */5 * * * *... 的内容
+  # 保存退出: Ctrl+X -> Y -> Enter
+
+  # 验证 crontab 是否添加成功
+  crontab -l
+
+  # 现在可以用 key 发一次 API 调用测试，等5分钟后查看同步日志
+  tail -20 ~/cardvela/sync.log
+
+  # 部署全部完成，定时同步已激活
+
+===== nano 编辑器操作步骤 =====
+
+  # 你现在在 nano 编辑器里，已有一行月费 crontab
+  # 操作步骤：
+  #   1. 按键盘 向下箭头 移到第一行下方的空行
+  #   2. 按 Enter 新建一行
+  #   3. 粘贴下面这行（右键粘贴 或 Shift+Insert）：
+  */5 * * * * curl -s "http://localhost:3000/api/cron/sync-usage?secret=CardVela-MonthlyFee-2026-Secret" >> /home/ubuntu/cardvela/sync.log 2>&1
+  #   4. 按 Ctrl+X
+  #   5. 按 Y
+  #   6. 按 Enter
+  # 这样就保存退出了
+
+  # 退出后验证是否添加成功（应看到两行）
+  crontab -l
+
+  # 等5分钟后查看同步日志
+  tail -20 ~/cardvela/sync.log
+
+===== 修复 crontab 重复行 =====
+
+  # crontab 里同步那行被粘贴了两次连在一起，需要修复
+  # 重新编辑 crontab
+  crontab -e
+
+  # 在 nano 里删掉重复的那行，只保留这两行：
+  # 第1行（月费，已有的）:
+  0 3 1 * * curl -s -X POST http://localhost:3000/api/admin/monthly-fee -H "x-cron-secret: CardVela-MonthlyFee-2026-Secret" >> /tmp/monthly-fee.log 2>&1
+  # 第2行（用量同步，新加的）:
+  */5 * * * * curl -s "http://localhost:3000/api/cron/sync-usage?secret=CardVela-MonthlyFee-2026-Secret" >> /home/ubuntu/cardvela/sync.log 2>&1
+
+  # 操作方法：用方向键移到重复部分，按 Ctrl+K 删除多余内容
+  # 确保两行之间有换行，不要连在一起
+  # 保存退出: Ctrl+X -> Y -> Enter
+
+  # 验证修复后的 crontab（应该只有上面两行）
+  crontab -l
+
+  # sync.log 还不存在是正常的，等5分钟 cron 执行后就会自动创建
+  # 5分钟后查看
+  tail -20 ~/cardvela/sync.log

@@ -462,3 +462,18 @@ model EnterpriseApplication {
   @@index([userId])
   @@index([status])
 }
+
+// Copilot账号池模型
+model CopilotAccount {
+  id          String   @id @default(cuid())
+  githubId    String   // GitHub账号ID
+  token       String   // gho_开头的token
+  quotaUsed   Float    @default(0)  // 已用额度（美元）
+  quotaLimit  Float    @default(10) // 月额度上限
+  status      String   // active/inactive/error
+  lastUsed    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+}
