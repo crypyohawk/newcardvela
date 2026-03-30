@@ -20,6 +20,11 @@ function getNewApiAuthHeaders(): Record<string, string> {
   const cookie = NEW_API_COOKIE.trim();
   const token = NEW_API_TOKEN.trim();
 
+  // Token 优先：Token 比 Cookie 更稳定，不会过期
+  if (token) {
+    return { 'Authorization': `Bearer ${token}`, 'New-Api-User': NEW_API_USER };
+  }
+
   if (cookie) {
     return {
       'Cookie': cookie.startsWith('session=') ? cookie : `session=${cookie}`,
@@ -27,11 +32,7 @@ function getNewApiAuthHeaders(): Record<string, string> {
     };
   }
 
-  if (token) {
-    return { 'Authorization': `Bearer ${token}`, 'New-Api-User': NEW_API_USER };
-  }
-
-  throw new Error('未配置 new-api 管理认证，请设置 NEW_API_ADMIN_COOKIE 或 NEW_API_ADMIN_TOKEN');
+  throw new Error('未配置 new-api 管理认证，请设置 NEW_API_ADMIN_TOKEN 或 NEW_API_ADMIN_COOKIE');
 }
 
 async function newApiRequest(path: string, options: RequestInit = {}): Promise<any> {
