@@ -44,7 +44,7 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdmin = user?.role === 'admin';
 
   const fetchUser = async () => {
     if (typeof window === 'undefined') {
