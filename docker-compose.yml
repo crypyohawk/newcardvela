@@ -14,6 +14,8 @@ services:
 
   db:
     image: postgres:15-alpine
+    ports:
+      - "5432:5432"
     environment:
       - POSTGRES_USER=cardvela
       - POSTGRES_PASSWORD=CardVela2024Secure

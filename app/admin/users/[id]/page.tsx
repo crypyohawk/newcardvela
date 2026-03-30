@@ -42,13 +42,34 @@ interface UserStats {
   totalWithdraw: number;
 }
 
+interface AIKeyInfo {
+  id: string;
+  keyName: string;
+  tierName: string;
+  status: string;
+  monthUsed: number;
+  totalUsed: number;
+  monthlyLimit: number | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+interface AIStats {
+  totalKeys: number;
+  activeKeys: number;
+  totalAiCost: number;
+  monthAiCost: number;
+}
+
 export default function UserDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [user, setUser] = useState<UserDetail | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState<'cards' | 'transactions'>('cards');
+  const [activeSection, setActiveSection] = useState<'cards' | 'transactions' | 'ai'>('cards');
+  const [aiKeys, setAiKeys] = useState<AIKeyInfo[]>([]);
+  const [aiStats, setAiStats] = useState<AIStats | null>(null);
 
   const getToken = () => localStorage.getItem('token') || '';
 
@@ -65,6 +86,8 @@ export default function UserDetailPage() {
       const data = await res.json();
       if (data.user) setUser(data.user);
       if (data.stats) setStats(data.stats);
+      if (data.aiKeys) setAiKeys(data.aiKeys);
+      if (data.aiStats) setAiStats(data.aiStats);
     } catch (error) {
       console.error('获取用户详情失败:', error);
     } finally {
@@ -82,6 +105,9 @@ export default function UserDetailPage() {
       refund: '退款',
       referral_bonus: '推荐奖励',
       first_recharge_bonus: '首充奖励',
+      ai_usage: 'AI消费',
+      ai_transfer: 'AI钱包转账',
+      deposit: '入账',
     };
     return map[type] || type;
   };
@@ -181,23 +207,35 @@ export default function UserDetailPage() {
 
         {/* 统计卡片 */}
         {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
             <div className="bg-slate-800 rounded-lg p-4 text-center">
               <div className="text-2xl font-bold text-yellow-400">{stats.totalCards}</div>
-              <div className="text-sm text-gray-400 mt-1">💳 开卡数量</div>
+              <div className="text-sm text-gray-400 mt-1">开卡数量</div>
             </div>
             <div className="bg-slate-800 rounded-lg p-4 text-center">
               <div className="text-2xl font-bold text-blue-400">{stats.totalTransactions}</div>
-              <div className="text-sm text-gray-400 mt-1">📋 交易笔数</div>
+              <div className="text-sm text-gray-400 mt-1">交易笔数</div>
             </div>
             <div className="bg-slate-800 rounded-lg p-4 text-center">
               <div className="text-2xl font-bold text-green-400">${stats.totalRecharge.toFixed(2)}</div>
-              <div className="text-sm text-gray-400 mt-1">💰 累计充值</div>
+              <div className="text-sm text-gray-400 mt-1">累计充值</div>
             </div>
             <div className="bg-slate-800 rounded-lg p-4 text-center">
               <div className="text-2xl font-bold text-red-400">${stats.totalWithdraw.toFixed(2)}</div>
-              <div className="text-sm text-gray-400 mt-1">💸 累计提现</div>
+              <div className="text-sm text-gray-400 mt-1">累计提现</div>
             </div>
+            {aiStats && (
+              <>
+                <div className="bg-slate-800 rounded-lg p-4 text-center">
+                  <div className="text-2xl font-bold text-purple-400">${aiStats.monthAiCost.toFixed(4)}</div>
+                  <div className="text-sm text-gray-400 mt-1">本月AI消费</div>
+                </div>
+                <div className="bg-slate-800 rounded-lg p-4 text-center">
+                  <div className="text-2xl font-bold text-orange-400">${aiStats.totalAiCost.toFixed(4)}</div>
+                  <div className="text-sm text-gray-400 mt-1">累计AI消费</div>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -209,7 +247,7 @@ export default function UserDetailPage() {
               activeSection === 'cards' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'
             }`}
           >
-            💳 卡片列表 ({user.userCards.length})
+            卡片列表 ({user.userCards.length})
           </button>
           <button
             onClick={() => setActiveSection('transactions')}
@@ -217,7 +255,15 @@ export default function UserDetailPage() {
               activeSection === 'transactions' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'
             }`}
           >
-            📋 交易记录 ({user.transactions.length})
+            交易记录 ({user.transactions.length})
+          </button>
+          <button
+            onClick={() => setActiveSection('ai')}
+            className={`px-4 py-2 rounded-lg text-sm ${
+              activeSection === 'ai' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'
+            }`}
+          >
+            AI服务 ({aiKeys.length})
           </button>
         </div>
 
@@ -286,6 +332,53 @@ export default function UserDetailPage() {
                       <td className="py-3">{getStatusLabel(tx.status)}</td>
                       <td className="py-3 text-gray-400">
                         {new Date(tx.createdAt).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {/* AI 服务 */}
+        {activeSection === 'ai' && (
+          <div className="bg-slate-800 rounded-xl p-6">
+            <h3 className="text-lg font-bold mb-4">AI 服务 Key</h3>
+            {aiKeys.length === 0 ? (
+              <p className="text-gray-400 text-center py-8">该用户暂无 AI Key</p>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-gray-400 border-b border-slate-700">
+                    <th className="pb-3">名称</th>
+                    <th className="pb-3">套餐</th>
+                    <th className="pb-3">状态</th>
+                    <th className="pb-3">本月消费</th>
+                    <th className="pb-3">累计消费</th>
+                    <th className="pb-3">月限额</th>
+                    <th className="pb-3">最后使用</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aiKeys.map(key => (
+                    <tr key={key.id} className="border-b border-slate-700">
+                      <td className="py-3 font-medium">{key.keyName}</td>
+                      <td className="py-3 text-gray-300">{key.tierName}</td>
+                      <td className="py-3">
+                        <span className={`px-2 py-0.5 rounded text-xs ${
+                          key.status === 'active' ? 'bg-green-600' : 'bg-red-600'
+                        }`}>
+                          {key.status === 'active' ? '启用' : '禁用'}
+                        </span>
+                      </td>
+                      <td className="py-3 text-purple-400">${key.monthUsed.toFixed(4)}</td>
+                      <td className="py-3 text-orange-400">${key.totalUsed.toFixed(4)}</td>
+                      <td className="py-3 text-gray-400">
+                        {key.monthlyLimit != null ? `$${key.monthlyLimit.toFixed(2)}` : '无限制'}
+                      </td>
+                      <td className="py-3 text-gray-400 text-sm">
+                        {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString('zh-CN') : '从未使用'}
                       </td>
                     </tr>
                   ))}

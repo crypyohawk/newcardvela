@@ -17,6 +17,10 @@ export async function GET(request: NextRequest) {
         pricePerMillionInput: true,
         pricePerMillionOutput: true,
         features: true,
+        models: true,
+        maxKeys: true,
+        requiredRole: true,
+        minAiBalance: true,
         sortOrder: true,
         modelGroup: true,
         provider: { select: { id: true, name: true, displayName: true, type: true } },
@@ -26,6 +30,7 @@ export async function GET(request: NextRequest) {
     const result = tiers.map(t => ({
       ...t,
       features: t.features ? JSON.parse(t.features) : [],
+      models: t.models ? JSON.parse(t.models) : [],
     }));
 
     return NextResponse.json({ tiers: result });

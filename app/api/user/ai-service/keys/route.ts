@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     if (!payload) return NextResponse.json({ error: '无效的令牌' }, { status: 401 });
 
     const body = await request.json();
-    const { keyName, tierId, monthlyLimit } = body;
+    const { keyName, tierId, monthlyLimit, label } = body;
 
     if (!keyName?.trim() || !tierId) {
       return NextResponse.json({ error: '请填写 Key 名称并选择套餐' }, { status: 400 });
@@ -71,11 +71,28 @@ export async function POST(request: NextRequest) {
 
     const providerType = tier.provider?.type || 'proxy';
 
-    // 验证用户余额
+    // 验证用户
     const user = await db.user.findUnique({ where: { id: payload.userId } });
     if (!user) return NextResponse.json({ error: '用户不存在' }, { status: 404 });
-    if (user.balance <= 0) {
-      return NextResponse.json({ error: '账户余额不足，请先充值' }, { status: 400 });
+
+    // 检查角色权限
+    if (tier.requiredRole) {
+      const userRole = user.role?.toLowerCase();
+      const required = tier.requiredRole.toLowerCase();
+      const hasAccess = required === 'enterprise'
+        ? (userRole === 'enterprise' || userRole === 'admin')
+        : userRole === required;
+      if (!hasAccess) {
+        return NextResponse.json({ error: `该套餐仅限${tier.requiredRole === 'enterprise' ? '企业用户' : '管理员'}使用` }, { status: 403 });
+      }
+    }
+
+    // 检查 AI 专用余额
+    if (user.aiBalance <= 0) {
+      return NextResponse.json({ error: 'AI 余额不足，请先从账户余额转入 AI 钱包' }, { status: 400 });
+    }
+    if (tier.minAiBalance > 0 && user.aiBalance < tier.minAiBalance) {
+      return NextResponse.json({ error: `该套餐要求 AI 余额不低于 $${tier.minAiBalance}，当前 AI 余额 $${user.aiBalance.toFixed(2)}` }, { status: 400 });
     }
 
     // 限制 Key 数量：企业账户/管理员最多 50 个，普通用户最多 10 个
@@ -86,12 +103,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `最多创建 ${maxKeys} 个 Key` }, { status: 400 });
     }
 
+    // 限制套餐总 Key 数量（所有用户共享）
+    if (tier.maxKeys > 0) {
+      const tierTotalKeys = await db.aIKey.count({ where: { tierId, status: 'active' } });
+      if (tierTotalKeys >= tier.maxKeys) {
+        return NextResponse.json({ error: `该套餐已达上限（${tier.maxKeys} 个 Key），暂无名额` }, { status: 400 });
+      }
+    }
+
     // 在 new-api 创建 token，获取 new-api 实际生成的 key
     let newApiTokenId: number | null = null;
     let apiKey: string = '';
     const tokenName = obfuscateKeyName(payload.userId, keyName.trim());
     try {
-      const maxQuota = monthlyLimit ? Math.min(monthlyLimit, user.balance * 2) : Math.min(user.balance * 2, 100);
+      const maxQuota = monthlyLimit ? Math.min(monthlyLimit, user.aiBalance * 2) : Math.min(user.aiBalance * 2, 100);
       const quotaAmount = usdToQuota(maxQuota);
       const result = await createNewApiToken({
         name: tokenName,
@@ -114,6 +139,7 @@ export async function POST(request: NextRequest) {
       userId: payload.userId,
       tierId,
       keyName: keyName.trim(),
+      label: label?.trim() || null,
       apiKey: apiKey,
       newApiTokenId,
       newApiTokenName: tokenName,

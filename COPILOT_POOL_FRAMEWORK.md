@@ -106,3 +106,18 @@
 
 ## 下一步
 按阶段执行，从基础搭建开始。需要代码实现时，告诉我具体模块。
+
+
+
+服务器上的运行架构：
+
+copilot-api 实例1 (port 4141, 账号A的token)  ──┐
+copilot-api 实例2 (port 4142, 账号B的token)  ──┼──→  new-api (port 3001)  ──→  用户 sk-xxx
+copilot-api 实例3 (port 4143, 账号C的token)  ──┘        ↑
+                                                    每个实例注册为一个"渠道"
+
+                                                    ✅ 添加Copilot账号 (本地测试)
+✅ 同步到new-api (创建渠道)
+🔄 配置AI服务商 (在CardVela中)
+🔄 测试完整调用链
+🔄 服务器部署

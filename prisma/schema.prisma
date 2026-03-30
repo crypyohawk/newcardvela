@@ -18,6 +18,7 @@ model User {
   avatar    String?
   role      String   @default("user")
   balance   Float    @default(0)
+  aiBalance Float    @default(0)          // AI 服务专用余额，与主余额隔离
   
   // 推荐相关 - 改为可选
   referralCode    String?  @unique           // 改为可选
@@ -350,6 +351,10 @@ model AIServiceTier {
   pricePerMillionInput    Float                         // 每百万 input token 价格 (USD)
   pricePerMillionOutput   Float                         // 每百万 output token 价格 (USD)
   features                String?  @db.Text             // JSON: 特性列表
+  models                  String?  @db.Text             // JSON: 可用模型及倍率 [{"name":"claude-opus-4","ratio":3},...]
+  maxKeys                 Int      @default(0)          // 套餐总可开 Key 数量，0=不限
+  requiredRole            String?                       // 开 Key 所需角色: enterprise/admin，null=不限
+  minAiBalance            Float    @default(0)          // 开 Key 所需最低 AI 余额
   isActive                Boolean  @default(true)
   sortOrder               Int      @default(0)
 
@@ -378,6 +383,7 @@ model AIKey {
   tier            AIServiceTier @relation(fields: [tierId], references: [id])
 
   keyName         String                        // 用户给 Key 起的名称
+  label           String?                       // 企业标签：员工名/部门/用途，方便企业统计
   apiKey          String   @unique              // proxy: sk-cardvela-xxxx / reseller: 上游原始Key
   hashedKey       String?                       // 哈希后的 Key（安全存储）
   newApiTokenId   Int?                          // new-api 侧的 token ID（proxy模式）
@@ -465,15 +471,17 @@ model EnterpriseApplication {
 
 // Copilot账号池模型
 model CopilotAccount {
-  id          String   @id @default(cuid())
-  githubId    String   // GitHub账号ID
-  token       String   // gho_开头的token
-  quotaUsed   Float    @default(0)  // 已用额度（美元）
-  quotaLimit  Float    @default(10) // 月额度上限
-  status      String   // active/inactive/error
-  lastUsed    DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  githubId        String   // GitHub账号ID
+  token           String   // ghu_开头的token
+  quotaUsed       Float    @default(0)  // 已用额度（美元）
+  quotaLimit      Float    @default(10) // 月额度上限
+  status          String   @default("active") // active/inactive/error
+  port            Int?     // copilot-api 实例端口号
+  newApiChannelId Int?     // 对应的 new-api 渠道 ID
+  lastUsed        DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([status])
 }

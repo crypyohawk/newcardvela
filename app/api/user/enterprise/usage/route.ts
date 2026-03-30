@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     // 获取企业自身所有 Key
     const keys = await db.aIKey.findMany({
       where: { userId: payload.userId },
-      select: { id: true, keyName: true, status: true, monthUsed: true, totalUsed: true, monthlyLimit: true, lastUsedAt: true },
+      select: { id: true, keyName: true, label: true, status: true, monthUsed: true, totalUsed: true, monthlyLimit: true, lastUsedAt: true },
     });
 
     // 本月用量汇总
@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
       return {
         keyId: u.aiKeyId,
         keyName: key?.keyName || '未知',
+        label: key?.label || null,
         monthCost: Math.round((u._sum.cost || 0) * 10000) / 10000,
         requestCount: u._count,
         monthlyLimit: key?.monthlyLimit || null,

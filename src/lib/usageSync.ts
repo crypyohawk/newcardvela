@@ -67,9 +67,9 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
         include: { tier: true },
       });
 
-      // 兼容旧数据：通过 new-api SQLite 查 token ID 反查
+      // 兼容旧数据：通过 new-api 数据库查 token ID 反查
       if (!aiKey) {
-        const tokenId = findNewApiTokenIdByName(token_name);
+        const tokenId = await findNewApiTokenIdByName(token_name);
         if (tokenId) {
           aiKey = await db.aIKey.findFirst({
             where: { newApiTokenId: tokenId },
@@ -121,18 +121,18 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
         console.log(`[用量同步] Key ${aiKey.id} 超出月度预算 $${aiKey.monthlyLimit}，已自动禁用。此次调用仍正常扣费。`);
       }
 
-      // 查当前余额
+      // 查当前AI余额
       const currentUser = await db.user.findUnique({
         where: { id: aiKey.userId },
-        select: { balance: true },
+        select: { aiBalance: true },
       });
       if (!currentUser) {
         skipped++;
         continue;
       }
 
-      // 如果余额已经低于信用下限，禁用所有 Key 并跳过
-      if (currentUser.balance <= -creditLimit) {
+      // 如果AI余额已经低于信用下限，禁用所有 Key 并跳过
+      if (currentUser.aiBalance <= -creditLimit) {
         const activeKeys = await db.aIKey.findMany({
           where: { userId: aiKey.userId, status: 'active' },
           select: { id: true, newApiTokenId: true },
@@ -145,7 +145,7 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
           for (const k of activeKeys) {
             await disableKeyOnNewApi(k.newApiTokenId);
           }
-          console.log(`[用量同步] 用户 ${aiKey.userId} 已超出信用额度(余额$${currentUser.balance.toFixed(4)}, 信用上限-$${creditLimit})，禁用所有Key`);
+          console.log(`[用量同步] 用户 ${aiKey.userId} 已超出信用额度(AI余额$${currentUser.aiBalance.toFixed(4)}, 信用上限-$${creditLimit})，禁用所有Key`);
         }
         skipped++;
         continue;
@@ -184,8 +184,21 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
         });
         await tx.user.update({
           where: { id: aiKey.userId },
-          data: { balance: { decrement: cost } },
+          data: { aiBalance: { decrement: cost } },
         });
+
+        // 写入 Transaction 记录，让用户交易历史可见 AI 消费
+        if (cost > 0) {
+          await tx.transaction.create({
+            data: {
+              userId: aiKey.userId,
+              type: 'ai_usage',
+              amount: -cost,
+              status: 'completed',
+            },
+          });
+        }
+
         return 'created';
       });
 
@@ -197,12 +210,36 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
       totalCostDeducted += cost;
       synced++;
 
-      // 扣费后检查：余额低于信用下限则禁用所有 Key
+      // 追踪 Copilot 账号用量：通过 channel ID 匹配 CopilotAccount
+      if (log.channel) {
+        try {
+          const channelId = Number(log.channel);
+          if (!isNaN(channelId) && channelId > 0) {
+            const copilotAccount = await db.copilotAccount.findFirst({
+              where: { newApiChannelId: channelId },
+            });
+            if (copilotAccount) {
+              await db.copilotAccount.update({
+                where: { id: copilotAccount.id },
+                data: {
+                  quotaUsed: { increment: cost },
+                  lastUsed: new Date(),
+                },
+              });
+            }
+          }
+        } catch (copilotErr: any) {
+          // Copilot 用量追踪失败不影响主流程
+          console.warn(`[用量同步] Copilot账号用量追踪失败 (channel=${log.channel}):`, copilotErr.message);
+        }
+      }
+
+      // 扣费后检查：AI余额低于信用下限则禁用所有 Key
       const updatedUser = await db.user.findUnique({
         where: { id: aiKey.userId },
-        select: { balance: true },
+        select: { aiBalance: true },
       });
-      if (updatedUser && updatedUser.balance <= -creditLimit) {
+      if (updatedUser && updatedUser.aiBalance <= -creditLimit) {
         const activeKeys = await db.aIKey.findMany({
           where: { userId: aiKey.userId, status: 'active' },
           select: { id: true, newApiTokenId: true },
@@ -214,7 +251,7 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
         for (const k of activeKeys) {
           await disableKeyOnNewApi(k.newApiTokenId);
         }
-        console.log(`[用量同步] 用户 ${aiKey.userId} 扣费后超出信用额度(余额$${updatedUser.balance.toFixed(4)})，已禁用所有 Key`);
+        console.log(`[用量同步] 用户 ${aiKey.userId} 扣费后超出信用额度(AI余额$${updatedUser.aiBalance.toFixed(4)})，已禁用所有 Key`);
       }
     } catch (logError: any) {
       // 单条日志处理失败不应中断整个批次

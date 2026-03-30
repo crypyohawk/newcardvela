@@ -27,7 +27,7 @@ export function AdminGuard({ children }: AdminGuardProps) {
   }
 
   if (!user || !isAdmin) {
-    return null;
+    return <div className="flex justify-center items-center min-h-screen">无权限访问</div>;
   }
 
   return <>{children}</>;

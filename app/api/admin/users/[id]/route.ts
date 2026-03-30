@@ -78,9 +78,34 @@ export async function GET(
         .reduce((sum, t) => sum + Math.abs(t.amount), 0),
     };
 
+    // AI 服务用量统计
+    const aiKeys = await prisma.aIKey.findMany({
+      where: { userId: params.id },
+      include: { tier: { select: { displayName: true, name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    const aiStats = {
+      totalKeys: aiKeys.length,
+      activeKeys: aiKeys.filter(k => k.status === 'active').length,
+      totalAiCost: aiKeys.reduce((sum, k) => sum + k.totalUsed, 0),
+      monthAiCost: aiKeys.reduce((sum, k) => sum + k.monthUsed, 0),
+    };
+
     return NextResponse.json({ 
       user: { ...user, userCards: cardsWithRealBalance },
       stats,
+      aiKeys: aiKeys.map(k => ({
+        id: k.id,
+        keyName: k.keyName,
+        tierName: k.tier.displayName || k.tier.name,
+        status: k.status,
+        monthUsed: k.monthUsed,
+        totalUsed: k.totalUsed,
+        monthlyLimit: k.monthlyLimit,
+        lastUsedAt: k.lastUsedAt,
+        createdAt: k.createdAt,
+      })),
+      aiStats,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -1,6 +1,7 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import { AuthProvider } from '../src/hooks/useAuth';
+import ClientAuthProvider from '../src/components/ClientAuthProvider';
 
 export const metadata: Metadata = {
   title: 'CardVela - 卡维拉',
@@ -20,7 +21,7 @@ export default function RootLayout({
   return (
     <html lang="zh">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <ClientAuthProvider>{children}</ClientAuthProvider>
       </body>
     </html>
   );

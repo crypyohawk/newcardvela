@@ -125,9 +125,16 @@ export default function DashboardPage() {
   const [newKeyName, setNewKeyName] = useState('');
   const [newKeyTier, setNewKeyTier] = useState('');
   const [newKeyLimit, setNewKeyLimit] = useState('');
+  const [newKeyLabel, setNewKeyLabel] = useState('');
   const [creatingKey, setCreatingKey] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [aiConfigTab, setAiConfigTab] = useState<'cline' | 'cursor' | 'claudecode' | 'openai'>('cline');
+
+  // AI 钱包转账
+  const [showAiTransfer, setShowAiTransfer] = useState(false);
+  const [aiTransferAmount, setAiTransferAmount] = useState('');
+  const [aiTransferDirection, setAiTransferDirection] = useState<'main_to_ai' | 'ai_to_main'>('main_to_ai');
+  const [aiTransfering, setAiTransfering] = useState(false);
 
   // 企业用量
   const [enterpriseUsage, setEnterpriseUsage] = useState<any>(null);
@@ -289,6 +296,7 @@ export default function DashboardPage() {
           keyName: newKeyName.trim(),
           tierId: newKeyTier,
           monthlyLimit: newKeyLimit ? parseFloat(newKeyLimit) : null,
+          label: newKeyLabel.trim() || null,
         }),
       });
       const data = await res.json();
@@ -298,11 +306,40 @@ export default function DashboardPage() {
       setNewKeyName('');
       setNewKeyTier('');
       setNewKeyLimit('');
+      setNewKeyLabel('');
       fetchAIData();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
     } finally {
       setCreatingKey(false);
+    }
+  };
+
+  const handleAiTransfer = async () => {
+    const amount = parseFloat(aiTransferAmount);
+    if (!amount || amount <= 0) {
+      setMessage({ type: 'error', text: '请输入有效金额' });
+      return;
+    }
+    setAiTransfering(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/user/ai-service/transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ amount, direction: aiTransferDirection }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setMessage({ type: 'success', text: `转账成功！AI 余额: $${data.aiBalance.toFixed(2)}` });
+      setShowAiTransfer(false);
+      setAiTransferAmount('');
+      refreshUser();
+      fetchAIData();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    } finally {
+      setAiTransfering(false);
     }
   };
 
@@ -761,9 +798,13 @@ export default function DashboardPage() {
               </Link>
             )}
             <div className="flex items-center gap-2">
-              <div className="bg-green-600 px-4 py-2 rounded-l-lg">
-                <span className="text-sm text-green-200">账户余额</span>
-                <span className="font-bold text-lg ml-2">${user.balance.toFixed(2)}</span>
+              <div className="bg-green-600 px-3 py-2 rounded-l-lg">
+                <span className="text-xs text-green-200">账户</span>
+                <span className="font-bold text-sm ml-1">${user.balance.toFixed(2)}</span>
+              </div>
+              <div className="bg-blue-600 px-3 py-2">
+                <span className="text-xs text-blue-200">AI</span>
+                <span className="font-bold text-sm ml-1">${(user.aiBalance ?? 0).toFixed(2)}</span>
               </div>
               <button
                 onClick={() => {
@@ -1686,17 +1727,23 @@ export default function DashboardPage() {
           <div className="space-y-6">
             {/* 概览卡片 */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50">
+              <div className="bg-slate-800 rounded-xl p-4 border border-blue-500/30">
                 <div className="flex items-center gap-2 text-sm text-gray-400 mb-1">
-                  <span className="text-green-400">💰</span> 账户余额
+                  <span className="text-blue-400">🤖</span> AI 钱包余额
                 </div>
-                <div className="text-2xl font-bold text-green-400">${aiSummary?.balance?.toFixed(2) || '0.00'}</div>
+                <div className="text-2xl font-bold text-blue-400">${aiSummary?.aiBalance?.toFixed(2) || (user?.aiBalance ?? 0).toFixed(2)}</div>
+                <button
+                  onClick={() => setShowAiTransfer(true)}
+                  className="text-xs text-blue-400 hover:text-blue-300 mt-1 underline"
+                >
+                  转入/转出
+                </button>
               </div>
               <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50">
                 <div className="flex items-center gap-2 text-sm text-gray-400 mb-1">
-                  <span className="text-blue-400">📊</span> 本月消费
+                  <span className="text-red-400">📊</span> 本月消费
                 </div>
-                <div className="text-2xl font-bold text-blue-400">${aiSummary?.monthCost?.toFixed(2) || '0.00'}</div>
+                <div className="text-2xl font-bold text-red-400">${aiSummary?.monthCost?.toFixed(2) || '0.00'}</div>
               </div>
               <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50">
                 <div className="flex items-center gap-2 text-sm text-gray-400 mb-1">
@@ -2016,7 +2063,7 @@ export default function DashboardPage() {
                             const maxCost = Math.max(...enterpriseUsage.perKey.map((k: any) => k.monthCost || 0), 0.01);
                             return enterpriseUsage.perKey.map((pk: any) => (
                               <div key={pk.keyId} className="flex items-center gap-3 text-sm">
-                                <span className="text-gray-300 w-36 truncate" title={pk.keyName}>{pk.keyName}</span>
+                                <span className="text-gray-300 w-36 truncate" title={pk.label ? `${pk.keyName} (${pk.label})` : pk.keyName}>{pk.label || pk.keyName}</span>
                                 <div className="flex-1 bg-slate-700 rounded-full h-6 overflow-hidden">
                                   <div
                                     className="h-full bg-gradient-to-r from-purple-500 to-cyan-400 rounded-full flex items-center px-2"
@@ -2054,6 +2101,7 @@ export default function DashboardPage() {
                         <thead>
                           <tr className="text-gray-400 border-b border-slate-700">
                             <th className="text-left py-2 px-3">Key 名称（员工）</th>
+                            <th className="text-left py-2 px-3">标签</th>
                             <th className="text-right py-2 px-3">本月消费</th>
                             <th className="text-right py-2 px-3">月限额</th>
                             <th className="text-right py-2 px-3">累计消费</th>
@@ -2065,6 +2113,7 @@ export default function DashboardPage() {
                           {aiKeys.map((key: any) => (
                             <tr key={key.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition">
                               <td className="py-3 px-3 font-medium">{key.keyName}</td>
+                              <td className="py-3 px-3 text-gray-400 text-sm">{key.label || '-'}</td>
                               <td className="py-3 px-3 text-right text-blue-400">${(key.monthUsed || 0).toFixed(4)}</td>
                               <td className="py-3 px-3 text-right">
                                 {key.monthlyLimit ? <span className="text-yellow-400">${key.monthlyLimit}</span> : <span className="text-gray-500">不限</span>}
@@ -2121,6 +2170,26 @@ export default function DashboardPage() {
                           <span>${tier.pricePerMillionOutput}/百万 tokens</span>
                         </div>
                       </div>
+                      {/* 可用模型及倍率 */}
+                      {tier.models && tier.models.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-slate-700">
+                          <p className="text-xs text-gray-500 mb-2">可用模型（倍率 = 相对基础价格的乘数）</p>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                            {tier.models.map((m: any, i: number) => (
+                              <div key={i} className="flex justify-between text-xs">
+                                <span className="text-gray-300 truncate">{m.name}</span>
+                                <span className={`ml-2 font-mono ${
+                                  m.ratio >= 3 ? 'text-red-400' :
+                                  m.ratio >= 1 ? 'text-yellow-400' :
+                                  'text-green-400'
+                                }`}>
+                                  {m.ratio}x
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       {tier.features && tier.features.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-slate-700">
                           {tier.features.map((f: string, i: number) => (
@@ -2144,10 +2213,10 @@ export default function DashboardPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-slate-800 p-6 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">🔑 创建 API Key</h3>
-            {(user?.balance ?? 0) <= 0 && (
+            {(user?.aiBalance ?? 0) <= 0 && (
               <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 mb-4">
-                <p className="text-red-400 text-sm font-medium">⚠️ 账户余额不足，无法创建 Key</p>
-                <p className="text-red-400/70 text-xs mt-1">请先充值后再创建 API Key。创建 Key 需要账户余额大于 $0。</p>
+                <p className="text-red-400 text-sm font-medium">AI 钱包余额不足，无法创建 Key</p>
+                <p className="text-red-400/70 text-xs mt-1">请先从账户余额转入 AI 钱包。AI 服务使用独立余额，与开卡充卡互不影响。</p>
               </div>
             )}
             <div className="space-y-4">
@@ -2215,15 +2284,28 @@ export default function DashboardPage() {
                   className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+
+              {(user?.role === 'enterprise' || user?.role === 'admin' || user?.role === 'ADMIN') && (
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">员工/部门标签（便于企业统计）</label>
+                  <input
+                    type="text"
+                    value={newKeyLabel}
+                    onChange={(e) => setNewKeyLabel(e.target.value)}
+                    placeholder="例如：张三、设计部、前端组"
+                    className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3 mt-6">
               <button
                 onClick={handleCreateKey}
-                disabled={creatingKey || !newKeyName.trim() || !newKeyTier || (user?.balance ?? 0) <= 0}
+                disabled={creatingKey || !newKeyName.trim() || !newKeyTier || (user?.aiBalance ?? 0) <= 0}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-2 rounded-lg font-medium transition"
               >
-                {creatingKey ? '创建中...' : (user?.balance ?? 0) <= 0 ? '余额不足，请先充值' : '创建 Key'}
+                {creatingKey ? '创建中...' : (user?.aiBalance ?? 0) <= 0 ? 'AI余额不足，请先转入' : '创建 Key'}
               </button>
               <button
                 onClick={() => {
@@ -2231,7 +2313,68 @@ export default function DashboardPage() {
                   setNewKeyName('');
                   setNewKeyTier('');
                   setNewKeyLimit('');
+                  setNewKeyLabel('');
                 }}
+                className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded-lg font-medium transition"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI 钱包转账弹窗 */}
+      {showAiTransfer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 p-6 rounded-xl w-full max-w-sm">
+            <h3 className="text-lg font-bold mb-4">💰 AI 钱包转账</h3>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-2 text-center text-sm">
+                <div className="bg-green-600/20 border border-green-500/30 rounded-lg p-3">
+                  <div className="text-green-400 text-xs mb-1">账户余额</div>
+                  <div className="font-bold text-green-400">${user?.balance.toFixed(2)}</div>
+                </div>
+                <div className="bg-blue-600/20 border border-blue-500/30 rounded-lg p-3">
+                  <div className="text-blue-400 text-xs mb-1">AI 钱包</div>
+                  <div className="font-bold text-blue-400">${(user?.aiBalance ?? 0).toFixed(2)}</div>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">转账方向</label>
+                <select
+                  value={aiTransferDirection}
+                  onChange={(e) => setAiTransferDirection(e.target.value as any)}
+                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="main_to_ai">账户余额 → AI 钱包</option>
+                  <option value="ai_to_main">AI 钱包 → 账户余额</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">转账金额 ($)</label>
+                <input
+                  type="number"
+                  value={aiTransferAmount}
+                  onChange={(e) => setAiTransferAmount(e.target.value)}
+                  placeholder="最低 $1"
+                  min="1"
+                  step="0.01"
+                  className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <p className="text-xs text-gray-500">AI 服务使用独立余额，与开卡、充卡业务互不影响，防止延迟扣费风险。</p>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleAiTransfer}
+                disabled={aiTransfering || !aiTransferAmount || parseFloat(aiTransferAmount) <= 0}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-2 rounded-lg font-medium transition"
+              >
+                {aiTransfering ? '转账中...' : '确认转账'}
+              </button>
+              <button
+                onClick={() => { setShowAiTransfer(false); setAiTransferAmount(''); }}
                 className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded-lg font-medium transition"
               >
                 取消

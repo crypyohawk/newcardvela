@@ -49,6 +49,7 @@ export async function PUT(
     const updateData: any = {};
 
     if (body.keyName !== undefined) updateData.keyName = body.keyName.trim();
+    if (body.label !== undefined) updateData.label = body.label?.trim() || null;
     if (body.monthlyLimit !== undefined) {
       updateData.monthlyLimit = (body.monthlyLimit === null || body.monthlyLimit === '' || body.monthlyLimit === 0) ? null : Number(body.monthlyLimit);
       if (updateData.monthlyLimit !== null && (isNaN(updateData.monthlyLimit) || updateData.monthlyLimit < 0)) {
@@ -56,11 +57,11 @@ export async function PUT(
       }
     }
     if (body.status !== undefined && ['active', 'disabled'].includes(body.status)) {
-      // 重新启用 Key 时必须检查余额
+      // 重新启用 Key 时必须检查 AI 余额（非主余额）
       if (body.status === 'active') {
-        const user = await db.user.findUnique({ where: { id: payload.userId }, select: { balance: true } });
-        if (!user || user.balance <= 0) {
-          return NextResponse.json({ error: '账户余额不足，无法启用 Key，请先充值' }, { status: 400 });
+        const user = await db.user.findUnique({ where: { id: payload.userId }, select: { aiBalance: true } });
+        if (!user || user.aiBalance <= 0) {
+          return NextResponse.json({ error: 'AI 余额不足，无法启用 Key，请先从账户余额转入 AI 钱包' }, { status: 400 });
         }
       }
       updateData.status = body.status;

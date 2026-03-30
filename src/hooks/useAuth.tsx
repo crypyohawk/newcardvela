@@ -8,6 +8,7 @@ interface User {
   username: string;
   avatar?: string | null;
   balance: number;
+  aiBalance: number;
   role: string;
   createdAt: Date;
   updatedAt: Date;
@@ -39,13 +40,18 @@ interface AuthProviderProps {
   children: React.ReactNode;
 }
 
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   const isAdmin = user?.role === 'ADMIN';
 
   const fetchUser = async () => {
+    if (typeof window === 'undefined') {
+      setLoading(false);
+      return;
+    }
+    
     const token = localStorage.getItem('token');
     if (!token) {
       setLoading(false);
@@ -76,6 +82,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = async (email: string, password: string) => {
+    if (typeof window === 'undefined') return;
+    
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -88,6 +96,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const register = async (email: string, username: string, password: string, confirmPassword: string) => {
+    if (typeof window === 'undefined') return;
+    
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -100,6 +110,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = () => {
+    if (typeof window === 'undefined') return;
+    
     localStorage.removeItem('token');
     setUser(null);
   };
@@ -114,3 +126,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     </AuthContext.Provider>
   );
 };
+
+// 客户端安全的AuthProvider包装器
+const AuthProviderClient: React.FC<AuthProviderProps> = ({ children }) => {
+  return <AuthProvider>{children}</AuthProvider>;
+};
+
+export { AuthProviderClient as AuthProvider };

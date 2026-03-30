@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       balance: user.balance,
+      aiBalance: user.aiBalance,
       monthCost: Math.round((monthLogs._sum.cost || 0) * 100) / 100,
       totalCost: Math.round(totalUsed * 100) / 100,
       monthTokens: (monthLogs._sum.inputTokens || 0) + (monthLogs._sum.outputTokens || 0),

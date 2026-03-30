@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
         username: true,
         role: true,
         balance: true,
+        aiBalance: true,
       },
     });
 

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        input { padding: 8px; margin: 5px; width: 200px; }
+    </style>
+</head>
+<body>
+    <h1>登录API测试</h1>
+
+    <div>
+        <input type="email" id="email" placeholder="邮箱" value="cyga6710@gmail.com">
+        <input type="password" id="password" placeholder="密码" value="admin123">
+        <button onclick="testLogin()">测试登录</button>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        async function testLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const results = document.getElementById('results');
+
+            results.innerHTML = '<div class="result">正在测试...</div>';
+
+            try {
+                console.log('发送登录请求...');
+                const response = await fetch('http://localhost:3001/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+                console.log('响应:', response.status, data);
+
+                if (response.ok) {
+                    results.innerHTML = `
+                        <div class="result success">
+                            <strong>✅ 登录成功!</strong><br>
+                            Token: ${data.token.substring(0, 20)}...<br>
+                            用户: ${data.user.email} (${data.user.role})
+                        </div>
+                    `;
+
+                    // 测试 /api/auth/me
+                    console.log('测试 /api/auth/me...');
+                    const meResponse = await fetch('http://localhost:3001/api/auth/me', {
+                        headers: {
+                            'Authorization': `Bearer ${data.token}`
+                        }
+                    });
+
+                    if (meResponse.ok) {
+                        const meData = await meResponse.json();
+                        results.innerHTML += `
+                            <div class="result success">
+                                <strong>✅ /api/auth/me 也成功!</strong><br>
+                                用户信息验证通过
+                            </div>
+                        `;
+                    } else {
+                        results.innerHTML += `
+                            <div class="result error">
+                                <strong>❌ /api/auth/me 失败</strong>
+                            </div>
+                        `;
+                    }
+
+                } else {
+                    results.innerHTML = `
+                        <div class="result error">
+                            <strong>❌ 登录失败:</strong> ${data.error}
+                        </div>
+                    `;
+                }
+
+            } catch (error) {
+                console.error('网络错误:', error);
+                results.innerHTML = `
+                    <div class="result error">
+                        <strong>❌ 网络错误:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

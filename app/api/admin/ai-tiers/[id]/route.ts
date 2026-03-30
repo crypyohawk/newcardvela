@@ -26,6 +26,10 @@ export async function PUT(
     if (body.providerId !== undefined) updateData.providerId = body.providerId || null;
     if (body.modelGroup !== undefined) updateData.modelGroup = body.modelGroup;
     if (body.channelGroup !== undefined) updateData.channelGroup = body.channelGroup || null;
+    if (body.models !== undefined) updateData.models = body.models ? JSON.stringify(body.models) : null;
+    if (body.maxKeys !== undefined) updateData.maxKeys = parseInt(body.maxKeys) || 0;
+    if (body.requiredRole !== undefined) updateData.requiredRole = body.requiredRole || null;
+    if (body.minAiBalance !== undefined) updateData.minAiBalance = parseFloat(body.minAiBalance) || 0;
 
     const tier = await db.aIServiceTier.update({
       where: { id: params.id },

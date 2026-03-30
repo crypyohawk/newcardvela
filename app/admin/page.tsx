@@ -67,7 +67,7 @@ interface Notice {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds' | 'referral' | 'monthlyFee' | 'ai' | 'enterprise'>('cards');
+  const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds' | 'referral' | 'monthlyFee' | 'ai' | 'enterprise' | 'copilot'>('cards');
   const [monthlyFeePreview, setMonthlyFeePreview] = useState<any>(null);
   const [monthlyFeeLoading, setMonthlyFeeLoading] = useState(false);
   const [monthlyFeeExecuting, setMonthlyFeeExecuting] = useState(false);
@@ -156,7 +156,7 @@ export default function AdminPage() {
   const [aiKeySearch, setAiKeySearch] = useState('');
   const [showAddTier, setShowAddTier] = useState(false);
   const [editingTier, setEditingTier] = useState<any>(null);
-  const [tierForm, setTierForm] = useState({ displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '' });
+  const [tierForm, setTierForm] = useState({ displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0' });
 
   // Provider 管理状态
   const [aiProviders, setAiProviders] = useState<any[]>([]);
@@ -544,6 +544,9 @@ export default function AdminPage() {
         providerId: tierForm.providerId || null,
         modelGroup: tierForm.modelGroup || 'claude',
         channelGroup: tierForm.channelGroup || null,
+        maxKeys: parseInt(tierForm.maxKeys) || 0,
+        requiredRole: tierForm.requiredRole || null,
+        minAiBalance: parseFloat(tierForm.minAiBalance) || 0,
       };
       const url = editingTier ? `/api/admin/ai-tiers/${editingTier.id}` : '/api/admin/ai-tiers';
       const res = await fetch(url, {
@@ -555,7 +558,7 @@ export default function AdminPage() {
       setMessage({ type: 'success', text: editingTier ? '套餐已更新' : '套餐已创建' });
       setShowAddTier(false);
       setEditingTier(null);
-      setTierForm({ displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '' });
+      setTierForm({ displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0' });
       fetchAIManagement();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
@@ -952,6 +955,7 @@ export default function AdminPage() {
             { key: 'monthlyFee', label: '📅 月费管理' },
             { key: 'enterprise', label: '🏢 企业审核' },
             { key: 'ai', label: '✦ AI 管理' },
+            { key: 'copilot', label: '🤖 Copilot池' },
           ].map(tab => (
             <button
               key={tab.key}
@@ -2442,7 +2446,7 @@ export default function AdminPage() {
                 <button
                   onClick={() => {
                     setEditingTier(null);
-                    setTierForm({ displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '' });
+                    setTierForm({ displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0' });
                     setShowAddTier(true);
                   }}
                   className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm"
@@ -2477,6 +2481,9 @@ export default function AdminPage() {
                       <p className="text-sm text-gray-400 mt-1">
                         输入 ${tier.pricePerMillionInput}/M · 输出 ${tier.pricePerMillionOutput}/M
                         {tier.channelGroup && <span className="ml-2 text-cyan-400">分组: {tier.channelGroup}</span>}
+                        {tier.maxKeys > 0 && <span className="ml-2 text-purple-400">限{tier.maxKeys}个Key</span>}
+                        {tier.requiredRole && <span className="ml-2 text-orange-400">需{tier.requiredRole === 'enterprise' ? '企业' : '管理员'}</span>}
+                        {tier.minAiBalance > 0 && <span className="ml-2 text-yellow-400">最低AI余额${tier.minAiBalance}</span>}
                         {tier._count?.aiKeys > 0 && <span className="ml-2 text-blue-400">({tier._count.aiKeys} 个 Key)</span>}
                       </p>
                     </div>
@@ -2493,6 +2500,9 @@ export default function AdminPage() {
                             providerId: tier.providerId || '',
                             modelGroup: tier.modelGroup || 'claude',
                             channelGroup: tier.channelGroup || '',
+                            maxKeys: String(tier.maxKeys || 0),
+                            requiredRole: tier.requiredRole || '',
+                            minAiBalance: String(tier.minAiBalance || 0),
                           });
                           setShowAddTier(true);
                         }}
@@ -2599,6 +2609,31 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* Copilot 池管理 */}
+        {!tabLoading && activeTab === 'copilot' && (
+          <div className="space-y-6">
+            <div className="bg-slate-800 p-6 rounded-xl">
+              <h3 className="text-lg font-bold mb-4">🤖 Copilot 账号池管理</h3>
+              <p className="text-gray-400 mb-4">
+                管理 GitHub Copilot 账号池，实现智能负载均衡。支持多账号轮询，确保高可用性。
+              </p>
+              <div className="flex gap-4">
+                <Link
+                  href="/admin/copilot-accounts"
+                  className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg text-sm font-medium transition"
+                >
+                  进入账号池管理 →
+                </Link>
+                <div className="text-sm text-gray-500">
+                  <p>• 账号数量：动态</p>
+                  <p>• 总额度：动态计算</p>
+                  <p>• 活跃账号：动态</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 新建/编辑套餐弹窗 */}
         {showAddTier && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -2676,15 +2711,54 @@ export default function AdminPage() {
                     />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">特性 (逗号分隔)</label>
-                  <input
-                    type="text"
-                    value={tierForm.features}
-                    onChange={(e) => setTierForm({ ...tierForm, features: e.target.value })}
-                    placeholder="多通道聚合, 自动切换, 低延迟"
-                    className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">特性 (逗号分隔)</label>
+                    <input
+                      type="text"
+                      value={tierForm.features}
+                      onChange={(e) => setTierForm({ ...tierForm, features: e.target.value })}
+                      placeholder="多通道聚合, 自动切换, 低延迟"
+                      className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">套餐总 Key 上限 (0=不限)</label>
+                    <input
+                      type="number"
+                      value={tierForm.maxKeys}
+                      onChange={(e) => setTierForm({ ...tierForm, maxKeys: e.target.value })}
+                      placeholder="0"
+                      min="0"
+                      className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">所需角色</label>
+                    <select
+                      value={tierForm.requiredRole}
+                      onChange={(e) => setTierForm({ ...tierForm, requiredRole: e.target.value })}
+                      className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">不限</option>
+                      <option value="enterprise">企业用户</option>
+                      <option value="admin">管理员</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">最低 AI 余额 ($)</label>
+                    <input
+                      type="number"
+                      value={tierForm.minAiBalance}
+                      onChange={(e) => setTierForm({ ...tierForm, minAiBalance: e.target.value })}
+                      placeholder="0"
+                      min="0"
+                      step="1"
+                      className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <input

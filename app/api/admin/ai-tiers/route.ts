@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '名称不能为空' }, { status: 400 });
     }
 
-    const { providerId, modelGroup, channelGroup } = body;
+    const { providerId, modelGroup, channelGroup, models, maxKeys, requiredRole, minAiBalance } = body;
 
     const tier = await db.aIServiceTier.create({
       data: {
@@ -43,6 +43,10 @@ export async function POST(request: NextRequest) {
         pricePerMillionInput: pricePerMillionInput || 3,
         pricePerMillionOutput: pricePerMillionOutput || 15,
         features: features ? JSON.stringify(features) : null,
+        models: models ? JSON.stringify(models) : null,
+        maxKeys: maxKeys ? parseInt(maxKeys) : 0,
+        requiredRole: requiredRole || null,
+        minAiBalance: minAiBalance ? parseFloat(minAiBalance) : 0,
         sortOrder: sortOrder || 0,
         providerId: providerId || null,
         modelGroup: modelGroup || 'claude',

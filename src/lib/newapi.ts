@@ -8,6 +8,7 @@ const NEW_API_TOKEN = process.env.NEW_API_ADMIN_TOKEN || '';
 const NEW_API_COOKIE = process.env.NEW_API_ADMIN_COOKIE || '';
 const NEW_API_USER = process.env.NEW_API_ADMIN_USER || '1';
 const NEW_API_SQLITE_PATH = process.env.NEW_API_SQLITE_PATH || '/home/ubuntu/new-api/data/one-api.db';
+const NEW_API_DB_URL = process.env.NEW_API_DB_URL || '';  // MySQL/PostgreSQL 连接串
 
 interface NewApiResponse<T = any> {
   success: boolean;
@@ -27,9 +28,6 @@ function getNewApiAuthHeaders(): Record<string, string> {
   }
 
   if (token) {
-    if (/^(session|token|jwt)=/i.test(token)) {
-      return { 'Cookie': token };
-    }
     return { 'Authorization': `Bearer ${token}`, 'New-Api-User': NEW_API_USER };
   }
 
@@ -67,6 +65,63 @@ function getSqliteDb() {
 }
 
 /**
+ * 从 new-api 的 MySQL/PostgreSQL 数据库读取 token 信息。
+ * 用于远程部署场景（本地开发连接远程 new-api 数据库）。
+ * NEW_API_DB_URL 格式:
+ *   mysql://user:pass@host:3306/dbname
+ *   postgresql://user:pass@host:5432/dbname
+ */
+async function readTokenFromRemoteDb(name: string): Promise<{ id: number; key: string } | null> {
+  if (!NEW_API_DB_URL) return null;
+  
+  try {
+    const url = new URL(NEW_API_DB_URL);
+    const protocol = url.protocol.replace(':', '');
+    
+    if (protocol === 'mysql' || protocol === 'mariadb') {
+      const mysql2 = require('mysql2/promise');
+      const conn = await mysql2.createConnection(NEW_API_DB_URL);
+      try {
+        const [rows] = await conn.execute(
+          'SELECT id, `key` FROM tokens WHERE name = ? ORDER BY id DESC LIMIT 1',
+          [name]
+        );
+        const row = (rows as any[])[0];
+        if (row && row.id && row.key) {
+          return { id: row.id, key: `sk-${row.key}` };
+        }
+        return null;
+      } finally {
+        await conn.end();
+      }
+    } else if (protocol === 'postgresql' || protocol === 'postgres') {
+      const { Client } = require('pg');
+      const client = new Client({ connectionString: NEW_API_DB_URL });
+      await client.connect();
+      try {
+        const result = await client.query(
+          'SELECT id, key FROM tokens WHERE name = $1 ORDER BY id DESC LIMIT 1',
+          [name]
+        );
+        const row = result.rows[0];
+        if (row && row.id && row.key) {
+          return { id: row.id, key: `sk-${row.key}` };
+        }
+        return null;
+      } finally {
+        await client.end();
+      }
+    }
+    
+    console.error('[newapi] 不支持的数据库协议:', protocol);
+    return null;
+  } catch (e: any) {
+    console.error('[newapi] 远程数据库读取失败:', e.message);
+    return null;
+  }
+}
+
+/**
  * 从 new-api 的 SQLite 数据库直接读取 token 信息。
  * new-api 的创建 API 不返回 key，只能从数据库读。
  * 使用 better-sqlite3 参数化查询，避免 SQL 注入。
@@ -89,8 +144,26 @@ function readTokenFromSqlite(name: string): { id: number; key: string } | null {
 }
 
 /**
+ * 从 new-api 数据库读取完整 token key。
+ * 优先级：1. 远程 MySQL/PostgreSQL  2. 本地 SQLite
+ */
+async function readTokenFromDb(name: string): Promise<{ id: number; key: string } | null> {
+  // 优先使用远程数据库（如果配置了）
+  if (NEW_API_DB_URL) {
+    const result = await readTokenFromRemoteDb(name);
+    if (result) return result;
+  }
+  // 回退到 SQLite（同机部署场景）
+  return readTokenFromSqlite(name);
+}
+
+/**
  * 在 new-api 中创建 token（对应用户的 API Key）。
- * 流程：通过 API 创建 → 从 SQLite 读取实际生成的 key。
+ * 
+ * 获取 key 的策略（按优先级）：
+ * 1. 远程 MySQL/PostgreSQL 数据库读取（NEW_API_DB_URL）
+ * 2. 本地 SQLite 数据库读取（同机部署）
+ * 3. 都失败则报错（不生成假 key，避免不一致）
  */
 export async function createNewApiToken(params: {
   name: string;
@@ -116,33 +189,43 @@ export async function createNewApiToken(params: {
     throw new Error(`new-api 创建 token 失败: ${data.message}`);
   }
 
-  // API 不返回 key，从 SQLite 直接读取
   // 短暂等待确保数据写入
-  await new Promise(r => setTimeout(r, 200));
+  await new Promise(r => setTimeout(r, 300));
 
-  const fromDb = readTokenFromSqlite(params.name);
-  if (!fromDb) {
-    throw new Error('new-api 创建 token 成功但无法从数据库读取 key，请检查 NEW_API_SQLITE_PATH 配置');
+  // 从数据库读取完整 key（远程DB → SQLite）
+  const fromDb = await readTokenFromDb(params.name);
+  if (fromDb) {
+    console.log(`[newapi] createToken success: id=${fromDb.id}, key=${fromDb.key.slice(0, 8)}...${fromDb.key.slice(-4)}`);
+    return fromDb;
   }
 
-  console.log(`[newapi] createToken result: id=${fromDb.id}, key=${fromDb.key.slice(0, 8)}...${fromDb.key.slice(-4)}`);
-  return fromDb;
+  // 数据库都不可用，报错提示配置
+  throw new Error(
+    'new-api 创建 token 成功，但无法从数据库读取完整 key。' +
+    '请配置 NEW_API_DB_URL（远程MySQL/PostgreSQL）或 NEW_API_SQLITE_PATH（本地SQLite）。' +
+    '例: NEW_API_DB_URL=mysql://user:pass@host:3306/new-api'
+  );
 }
 
 /**
- * 从 new-api SQLite 通过 token name 查找 token ID（用于 webhook 兼容旧数据）
+ * 从 new-api 通过 token name 查找 token ID（用于 webhook 兼容旧数据）
+ * 先尝试数据库，再尝试 API
  */
-export function findNewApiTokenIdByName(name: string): number | null {
-  let sqliteDb: any = null;
+export async function findNewApiTokenIdByName(name: string): Promise<number | null> {
+  // 尝试数据库
+  const fromDb = await readTokenFromDb(name);
+  if (fromDb) return fromDb.id;
+
+  // 回退到 API 搜索
   try {
-    sqliteDb = getSqliteDb();
-    const row = sqliteDb.prepare('SELECT id FROM tokens WHERE name = ? ORDER BY id DESC LIMIT 1').get(name) as { id: number } | undefined;
-    return row ? row.id : null;
+    const data = await newApiRequest(`/api/token/search?keyword=${encodeURIComponent(name)}`);
+    const items = data.data?.items || data.data || [];
+    const arr = Array.isArray(items) ? items : [];
+    const token = arr.find((t: any) => t.name === name);
+    return token ? token.id : null;
   } catch (e: any) {
-    console.error('[newapi] SQLite 查找 token ID 失败:', e.message);
+    console.error('[newapi] 查找 token ID 失败:', e.message);
     return null;
-  } finally {
-    sqliteDb?.close();
   }
 }
 
@@ -256,7 +339,80 @@ export async function getNewApiChannels(): Promise<Array<{
   response_time: number;
 }>> {
   const data = await newApiRequest('/api/channel/?p=0&page_size=100');
-  return data.data || [];
+  // 兼容不同版本的响应格式：
+  // v0.11.9+: { data: { items: [...], page, total } }
+  // 旧版本:   { data: [...] } 或 { data: { data: [...] } }
+  const rawData = data.data;
+  if (Array.isArray(rawData)) return rawData;
+  return rawData?.items || rawData?.data || rawData?.list || [];
+}
+
+/**
+ * 在 new-api 中创建渠道（上游通道）
+ * type=1 表示 OpenAI 兼容格式
+ */
+export async function createNewApiChannel(params: {
+  name: string;
+  baseUrl: string;
+  key: string;
+  models: string;
+  group: string;
+  modelMapping?: string;
+}): Promise<{ id: number }> {
+  const data = await newApiRequest('/api/channel/', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: params.name,
+      type: 1,  // OpenAI 兼容
+      key: params.key,
+      base_url: params.baseUrl,
+      models: params.models,
+      model_mapping: params.modelMapping || '',
+      group: params.group,
+      groups: [params.group],
+      status: 1,
+      weight: 1,
+    }),
+  });
+  if (!data.success) {
+    throw new Error(`new-api 创建渠道失败: ${data.message}`);
+  }
+  return { id: data.data?.id || 0 };
+}
+
+/**
+ * 更新 new-api 渠道
+ */
+export async function updateNewApiChannel(channelId: number, params: {
+  name?: string;
+  status?: number;
+  baseUrl?: string;
+  key?: string;
+  models?: string;
+  group?: string;
+  weight?: number;
+}): Promise<void> {
+  const body: any = { id: channelId };
+  if (params.name !== undefined) body.name = params.name;
+  if (params.status !== undefined) body.status = params.status;
+  if (params.baseUrl !== undefined) body.base_url = params.baseUrl;
+  if (params.key !== undefined) body.key = params.key;
+  if (params.models !== undefined) body.models = params.models;
+  if (params.group !== undefined) { body.group = params.group; body.groups = [params.group]; }
+  if (params.weight !== undefined) body.weight = params.weight;
+  await newApiRequest('/api/channel/', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * 删除 new-api 渠道
+ */
+export async function deleteNewApiChannel(channelId: number): Promise<void> {
+  await newApiRequest(`/api/channel/${channelId}`, {
+    method: 'DELETE',
+  });
 }
 
 // ==================== 工具函数 ====================
