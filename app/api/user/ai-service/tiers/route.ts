@@ -42,24 +42,27 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // 根据用户角色过滤：需要特定角色的套餐只对有权限的用户展示
-    const filteredTiers = tiers.filter(t => {
-      if (!t.requiredRole) return true; // 无角色要求，所有人可见
-      const required = t.requiredRole.toLowerCase();
-      if (required === 'enterprise') {
-        return userRole === 'enterprise' || userRole === 'admin';
+    // 所有启用的套餐对所有用户可见（权限仅在创建 Key 时检查）
+    // 标记当前用户是否有权限使用该套餐
+    const result = tiers.map(t => {
+      let canUse = true;
+      if (t.requiredRole) {
+        const required = t.requiredRole.toLowerCase();
+        if (required === 'enterprise') {
+          canUse = userRole === 'enterprise' || userRole === 'admin';
+        } else if (required === 'admin') {
+          canUse = userRole === 'admin';
+        } else {
+          canUse = userRole === required;
+        }
       }
-      if (required === 'admin') {
-        return userRole === 'admin';
-      }
-      return userRole === required;
+      return {
+        ...t,
+        features: t.features ? JSON.parse(t.features) : [],
+        models: t.models ? JSON.parse(t.models) : [],
+        canUse,
+      };
     });
-
-    const result = filteredTiers.map(t => ({
-      ...t,
-      features: t.features ? JSON.parse(t.features) : [],
-      models: t.models ? JSON.parse(t.models) : [],
-    }));
 
     return NextResponse.json({ tiers: result });
   } catch (error: any) {

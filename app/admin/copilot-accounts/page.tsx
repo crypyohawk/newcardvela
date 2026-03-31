@@ -14,6 +14,11 @@ interface CopilotAccount {
   status: string;
   port: number | null;
   newApiChannelId: number | null;
+  boundAiKeyId: string | null;
+  boundUserId: string | null;
+  boundAt: string | null;
+  boundUser: { id: string; email: string; name: string | null } | null;
+  boundKey: { id: string; keyName: string; lastUsedAt: string | null; status: string } | null;
   lastUsed: string | null;
   createdAt: string;
 }
@@ -234,6 +239,7 @@ export default function CopilotAccountsPage() {
   };
 
   const activeCount = accounts.filter(a => a.status === 'active').length;
+  const boundCount = accounts.filter(a => a.boundAiKeyId).length;
   const syncedCount = accounts.filter(a => a.newApiChannelId).length;
   const totalQuotaUsed = accounts.reduce((sum, a) => sum + a.quotaUsed, 0);
 
@@ -286,7 +292,7 @@ export default function CopilotAccountsPage() {
           <div>
             <h1 className="text-2xl font-bold">Copilot 账号池管理</h1>
             <p className="text-gray-500 text-sm mt-1">
-              共 {accounts.length} 个账号 · {activeCount} 个活跃 · {syncedCount} 个已绑定渠道 · 本月总消耗 ${totalQuotaUsed.toFixed(2)}
+              共 {accounts.length} 个账号 · {activeCount} 个空闲 · {boundCount} 个已绑定 · {syncedCount} 个已绑渠道 · 本月总消耗 ${totalQuotaUsed.toFixed(2)}
             </p>
           </div>
           <div className="flex gap-2">
@@ -453,6 +459,7 @@ export default function CopilotAccountsPage() {
               <tr>
                 <th className="px-4 py-3 text-left">GitHub ID</th>
                 <th className="px-4 py-3 text-left">状态</th>
+                <th className="px-4 py-3 text-left">号池绑定</th>
                 <th className="px-4 py-3 text-left">端口</th>
                 <th className="px-4 py-3 text-left">渠道</th>
                 <th className="px-4 py-3 text-left">已用额度</th>
@@ -468,11 +475,38 @@ export default function CopilotAccountsPage() {
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded text-sm ${
                       account.status === 'active' ? 'bg-green-100 text-green-800' :
+                      account.status === 'bound' ? 'bg-blue-100 text-blue-800' :
                       account.status === 'inactive' ? 'bg-gray-100 text-gray-800' :
                       'bg-red-100 text-red-800'
                     }`}>
-                      {account.status}
+                      {account.status === 'active' ? '空闲' :
+                       account.status === 'bound' ? '已绑定' :
+                       account.status}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    {account.boundAiKeyId ? (
+                      <div>
+                        <div className="text-blue-700 font-medium">
+                          {account.boundKey?.keyName || account.boundAiKeyId.slice(0, 8)}
+                        </div>
+                        {account.boundUser && (
+                          <div className="text-gray-500 text-xs">{account.boundUser.email}</div>
+                        )}
+                        {account.boundAt && (
+                          <div className="text-gray-400 text-xs">
+                            绑定于 {new Date(account.boundAt).toLocaleString()}
+                          </div>
+                        )}
+                        {account.boundKey?.lastUsedAt && (
+                          <div className="text-gray-400 text-xs">
+                            最后调用 {new Date(account.boundKey.lastUsedAt).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 font-mono text-sm">
                     {account.port ? `:${account.port}` : <span className="text-gray-300">—</span>}

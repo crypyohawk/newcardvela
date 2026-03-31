@@ -1784,9 +1784,14 @@ export default function DashboardPage() {
                         </div>
                         <button
                           onClick={() => { setNewKeyTier(tier.id); setShowCreateKey(true); }}
-                          className="bg-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-700 text-xs font-medium whitespace-nowrap"
+                          disabled={tier.canUse === false}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
+                            tier.canUse === false
+                              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                              : 'bg-blue-600 hover:bg-blue-700'
+                          }`}
                         >
-                          + 创建 Key
+                          {tier.canUse === false ? '🔒 需企业认证' : '+ 创建 Key'}
                         </button>
                       </div>
                       {tier.description && <p className="text-sm text-gray-400 mb-3">{tier.description}</p>}
@@ -1826,11 +1831,6 @@ export default function DashboardPage() {
                               <span className="text-green-400">✓</span> {f}
                             </div>
                           ))}
-                        </div>
-                      )}
-                      {tier.requiredRole && (
-                        <div className="mt-2 text-xs text-orange-400">
-                          需要{tier.requiredRole === 'enterprise' ? '企业' : '管理员'}身份
                         </div>
                       )}
                     </div>
@@ -2247,11 +2247,13 @@ export default function DashboardPage() {
                   {aiTiers.map((tier: any) => (
                     <div
                       key={tier.id}
-                      onClick={() => setNewKeyTier(tier.id)}
-                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                        newKeyTier === tier.id
-                          ? 'border-blue-500 bg-blue-500/10'
-                          : 'border-slate-600 bg-slate-700 hover:border-slate-500'
+                      onClick={() => tier.canUse !== false && setNewKeyTier(tier.id)}
+                      className={`p-4 rounded-lg border-2 transition-all ${
+                        tier.canUse === false
+                          ? 'border-slate-700 bg-slate-800 opacity-50 cursor-not-allowed'
+                          : newKeyTier === tier.id
+                            ? 'border-blue-500 bg-blue-500/10 cursor-pointer'
+                            : 'border-slate-600 bg-slate-700 hover:border-slate-500 cursor-pointer'
                       }`}
                     >
                       <div className="flex justify-between items-center mb-1">
@@ -2264,6 +2266,9 @@ export default function DashboardPage() {
                           }`}>
                             {tier.modelGroup === 'gpt' ? 'GPT' : tier.modelGroup === 'mixed' ? '混合' : 'Claude'}
                           </span>
+                          {tier.canUse === false && (
+                            <span className="text-xs text-orange-400">🔒 需企业认证</span>
+                          )}
                         </div>
                         <span className="text-sm text-green-400">
                           输入 ${tier.pricePerMillionInput}/M · 输出 ${tier.pricePerMillionOutput}/M

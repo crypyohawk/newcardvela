@@ -106,6 +106,27 @@ echo ">>> 部署完成！"
 # 如果持续 synced=0，检查 new-api 日志面板是否有对应调用记录
 
 # ================================================================
+# 修复 NEW_API_ADMIN_TOKEN（用量同步报 token 无效时）
+# ================================================================
+# ⚠️ NEW_API_ADMIN_TOKEN 是 CardVela 后端调 new-api 管理 API 的令牌（查日志/建token/禁用token）
+#    它与用户的 sk-xxxxx Key 完全独立，更换此 token 不会影响任何用户 Key 的正常使用。
+#
+# 步骤:
+#   1. 浏览器打开 http://<服务器IP>:3001 登录 new-api 管理后台
+#      （如果 3001 端口未开放外网，用 SSH 隧道: ssh -L 3001:127.0.0.1:3001 ubuntu@<IP>）
+#   2. 点击右上角头像 → 个人设置 → 系统访问令牌 → 生成新令牌
+#   3. 复制令牌，更新服务器上的 .env.production:
+#      nano /home/ubuntu/cardvela/.env.production
+#      找到 NEW_API_ADMIN_TOKEN=旧值 → 替换为新令牌 → Ctrl+O 保存 → Ctrl+X 退出
+#   4. 重新加载环境变量并重启:
+#      cd /home/ubuntu/cardvela
+#      set -a; source .env.production; set +a
+#      pm2 restart cardvela
+#   5. 验证:
+#      curl -s "http://localhost:3000/api/cron/sync-usage?secret=a335b8fb17d4766aa3d30c8fe8b89be6" | python3 -m json.tool
+#      如果不再报 token 无效且 synced > 0，说明修复成功
+
+# ================================================================
 # 步骤 6: 配置 Crontab（首次部署后手动执行一次 crontab -e）
 # ================================================================
 # 写入以下三行：

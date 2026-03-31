@@ -48,10 +48,16 @@ async function newApiRequest(path: string, options: RequestInit = {}): Promise<a
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`new-api 请求失败 [${res.status}]: ${text}`);
+    throw new Error(`new-api 请求失败 [${res.status}]: ${text.slice(0, 200)}`);
   }
 
-  const json = await res.json();
+  // 安全解析 JSON，防止 new-api 返回非 JSON 内容（如 HTML 页面）导致未捕获异常
+  let json: any;
+  try {
+    json = await res.json();
+  } catch (parseErr) {
+    throw new Error(`new-api 返回非 JSON 响应 (${res.status} ${res.statusText})`);
+  }
 
   // new-api 返回 HTTP 200 但 success=false 时表示业务层错误（如 token 无效）
   if (json.success === false) {

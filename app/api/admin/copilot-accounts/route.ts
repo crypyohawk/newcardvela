@@ -11,10 +11,36 @@ export async function GET(request: NextRequest) {
 
   try {
     const accounts = await prisma.copilotAccount.findMany({
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json(accounts);
+    // 查询绑定用户信息
+    const boundUserIds = accounts.map(a => a.boundUserId).filter(Boolean) as string[];
+    const boundUsers = boundUserIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: boundUserIds } },
+          select: { id: true, email: true, name: true },
+        })
+      : [];
+    const userMap = Object.fromEntries(boundUsers.map(u => [u.id, u]));
+
+    // 查询绑定的 AIKey 信息
+    const boundKeyIds = accounts.map(a => a.boundAiKeyId).filter(Boolean) as string[];
+    const boundKeys = boundKeyIds.length > 0
+      ? await prisma.aIKey.findMany({
+          where: { id: { in: boundKeyIds } },
+          select: { id: true, keyName: true, lastUsedAt: true, status: true },
+        })
+      : [];
+    const keyMap = Object.fromEntries(boundKeys.map(k => [k.id, k]));
+
+    const result = accounts.map(a => ({
+      ...a,
+      boundUser: a.boundUserId ? userMap[a.boundUserId] || null : null,
+      boundKey: a.boundAiKeyId ? keyMap[a.boundAiKeyId] || null : null,
+    }));
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Failed to fetch copilot accounts:', error);
     return NextResponse.json({ error: '获取账号失败' }, { status: 500 });
