@@ -41,6 +41,11 @@ export async function POST(request: NextRequest) {
     });
     if (!user) return NextResponse.json({ error: '用户不存在' }, { status: 404 });
 
+    const userRole = user.role?.toLowerCase();
+    if (userRole !== 'enterprise' && userRole !== 'admin') {
+      return NextResponse.json({ error: '号池扩容申请仅限企业用户' }, { status: 403 });
+    }
+
     // 检查是否有待处理的申请
     const pending = await db.poolExpansionRequest.findFirst({
       where: { userId: payload.userId, status: 'pending' },
@@ -54,7 +59,7 @@ export async function POST(request: NextRequest) {
     const maxKeys = aiTierLimits[currentTier] || 3;
 
     const poolKeyCount = await db.aIKey.count({
-      where: { userId: payload.userId, copilotAccountId: { not: null }, status: { not: 'revoked' } },
+      where: { userId: payload.userId, copilotAccountId: { not: null }, status: 'active' },
     });
 
     const request_ = await db.poolExpansionRequest.create({

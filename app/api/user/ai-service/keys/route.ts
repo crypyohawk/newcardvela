@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
 
       // 检查号池 Key 数量上限
       const poolKeyCount = await db.aIKey.count({
-        where: { userId: payload.userId, copilotAccountId: { not: null }, status: { not: 'revoked' } },
+        where: { userId: payload.userId, copilotAccountId: { not: null }, status: 'active' },
       });
       if (poolKeyCount >= tierConfig.maxKeys) {
         return NextResponse.json({

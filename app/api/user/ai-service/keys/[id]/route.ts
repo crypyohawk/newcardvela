@@ -42,6 +42,13 @@ export async function PUT(
 
     const aiKey = await db.aIKey.findFirst({
       where: { id: params.id, userId: payload.userId },
+      include: {
+        tier: {
+          include: {
+            provider: true,
+          },
+        },
+      },
     });
     if (!aiKey) return NextResponse.json({ error: 'Key 不存在' }, { status: 404 });
 
@@ -58,7 +65,11 @@ export async function PUT(
     }
     if (body.status !== undefined && ['active', 'disabled'].includes(body.status)) {
       // 重新启用 Key 时必须检查 AI 余额（非主余额）
+      const isCopilotPool = aiKey.tier.channelGroup === 'copilot' || aiKey.tier.provider?.type === 'copilot-pool';
       if (body.status === 'active') {
+        if (isCopilotPool && aiKey.status === 'disabled') {
+          return NextResponse.json({ error: '号池 Key 禁用后不可重新启用，请直接创建新的 Key' }, { status: 400 });
+        }
         const user = await db.user.findUnique({ where: { id: payload.userId }, select: { aiBalance: true } });
         if (!user || user.aiBalance <= 0) {
           return NextResponse.json({ error: 'AI 余额不足，无法启用 Key，请先从账户余额转入 AI 钱包' }, { status: 400 });
@@ -87,7 +98,7 @@ export async function PUT(
       const [updated] = await db.$transaction([
         db.aIKey.update({
           where: { id: params.id },
-          data: updateData,
+          data: { ...updateData, copilotAccountId: null },
           include: { tier: { select: { name: true, displayName: true } } },
         }),
         db.copilotAccount.update({
@@ -148,7 +159,7 @@ export async function DELETE(
     await db.$transaction(async (tx) => {
       await tx.aIKey.update({
         where: { id: params.id },
-        data: { status: 'revoked' },
+        data: { status: 'revoked', copilotAccountId: null },
       });
       if (aiKey.copilotAccountId) {
         await tx.copilotAccount.update({

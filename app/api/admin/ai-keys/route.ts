@@ -72,7 +72,13 @@ export async function PUT(request: NextRequest) {
     // 查询 Key 获取 newApiTokenId 和 copilotAccountId 用于同步
     const existingKey = await db.aIKey.findUnique({
       where: { id: keyId },
-      select: { newApiTokenId: true, copilotAccountId: true },
+      include: {
+        tier: {
+          include: {
+            provider: true,
+          },
+        },
+      },
     });
     if (!existingKey) {
       return NextResponse.json({ error: 'Key 不存在' }, { status: 404 });
@@ -90,11 +96,16 @@ export async function PUT(request: NextRequest) {
     }
 
     // 禁用 Key 时解绑号池账号，合并事务防止数据不一致
+    const isCopilotPool = existingKey.tier.channelGroup === 'copilot' || existingKey.tier.provider?.type === 'copilot-pool';
+    if (status === 'active' && isCopilotPool && existingKey.status === 'disabled') {
+      return NextResponse.json({ error: '号池 Key 禁用后不可重新启用，请直接为用户创建新的 Key' }, { status: 400 });
+    }
+
     if (status === 'disabled' && existingKey.copilotAccountId) {
       const [updated] = await db.$transaction([
         db.aIKey.update({
           where: { id: keyId },
-          data: { status },
+          data: { status, copilotAccountId: null },
         }),
         db.copilotAccount.update({
           where: { id: existingKey.copilotAccountId },
@@ -207,7 +218,7 @@ export async function DELETE(request: NextRequest) {
     await db.$transaction(async (tx) => {
       await tx.aIKey.update({
         where: { id: keyId },
-        data: { status: 'revoked' },
+        data: { status: 'revoked', copilotAccountId: null },
       });
       if (aiKey.copilotAccountId) {
         await tx.copilotAccount.update({

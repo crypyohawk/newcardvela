@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     // 号池 Key 数量
     const poolKeyCount = await db.aIKey.count({
-      where: { userId: payload.userId, copilotAccountId: { not: null }, status: { not: 'revoked' } },
+      where: { userId: payload.userId, copilotAccountId: { not: null }, status: 'active' },
     });
 
     // 可升级的等级列表
