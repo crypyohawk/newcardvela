@@ -51,7 +51,14 @@ async function newApiRequest(path: string, options: RequestInit = {}): Promise<a
     throw new Error(`new-api 请求失败 [${res.status}]: ${text}`);
   }
 
-  return res.json();
+  const json = await res.json();
+
+  // new-api 返回 HTTP 200 但 success=false 时表示业务层错误（如 token 无效）
+  if (json.success === false) {
+    throw new Error(`new-api 业务错误: ${json.message || JSON.stringify(json)}`);
+  }
+
+  return json;
 }
 
 // ==================== Token 管理 ====================
