@@ -594,6 +594,21 @@ export default function AdminPage() {
     }
   };
 
+  const handleDeleteAIKey = async (keyId: string, keyName: string) => {
+    if (!confirm(`确定要删除 Key "${keyName}" 吗？此操作不可撤销，同时会删除 new-api 侧的令牌。`)) return;
+    try {
+      const res = await fetch(`/api/admin/ai-keys?id=${keyId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      setMessage({ type: 'success', text: 'Key 已删除' });
+      fetchAIManagement();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
   // Provider 管理
   const handleSaveProvider = async () => {
     try {
@@ -2595,6 +2610,12 @@ export default function AdminPage() {
                             className={`text-xs ${key.status === 'active' ? 'text-yellow-400' : 'text-green-400'}`}
                           >
                             {key.status === 'active' ? '停用' : '启用'}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAIKey(key.id, key.keyName)}
+                            className="text-xs text-red-400 ml-2"
+                          >
+                            删除
                           </button>
                         </td>
                       </tr>
