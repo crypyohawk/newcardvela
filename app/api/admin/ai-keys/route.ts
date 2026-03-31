@@ -18,7 +18,12 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
 
     const where: any = {};
-    if (status) where.status = status;
+    // 默认不显示已吊销的 Key，除非明确筛选
+    if (status) {
+      where.status = status;
+    } else {
+      where.status = { not: 'revoked' };
+    }
     if (search) {
       where.OR = [
         { keyName: { contains: search, mode: 'insensitive' } },

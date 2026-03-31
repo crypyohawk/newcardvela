@@ -19,9 +19,9 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    // Key 统计
+    // Key 统计（排除已吊销的 Key）
     const keys = await db.aIKey.findMany({
-      where: { userId: payload.userId },
+      where: { userId: payload.userId, status: { not: 'revoked' } },
       select: { id: true, status: true, monthUsed: true, totalUsed: true },
     });
 

@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     if (!payload) return NextResponse.json({ error: '无效的令牌' }, { status: 401 });
 
     const keys = await db.aIKey.findMany({
-      where: { userId: payload.userId },
+      where: { userId: payload.userId, status: { not: 'revoked' } },
       include: {
         tier: {
           select: {

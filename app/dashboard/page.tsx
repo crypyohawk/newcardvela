@@ -1759,16 +1759,90 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {/* 可选套餐 — 直接展示在 Key 区上方 */}
+            {aiTiers.length > 0 && (
+              <div className="bg-slate-800 rounded-xl p-6">
+                <h2 className="text-xl font-bold mb-4">📦 可选套餐</h2>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {aiTiers.map((tier: any) => (
+                    <div key={tier.id} className={`rounded-xl p-5 border transition-all hover:scale-[1.02] ${
+                      tier.modelGroup === 'gpt' ? 'border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-emerald-900/10' :
+                      tier.modelGroup === 'mixed' ? 'border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-purple-900/10' :
+                      'border-orange-500/30 bg-gradient-to-br from-orange-500/5 to-amber-900/10'
+                    }`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {tier.modelGroup === 'gpt' ? <span className="text-lg">🤖</span> : tier.modelGroup === 'mixed' ? <span className="text-lg">🔀</span> : <span><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-[#D4A27C] inline"><path d="M12 1L13.5 9L19 4L15 10.5L23 12L15 13.5L19 20L13.5 15L12 23L10.5 15L5 20L9 13.5L1 12L9 10.5L5 4L10.5 9Z"/></svg></span>}
+                          <span className="font-bold text-lg">{tier.displayName}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            tier.modelGroup === 'gpt' ? 'bg-emerald-500/20 text-emerald-400' :
+                            tier.modelGroup === 'mixed' ? 'bg-purple-500/20 text-purple-400' :
+                            'bg-amber-500/20 text-amber-400'
+                          }`}>
+                            {tier.modelGroup === 'gpt' ? 'GPT' : tier.modelGroup === 'mixed' ? '混合' : 'Claude'}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => { setNewKeyTier(tier.id); setShowCreateKey(true); }}
+                          className="bg-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-700 text-xs font-medium whitespace-nowrap"
+                        >
+                          + 创建 Key
+                        </button>
+                      </div>
+                      {tier.description && <p className="text-sm text-gray-400 mb-3">{tier.description}</p>}
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Input 价格</span>
+                          <span>${tier.pricePerMillionInput}/百万 tokens</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Output 价格</span>
+                          <span>${tier.pricePerMillionOutput}/百万 tokens</span>
+                        </div>
+                      </div>
+                      {tier.models && tier.models.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-slate-700">
+                          <p className="text-xs text-gray-500 mb-2">可用模型（倍率 = 相对基础价格的乘数）</p>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                            {tier.models.map((m: any, i: number) => (
+                              <div key={i} className="flex justify-between text-xs">
+                                <span className="text-gray-300 truncate">{m.name}</span>
+                                <span className={`ml-2 font-mono ${
+                                  m.ratio >= 3 ? 'text-red-400' :
+                                  m.ratio >= 1 ? 'text-yellow-400' :
+                                  'text-green-400'
+                                }`}>
+                                  {m.ratio}x
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {tier.features && tier.features.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-slate-700">
+                          {tier.features.map((f: string, i: number) => (
+                            <div key={i} className="text-sm text-gray-300 flex items-center gap-1.5">
+                              <span className="text-green-400">✓</span> {f}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {tier.requiredRole && (
+                        <div className="mt-2 text-xs text-orange-400">
+                          需要{tier.requiredRole === 'enterprise' ? '企业' : '管理员'}身份
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* 我的 Key */}
             <div className="bg-slate-800 rounded-xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold">🔑 我的 API Key</h2>
-                <button
-                  onClick={() => setShowCreateKey(true)}
-                  className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium"
-                >
-                  + 创建新 Key
-                </button>
               </div>
 
               {aiKeys.length === 0 ? (
@@ -2137,73 +2211,6 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* 套餐说明 */}
-            {aiTiers.length > 0 && (
-              <div className="bg-slate-800 rounded-xl p-6">
-                <h2 className="text-xl font-bold mb-4">📋 套餐说明</h2>
-                <div className="grid md:grid-cols-2 gap-4">
-                  {aiTiers.map((tier: any) => (
-                    <div key={tier.id} className={`rounded-xl p-5 border transition-all hover:scale-[1.02] ${
-                      tier.modelGroup === 'gpt' ? 'border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-emerald-900/10' :
-                      tier.modelGroup === 'mixed' ? 'border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-purple-900/10' :
-                      'border-orange-500/30 bg-gradient-to-br from-orange-500/5 to-amber-900/10'
-                    }`}>
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        {tier.modelGroup === 'gpt' ? <span className="text-lg">🤖</span> : tier.modelGroup === 'mixed' ? <span className="text-lg">🔀</span> : <span><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-[#D4A27C] inline"><path d="M12 1L13.5 9L19 4L15 10.5L23 12L15 13.5L19 20L13.5 15L12 23L10.5 15L5 20L9 13.5L1 12L9 10.5L5 4L10.5 9Z"/></svg></span>}
-                        <span className="font-bold text-lg">{tier.displayName}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          tier.modelGroup === 'gpt' ? 'bg-emerald-500/20 text-emerald-400' :
-                          tier.modelGroup === 'mixed' ? 'bg-purple-500/20 text-purple-400' :
-                          'bg-amber-500/20 text-amber-400'
-                        }`}>
-                          {tier.modelGroup === 'gpt' ? 'GPT' : tier.modelGroup === 'mixed' ? '混合' : 'Claude'}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-400 mb-3">{tier.description}</p>
-                      <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Input 价格</span>
-                          <span>${tier.pricePerMillionInput}/百万 tokens</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Output 价格</span>
-                          <span>${tier.pricePerMillionOutput}/百万 tokens</span>
-                        </div>
-                      </div>
-                      {/* 可用模型及倍率 */}
-                      {tier.models && tier.models.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-slate-700">
-                          <p className="text-xs text-gray-500 mb-2">可用模型（倍率 = 相对基础价格的乘数）</p>
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                            {tier.models.map((m: any, i: number) => (
-                              <div key={i} className="flex justify-between text-xs">
-                                <span className="text-gray-300 truncate">{m.name}</span>
-                                <span className={`ml-2 font-mono ${
-                                  m.ratio >= 3 ? 'text-red-400' :
-                                  m.ratio >= 1 ? 'text-yellow-400' :
-                                  'text-green-400'
-                                }`}>
-                                  {m.ratio}x
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {tier.features && tier.features.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-slate-700">
-                          {tier.features.map((f: string, i: number) => (
-                            <div key={i} className="text-sm text-gray-300 flex items-center gap-1.5">
-                              <span className="text-green-400">✓</span> {f}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>

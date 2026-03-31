@@ -156,7 +156,7 @@ export default function AdminPage() {
   const [aiKeySearch, setAiKeySearch] = useState('');
   const [showAddTier, setShowAddTier] = useState(false);
   const [editingTier, setEditingTier] = useState<any>(null);
-  const [tierForm, setTierForm] = useState({ displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0' });
+  const [tierForm, setTierForm] = useState({ displayName: '', description: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0' });
 
   // Provider 管理状态
   const [aiProviders, setAiProviders] = useState<any[]>([]);
@@ -537,6 +537,7 @@ export default function AdminPage() {
       const payload = {
         name: editingTier ? editingTier.name : autoName,
         displayName: tierForm.displayName.trim(),
+        description: tierForm.description.trim() || null,
         pricePerMillionInput: parseFloat(tierForm.pricePerMillionInput) || 0,
         pricePerMillionOutput: parseFloat(tierForm.pricePerMillionOutput) || 0,
         features: tierForm.features.split(',').map((f: string) => f.trim()).filter(Boolean),
@@ -558,7 +559,7 @@ export default function AdminPage() {
       setMessage({ type: 'success', text: editingTier ? '套餐已更新' : '套餐已创建' });
       setShowAddTier(false);
       setEditingTier(null);
-      setTierForm({ displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0' });
+      setTierForm({ displayName: '', description: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0' });
       fetchAIManagement();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
@@ -2461,7 +2462,7 @@ export default function AdminPage() {
                 <button
                   onClick={() => {
                     setEditingTier(null);
-                    setTierForm({ displayName: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0' });
+                    setTierForm({ displayName: '', description: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0' });
                     setShowAddTier(true);
                   }}
                   className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm"
@@ -2508,6 +2509,7 @@ export default function AdminPage() {
                           setEditingTier(tier);
                           setTierForm({
                             displayName: tier.displayName,
+                            description: tier.description || '',
                             pricePerMillionInput: String(tier.pricePerMillionInput),
                             pricePerMillionOutput: String(tier.pricePerMillionOutput),
                             features: Array.isArray(tier.features) ? tier.features.join(', ') : (typeof tier.features === 'string' ? tier.features : ''),
@@ -2706,6 +2708,16 @@ export default function AdminPage() {
                     onChange={(e) => setTierForm({ ...tierForm, displayName: e.target.value })}
                     placeholder="例如：Claude 经济版、GPT-4o 稳定版"
                     className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">套餐说明（用户可见）</label>
+                  <textarea
+                    value={tierForm.description}
+                    onChange={(e) => setTierForm({ ...tierForm, description: e.target.value })}
+                    placeholder="例如：稳定高速的 Claude 官转 API 代理，支持 vscode / Cursor / Claude Code 等全系列工具"
+                    rows={2}
+                    className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">

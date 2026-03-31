@@ -83,7 +83,10 @@ export async function GET(request: NextRequest) {
         update: { value: String(nowTimestamp) },
         create: { key: 'usage_sync_last_timestamp', value: String(nowTimestamp) },
       });
-      return NextResponse.json({ message: '无新日志', synced: 0 });
+      return NextResponse.json({ message: '无新日志', synced: 0, debug: {
+        lastSyncAt: new Date(startTimestamp * 1000).toISOString(),
+        queriedUntil: new Date(nowTimestamp * 1000).toISOString(),
+      }});
     }
 
     // 转换日志格式并处理

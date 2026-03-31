@@ -1,0 +1,39 @@
+==================================================
+copilot-1 渠道完整配置
+==================================================
+
+【模型列表】复制到渠道的"模型"字段（原始.格式 + 连字符-格式 全覆盖）：
+
+claude-opus-4.6-fast,claude-opus-4-6-fast,claude-opus-4.6,claude-opus-4-6,claude-sonnet-4.6,claude-sonnet-4-6,gemini-3.1-pro-preview,gemini-3-1-pro-preview,goldeneye-free-auto,gpt-5.2-codex,gpt-5-2-codex,gpt-5.3-codex,gpt-5-3-codex,gpt-5.4-mini,gpt-5-4-mini,gpt-5.4,gpt-5-4,gpt-5-mini,gpt-4o-mini-2024-07-18,gpt-4o-mini,gpt-4o,gpt-4,gpt-4-o-preview,text-embedding-ada-002
+
+
+【模型映射】复制到渠道的"模型映射"字段（将-格式转为.格式转发给copilot-api）：
+
+{
+  "claude-opus-4-6-fast": "claude-opus-4.6-fast",
+  "claude-opus-4-6": "claude-opus-4.6",
+  "claude-sonnet-4-6": "claude-sonnet-4.6",
+  "gemini-3-1-pro-preview": "gemini-3.1-pro-preview",
+  "gpt-5-2-codex": "gpt-5.2-codex",
+  "gpt-5-3-codex": "gpt-5.3-codex",
+  "gpt-5-4-mini": "gpt-5.4-mini",
+  "gpt-5-4": "gpt-5.4"
+}
+
+
+==================================================
+如果以后 copilot-api 更新了模型，在服务器跑这条自动生成：
+
+curl -s http://127.0.0.1:4141/v1/models | python3 -c "
+import sys,json
+models=[m['id'] for m in json.load(sys.stdin)['data']]
+dash=[m.replace('.','-') for m in models if '.' in m]
+print('=== 模型列表 ===')
+print(','.join(models+dash))
+print()
+print('=== 模型映射 ===')
+print('{')
+mapping=[f'  \"{m.replace(\".\",\"-\")}\": \"{m}\"' for m in models if '.' in m]
+print(',\n'.join(mapping))
+print('}')
+"
