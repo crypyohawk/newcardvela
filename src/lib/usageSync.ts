@@ -61,9 +61,9 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
         continue;
       }
 
-      // 通过 token_name 匹配 AIKey
+      // 通过 token_name 匹配 AIKey（跳过已吊销的 Key）
       let aiKey: any = await db.aIKey.findFirst({
-        where: { newApiTokenName: token_name },
+        where: { newApiTokenName: token_name, status: { not: 'revoked' } },
         include: { tier: true },
       });
 
@@ -72,7 +72,7 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
         const tokenId = await findNewApiTokenIdByName(token_name);
         if (tokenId) {
           aiKey = await db.aIKey.findFirst({
-            where: { newApiTokenId: tokenId },
+            where: { newApiTokenId: tokenId, status: { not: 'revoked' } },
             include: { tier: true },
           });
           // 回填 newApiTokenName 避免下次再查 SQLite
