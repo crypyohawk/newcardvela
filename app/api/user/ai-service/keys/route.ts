@@ -191,9 +191,9 @@ export async function POST(request: NextRequest) {
       apiKey = result.key;  // 使用 new-api 实际返回的 key
       console.log(`[key-create] success: id=${result.id}, key=${apiKey.slice(0,8)}...${apiKey.slice(-4)}`);
     } catch (e: any) {
-      console.error('new-api 创建 token 失败:', e.message);
+      console.error('new-api 创建 token 失败:', e.message, e.stack);
       return NextResponse.json({
-        error: 'AI Key 同步到网关失败，请检查 new-api 管理认证配置',
+        error: `AI 网关同步失败: ${e.message?.slice(0, 120) || '未知错误'}`,
         details: e.message,
       }, { status: 502 });
     }

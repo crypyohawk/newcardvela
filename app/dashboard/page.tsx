@@ -301,10 +301,12 @@ export default function DashboardPage() {
       });
       const contentType = res.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
-        throw new Error(`服务器返回异常 (${res.status})，请刷新后重试`);
+        const text = await res.text();
+        console.error('[createKey] non-JSON response:', res.status, text.slice(0, 200));
+        throw new Error(`服务器返回异常 (${res.status}): ${text.slice(0, 80)}`);
       }
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error || data.details || '创建失败');
       setMessage({ type: 'success', text: 'API Key 创建成功！请妥善保管。' });
       setShowCreateKey(false);
       setNewKeyName('');

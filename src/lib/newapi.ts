@@ -37,8 +37,13 @@ function getNewApiAuthHeaders(): Record<string, string> {
 
 async function newApiRequest(path: string, options: RequestInit = {}): Promise<any> {
   const url = `${NEW_API_BASE}${path}`;
+  // 15 秒超时，避免 new-api 无响应导致 nginx 502
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
   const res = await fetch(url, {
     ...options,
+    signal: controller.signal,
     headers: {
       'Content-Type': 'application/json',
       ...getNewApiAuthHeaders(),
@@ -65,6 +70,9 @@ async function newApiRequest(path: string, options: RequestInit = {}): Promise<a
   }
 
   return json;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // ==================== Token 管理 ====================
@@ -74,7 +82,13 @@ async function newApiRequest(path: string, options: RequestInit = {}): Promise<a
  */
 function getSqliteDb() {
   // 动态加载避免 Next.js webpack 打包报错
-  const BetterSqlite3 = require('better-sqlite3');
+  // 先检查模块是否可加载（避免 native module 崩溃整个进程）
+  let BetterSqlite3: any;
+  try {
+    BetterSqlite3 = require('better-sqlite3');
+  } catch (e: any) {
+    throw new Error(`better-sqlite3 模块不可用: ${e.message}`);
+  }
   return new BetterSqlite3(NEW_API_SQLITE_PATH, { readonly: true, fileMustExist: true });
 }
 
