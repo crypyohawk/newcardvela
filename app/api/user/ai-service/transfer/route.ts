@@ -27,6 +27,13 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: '用户不存在' }, { status: 404 });
 
     if (direction === 'ai_to_main') {
+      // AI 等级升级后余额锁定，不可转出
+      if (user.aiBalanceLocked) {
+        return NextResponse.json({
+          error: '您的 AI 等级已升级，余额已锁定，仅可用于 API 消费，不可转回账户',
+        }, { status: 400 });
+      }
+
       // AI 钱包 → 主余额：必须没有任何活跃 Key 才允许转出
       const activeKeyCount = await db.aIKey.count({
         where: { userId: payload.userId, status: 'active' },

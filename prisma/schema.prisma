@@ -19,6 +19,11 @@ model User {
   role      String   @default("user")
   balance   Float    @default(0)
   aiBalance Float    @default(0)          // AI 服务专用余额，与主余额隔离
+
+  // AI 等级体系
+  aiTier            String   @default("basic")  // basic(3key) | pro(10key) | premium(20key)
+  aiBalanceLocked   Boolean  @default(false)     // 升级后 AI 余额锁定（只进不出）
+  aiTierUpgradedAt  DateTime?                     // 等级升级时间
   
   // 推荐相关 - 改为可选
   referralCode    String?  @unique           // 改为可选
@@ -43,6 +48,7 @@ model User {
   enterpriseOwned     EnterpriseSubAccount[] @relation("EnterpriseOwner")
   subAccountOf        EnterpriseSubAccount[] @relation("SubAccount")
   enterpriseApps      EnterpriseApplication[]
+  poolRequests        PoolExpansionRequest[]
 
   @@index([email])
   @@index([referralCode])
@@ -389,7 +395,8 @@ model AIKey {
   newApiTokenId   Int?                          // new-api 侧的 token ID（proxy模式）
   newApiTokenName String?                       // new-api 侧的 token 名称（混淆名，用于 webhook 匹配）
   
-  status          String   @default("active")   // active | disabled | expired
+  copilotAccountId String?                      // 绑定的号池账号 ID
+  status          String   @default("active")   // active | disabled | expired | revoked
   monthlyLimit    Float?                        // 每月用量上限 (USD)，null=不限
   totalUsed       Float    @default(0)          // 累计消费 (USD)
   monthUsed       Float    @default(0)          // 本月消费 (USD)
@@ -476,12 +483,36 @@ model CopilotAccount {
   token           String   // ghu_开头的token
   quotaUsed       Float    @default(0)  // 已用额度（美元）
   quotaLimit      Float    @default(10) // 月额度上限
-  status          String   @default("active") // active/inactive/error
+  status          String   @default("active") // active/inactive/error/bound
   port            Int?     // copilot-api 实例端口号
   newApiChannelId Int?     // 对应的 new-api 渠道 ID
+
+  // 号池绑定
+  boundAiKeyId    String?  @unique       // 当前绑定的 AIKey ID
+  boundUserId     String?                // 绑定的用户 ID
+  boundAt         DateTime?              // 绑定时间
+
   lastUsed        DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  @@index([status])
+}
+
+// 号池扩容申请
+model PoolExpansionRequest {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentTier String                          // 申请时的 AI 等级
+  keyCount    Int                             // 当前已用 Key 数
+  maxKeys     Int                             // 等级上限
+  message     String?  @db.Text               // 用户留言
+  status      String   @default("pending")   // pending | approved | rejected
+  adminNote   String?  @db.Text               // 管理员备注
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+
+  @@index([userId])
   @@index([status])
 }

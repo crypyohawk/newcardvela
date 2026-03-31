@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
     }
 
     const providerType = tier.provider?.type || 'proxy';
+    const isCopilotPool = tier.channelGroup === 'copilot' || providerType === 'copilot-pool';
 
     // 验证用户
     const user = await db.user.findUnique({ where: { id: payload.userId } });
@@ -87,6 +88,67 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // === 号池套餐额外校验 ===
+    let boundCopilotAccount: any = null;
+    if (isCopilotPool) {
+      // 号池套餐必须是企业用户
+      const userRole = user.role?.toLowerCase();
+      if (userRole !== 'enterprise' && userRole !== 'admin') {
+        return NextResponse.json({ error: '号池套餐仅限企业用户，请先申请企业认证' }, { status: 403 });
+      }
+
+      // AI 等级对应的 Key 上限
+      const aiTierLimits: Record<string, { maxKeys: number; minBalance: number }> = {
+        basic:   { maxKeys: 3,  minBalance: 50 },
+        pro:     { maxKeys: 10, minBalance: 500 },
+        premium: { maxKeys: 20, minBalance: 1000 },
+      };
+      const tierConfig = aiTierLimits[user.aiTier || 'basic'] || aiTierLimits.basic;
+
+      // 检查 AI 余额门槛
+      if (user.aiBalance < tierConfig.minBalance) {
+        return NextResponse.json({
+          error: `当前 AI 等级(${user.aiTier || 'basic'})要求 AI 余额 ≥ $${tierConfig.minBalance}，当前 $${user.aiBalance.toFixed(2)}`,
+        }, { status: 400 });
+      }
+
+      // 检查号池 Key 数量上限
+      const poolKeyCount = await db.aIKey.count({
+        where: { userId: payload.userId, copilotAccountId: { not: null }, status: { not: 'revoked' } },
+      });
+      if (poolKeyCount >= tierConfig.maxKeys) {
+        return NextResponse.json({
+          error: `当前 AI 等级(${user.aiTier || 'basic'})最多创建 ${tierConfig.maxKeys} 个号池 Key，已有 ${poolKeyCount} 个。升级等级可创建更多`,
+        }, { status: 400 });
+      }
+
+      // 查找空闲号池账号
+      boundCopilotAccount = await db.copilotAccount.findFirst({
+        where: { status: 'active', boundAiKeyId: null },
+        orderBy: { quotaUsed: 'asc' },
+      });
+      if (!boundCopilotAccount) {
+        // 自动提交扩容申请
+        const pendingRequest = await db.poolExpansionRequest.findFirst({
+          where: { userId: payload.userId, status: 'pending' },
+        });
+        if (!pendingRequest) {
+          await db.poolExpansionRequest.create({
+            data: {
+              userId: payload.userId,
+              currentTier: user.aiTier || 'basic',
+              keyCount: poolKeyCount,
+              maxKeys: tierConfig.maxKeys,
+              message: '创建 Key 时号池无空闲账号，自动提交',
+            },
+          });
+        }
+        return NextResponse.json({
+          error: '号池暂无空闲账号，已为您提交扩容申请，请等待管理员处理',
+        }, { status: 400 });
+      }
+    }
+
     // 检查 AI 专用余额
     if (user.aiBalance <= 0) {
       return NextResponse.json({ error: 'AI 余额不足，请先从账户余额转入 AI 钱包' }, { status: 400 });
@@ -95,12 +157,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `该套餐要求 AI 余额不低于 $${tier.minAiBalance}，当前 AI 余额 $${user.aiBalance.toFixed(2)}` }, { status: 400 });
     }
 
-    // 限制 Key 数量：企业账户/管理员最多 50 个，普通用户最多 10 个
-    const isEnterprise = user.role === 'enterprise' || user.role === 'admin' || user.role === 'ADMIN';
-    const maxKeys = isEnterprise ? 50 : 10;
-    const existingCount = await db.aIKey.count({ where: { userId: payload.userId, status: { not: 'revoked' } } });
-    if (existingCount >= maxKeys) {
-      return NextResponse.json({ error: `最多创建 ${maxKeys} 个 Key` }, { status: 400 });
+    // 限制 Key 数量（非号池套餐的通用限制）
+    if (!isCopilotPool) {
+      const isEnterprise = user.role === 'enterprise' || user.role === 'admin' || user.role === 'ADMIN';
+      const maxKeys = isEnterprise ? 50 : 10;
+      const existingCount = await db.aIKey.count({ where: { userId: payload.userId, status: { not: 'revoked' } } });
+      if (existingCount >= maxKeys) {
+        return NextResponse.json({ error: `最多创建 ${maxKeys} 个 Key` }, { status: 400 });
+      }
     }
 
     // 限制套餐总 Key 数量（所有用户共享）
@@ -134,7 +198,7 @@ export async function POST(request: NextRequest) {
       }, { status: 502 });
     }
 
-    // 存入数据库
+    // 存入数据库（号池套餐需要在事务内绑定账号）
     const createData: any = {
       userId: payload.userId,
       tierId,
@@ -145,11 +209,44 @@ export async function POST(request: NextRequest) {
       newApiTokenName: tokenName,
       status: 'active',
       monthlyLimit: monthlyLimit || null,
+      copilotAccountId: boundCopilotAccount?.id || null,
     };
-    const aiKey = await db.aIKey.create({
-      data: createData,
-      include: { tier: { select: { name: true, displayName: true } } },
-    });
+
+    let aiKey: any;
+    if (boundCopilotAccount) {
+      // 事务：创建 Key + 绑定号池账号（防并发）
+      const txResult = await db.$transaction(async (tx) => {
+        // 二次检查账号仍然空闲（防并发竞争）
+        const account = await tx.copilotAccount.findUnique({
+          where: { id: boundCopilotAccount.id },
+        });
+        if (!account || account.boundAiKeyId) {
+          throw new Error('POOL_RACE_CONDITION');
+        }
+
+        const key = await tx.aIKey.create({
+          data: createData,
+          include: { tier: { select: { name: true, displayName: true } } },
+        });
+
+        await tx.copilotAccount.update({
+          where: { id: boundCopilotAccount.id },
+          data: {
+            boundAiKeyId: key.id,
+            boundUserId: payload.userId,
+            boundAt: new Date(),
+          },
+        });
+
+        return key;
+      });
+      aiKey = txResult;
+    } else {
+      aiKey = await db.aIKey.create({
+        data: createData,
+        include: { tier: { select: { name: true, displayName: true } } },
+      });
+    }
 
     // 获取平台 API 域名配置
     const platformUrlConfig = await db.systemConfig.findUnique({ where: { key: 'ai_api_base_url' } });

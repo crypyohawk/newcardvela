@@ -88,6 +88,14 @@ export async function PUT(
       include: { tier: { select: { name: true, displayName: true } } },
     });
 
+    // 禁用 Key 时解绑号池账号，启用时不自动重新绑定（需创建新 Key）
+    if (body.status === 'disabled' && aiKey.copilotAccountId) {
+      await db.copilotAccount.update({
+        where: { id: aiKey.copilotAccountId },
+        data: { boundAiKeyId: null, boundUserId: null, boundAt: null },
+      });
+    }
+
     return NextResponse.json({ success: true, key: updated });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -128,9 +136,18 @@ export async function DELETE(
     }
 
     // 软删除：标记为 revoked，保留记录用于审计
-    await db.aIKey.update({
-      where: { id: params.id },
-      data: { status: 'revoked' },
+    // 如果有绑定号池账号，解绑释放
+    await db.$transaction(async (tx) => {
+      await tx.aIKey.update({
+        where: { id: params.id },
+        data: { status: 'revoked' },
+      });
+      if (aiKey.copilotAccountId) {
+        await tx.copilotAccount.update({
+          where: { id: aiKey.copilotAccountId },
+          data: { boundAiKeyId: null, boundUserId: null, boundAt: null },
+        });
+      }
     });
 
     return NextResponse.json({ success: true });

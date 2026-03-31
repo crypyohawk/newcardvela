@@ -168,7 +168,7 @@ export async function DELETE(request: NextRequest) {
 
     const aiKey = await db.aIKey.findUnique({
       where: { id: keyId },
-      select: { id: true, newApiTokenId: true, keyName: true },
+      select: { id: true, newApiTokenId: true, keyName: true, copilotAccountId: true },
     });
     if (!aiKey) {
       return NextResponse.json({ error: 'Key 不存在' }, { status: 404 });
@@ -188,10 +188,18 @@ export async function DELETE(request: NextRequest) {
       }
     }
 
-    // 软删除：标记为 revoked，保留记录用于审计
-    await db.aIKey.update({
-      where: { id: keyId },
-      data: { status: 'revoked' },
+    // 软删除：标记为 revoked + 解绑号池账号
+    await db.$transaction(async (tx) => {
+      await tx.aIKey.update({
+        where: { id: keyId },
+        data: { status: 'revoked' },
+      });
+      if (aiKey.copilotAccountId) {
+        await tx.copilotAccount.update({
+          where: { id: aiKey.copilotAccountId },
+          data: { boundAiKeyId: null, boundUserId: null, boundAt: null },
+        });
+      }
     });
 
     return NextResponse.json({ success: true });
