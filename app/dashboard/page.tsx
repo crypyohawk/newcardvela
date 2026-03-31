@@ -299,6 +299,10 @@ export default function DashboardPage() {
           label: newKeyLabel.trim() || null,
         }),
       });
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(`服务器返回异常 (${res.status})，请刷新后重试`);
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setMessage({ type: 'success', text: 'API Key 创建成功！请妥善保管。' });

@@ -3,6 +3,8 @@ import type { Metadata } from 'next';
 import { AuthProvider } from '../src/hooks/useAuth';
 import ClientAuthProvider from '../src/components/ClientAuthProvider';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'CardVela - 卡维拉',
   icons: {

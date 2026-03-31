@@ -203,21 +203,46 @@ export async function createNewApiToken(params: {
     throw new Error(`new-api 创建 token 失败: ${data.message}`);
   }
 
-  // 短暂等待确保数据写入
-  await new Promise(r => setTimeout(r, 300));
+  // 策略 1：从 POST 响应直接获取 key（部分 new-api 版本返回完整对象）
+  if (data.data && typeof data.data === 'object' && data.data.key) {
+    const key = data.data.key.startsWith('sk-') ? data.data.key : `sk-${data.data.key}`;
+    console.log(`[newapi] createToken from response: id=${data.data.id}, key=${key.slice(0,8)}...`);
+    return { id: data.data.id, key };
+  }
 
-  // 从数据库读取完整 key（远程DB → SQLite）
+  // 获取 token ID（POST 可能只返回 ID）
+  const tokenId = typeof data.data === 'number' ? data.data
+    : typeof data.data === 'object' ? data.data?.id
+    : null;
+
+  // 策略 2：通过 GET API 获取完整 key（无需数据库依赖）
+  if (tokenId) {
+    try {
+      const detail = await getNewApiTokenDetail(tokenId);
+      if (detail.key) {
+        const key = detail.key.startsWith('sk-') ? detail.key : `sk-${detail.key}`;
+        console.log(`[newapi] createToken from GET API: id=${detail.id}, key=${key.slice(0,8)}...`);
+        return { id: detail.id, key };
+      }
+    } catch (e: any) {
+      console.warn('[newapi] GET token detail failed, falling back to DB:', e.message);
+    }
+  }
+
+  // 策略 3：从数据库读取（远程DB → SQLite）
+  // 等待数据写入
+  await new Promise(r => setTimeout(r, 300));
   const fromDb = await readTokenFromDb(params.name);
   if (fromDb) {
-    console.log(`[newapi] createToken success: id=${fromDb.id}, key=${fromDb.key.slice(0, 8)}...${fromDb.key.slice(-4)}`);
+    console.log(`[newapi] createToken from DB: id=${fromDb.id}, key=${fromDb.key.slice(0, 8)}...${fromDb.key.slice(-4)}`);
     return fromDb;
   }
 
-  // 数据库都不可用，报错提示配置
+  // 所有策略都失败
   throw new Error(
-    'new-api 创建 token 成功，但无法从数据库读取完整 key。' +
-    '请配置 NEW_API_DB_URL（远程MySQL/PostgreSQL）或 NEW_API_SQLITE_PATH（本地SQLite）。' +
-    '例: NEW_API_DB_URL=mysql://user:pass@host:3306/new-api'
+    'new-api 创建 token 成功但无法获取 key。' +
+    `token ID=${tokenId || '未知'}。` +
+    '请检查 GET /api/token/:id 是否正常，或配置 NEW_API_DB_URL / NEW_API_SQLITE_PATH'
   );
 }
 
