@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../src/lib/db';
 import { verifyAdmin } from '../../../../src/lib/adminAuth';
-import { updateNewApiToken } from '../../../../src/lib/newapi';
+import { updateNewApiToken, deleteNewApiToken } from '../../../../src/lib/newapi';
 
 // 获取所有用户的 Key（管理员）
 export async function GET(request: NextRequest) {
@@ -148,6 +148,53 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ success: true, key: aiKey });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// 管理员删除 Key（软删除：标记为 revoked + 禁用/删除 new-api 侧 token）
+export async function DELETE(request: NextRequest) {
+  const admin = await verifyAdmin(request);
+  if (!admin) return NextResponse.json({ error: '需要管理员权限' }, { status: 403 });
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const keyId = searchParams.get('id');
+
+    if (!keyId) {
+      return NextResponse.json({ error: '缺少 Key ID' }, { status: 400 });
+    }
+
+    const aiKey = await db.aIKey.findUnique({
+      where: { id: keyId },
+      select: { id: true, newApiTokenId: true, keyName: true },
+    });
+    if (!aiKey) {
+      return NextResponse.json({ error: 'Key 不存在' }, { status: 404 });
+    }
+
+    // 先禁用再删除 new-api 侧 token，确保 key 立即失效
+    if (aiKey.newApiTokenId) {
+      try {
+        await updateNewApiToken(aiKey.newApiTokenId, { status: 2 });
+      } catch (e: any) {
+        console.error('[admin] 禁用 new-api token 失败:', e.message);
+      }
+      try {
+        await deleteNewApiToken(aiKey.newApiTokenId);
+      } catch (e: any) {
+        console.error('[admin] 删除 new-api token 失败:', e.message);
+      }
+    }
+
+    // 软删除：标记为 revoked，保留记录用于审计
+    await db.aIKey.update({
+      where: { id: keyId },
+      data: { status: 'revoked' },
+    });
+
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

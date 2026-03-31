@@ -316,7 +316,8 @@ export async function getNewApiLogs(params: {
   query.set('p', String(params.page || 0));
   query.set('page_size', String(params.pageSize || 100));
 
-  const data = await newApiRequest(`/api/log/self/?${query.toString()}`);
+  // 使用管理员端点 /api/log/ 获取所有用户日志（/api/log/self/ 只返回当前认证用户自己的）
+  const data = await newApiRequest(`/api/log/?${query.toString()}`);
   // 兼容不同 new-api 版本的响应格式：
   // 有的返回 { data: { logs: [...], total: N } }，有的返回 { data: [...] }
   const rawData = data.data;

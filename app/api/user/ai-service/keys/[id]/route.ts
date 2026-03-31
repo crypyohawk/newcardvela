@@ -94,7 +94,7 @@ export async function PUT(
   }
 }
 
-// 删除 Key
+// 删除 Key（软删除：标记为 revoked + 禁用/删除 new-api 侧 token，防止用户保存 key 后继续调用）
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -110,20 +110,28 @@ export async function DELETE(
     });
     if (!aiKey) return NextResponse.json({ error: 'Key 不存在' }, { status: 404 });
 
-    // 删除 new-api 侧的 token
+    // 先禁用再删除 new-api 侧 token，确保 key 立即失效
     if (aiKey.newApiTokenId) {
       try {
+        // 先禁用（立即生效，防止在删除过程中仍可调用）
+        await updateNewApiToken(aiKey.newApiTokenId, { status: 2 });
+      } catch (e: any) {
+        console.error('禁用 new-api token 失败:', e.message);
+      }
+      try {
+        // 再删除（彻底移除）
         await deleteNewApiToken(aiKey.newApiTokenId);
       } catch (e: any) {
         console.error('删除 new-api token 失败:', e.message);
-        return NextResponse.json({
-          error: '删除网关 Key 失败，请检查 new-api 管理认证配置',
-          details: e.message,
-        }, { status: 502 });
+        // 即使删除失败，token 已被禁用，继续软删除本地记录
       }
     }
 
-    await db.aIKey.delete({ where: { id: params.id } });
+    // 软删除：标记为 revoked，保留记录用于审计
+    await db.aIKey.update({
+      where: { id: params.id },
+      data: { status: 'revoked' },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

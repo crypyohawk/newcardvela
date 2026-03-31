@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     // 限制 Key 数量：企业账户/管理员最多 50 个，普通用户最多 10 个
     const isEnterprise = user.role === 'enterprise' || user.role === 'admin' || user.role === 'ADMIN';
     const maxKeys = isEnterprise ? 50 : 10;
-    const existingCount = await db.aIKey.count({ where: { userId: payload.userId } });
+    const existingCount = await db.aIKey.count({ where: { userId: payload.userId, status: { not: 'revoked' } } });
     if (existingCount >= maxKeys) {
       return NextResponse.json({ error: `最多创建 ${maxKeys} 个 Key` }, { status: 400 });
     }

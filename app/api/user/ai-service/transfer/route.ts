@@ -27,7 +27,16 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: '用户不存在' }, { status: 404 });
 
     if (direction === 'ai_to_main') {
-      // AI 钱包 → 主余额
+      // AI 钱包 → 主余额：必须没有任何活跃 Key 才允许转出
+      const activeKeyCount = await db.aIKey.count({
+        where: { userId: payload.userId, status: 'active' },
+      });
+      if (activeKeyCount > 0) {
+        return NextResponse.json({ 
+          error: `您当前有 ${activeKeyCount} 个活跃 Key，请先删除或禁用所有 Key 后才能将 AI 余额转回账户` 
+        }, { status: 400 });
+      }
+
       if (user.aiBalance < transferAmount) {
         return NextResponse.json({ error: `AI 余额不足，当前 $${user.aiBalance.toFixed(2)}` }, { status: 400 });
       }
