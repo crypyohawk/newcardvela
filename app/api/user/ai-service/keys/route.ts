@@ -213,39 +213,51 @@ export async function POST(request: NextRequest) {
     };
 
     let aiKey: any;
-    if (boundCopilotAccount) {
-      // 事务：创建 Key + 绑定号池账号（防并发）
-      const txResult = await db.$transaction(async (tx) => {
-        // 二次检查账号仍然空闲（防并发竞争）
-        const account = await tx.copilotAccount.findUnique({
-          where: { id: boundCopilotAccount.id },
-        });
-        if (!account || account.boundAiKeyId) {
-          throw new Error('POOL_RACE_CONDITION');
-        }
+    try {
+      if (boundCopilotAccount) {
+        // 事务：创建 Key + 绑定号池账号（防并发）
+        const txResult = await db.$transaction(async (tx) => {
+          // 二次检查账号仍然空闲（防并发竞争）
+          const account = await tx.copilotAccount.findUnique({
+            where: { id: boundCopilotAccount.id },
+          });
+          if (!account || account.boundAiKeyId) {
+            throw new Error('POOL_RACE_CONDITION');
+          }
 
-        const key = await tx.aIKey.create({
+          const key = await tx.aIKey.create({
+            data: createData,
+            include: { tier: { select: { name: true, displayName: true } } },
+          });
+
+          await tx.copilotAccount.update({
+            where: { id: boundCopilotAccount.id },
+            data: {
+              status: 'bound',
+              boundAiKeyId: key.id,
+              boundUserId: payload.userId,
+              boundAt: new Date(),
+            },
+          });
+
+          return key;
+        });
+        aiKey = txResult;
+      } else {
+        aiKey = await db.aIKey.create({
           data: createData,
           include: { tier: { select: { name: true, displayName: true } } },
         });
-
-        await tx.copilotAccount.update({
-          where: { id: boundCopilotAccount.id },
-          data: {
-            boundAiKeyId: key.id,
-            boundUserId: payload.userId,
-            boundAt: new Date(),
-          },
-        });
-
-        return key;
-      });
-      aiKey = txResult;
-    } else {
-      aiKey = await db.aIKey.create({
-        data: createData,
-        include: { tier: { select: { name: true, displayName: true } } },
-      });
+      }
+    } catch (dbError: any) {
+      // DB 失败时清理已创建的 new-api token，防止孤立
+      if (newApiTokenId) {
+        try { await deleteNewApiToken(newApiTokenId); } catch (_) {}
+      }
+      if (dbError.message === 'POOL_RACE_CONDITION') {
+        return NextResponse.json({ error: '号池账号已被其他请求抢占，请重试' }, { status: 409 });
+      }
+      throw dbError;
     }
 
     // 获取平台 API 域名配置

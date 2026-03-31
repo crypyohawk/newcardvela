@@ -69,10 +69,10 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: '参数无效' }, { status: 400 });
     }
 
-    // 查询 Key 获取 newApiTokenId 用于同步
+    // 查询 Key 获取 newApiTokenId 和 copilotAccountId 用于同步
     const existingKey = await db.aIKey.findUnique({
       where: { id: keyId },
-      select: { newApiTokenId: true },
+      select: { newApiTokenId: true, copilotAccountId: true },
     });
     if (!existingKey) {
       return NextResponse.json({ error: 'Key 不存在' }, { status: 404 });
@@ -87,6 +87,21 @@ export async function PUT(request: NextRequest) {
       } catch (e: any) {
         console.error('[admin] 同步 new-api 状态失败:', e.message);
       }
+    }
+
+    // 禁用 Key 时解绑号池账号，合并事务防止数据不一致
+    if (status === 'disabled' && existingKey.copilotAccountId) {
+      const [updated] = await db.$transaction([
+        db.aIKey.update({
+          where: { id: keyId },
+          data: { status },
+        }),
+        db.copilotAccount.update({
+          where: { id: existingKey.copilotAccountId },
+          data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
+        }),
+      ]);
+      return NextResponse.json({ success: true, key: updated });
     }
 
     const updated = await db.aIKey.update({
@@ -197,7 +212,7 @@ export async function DELETE(request: NextRequest) {
       if (aiKey.copilotAccountId) {
         await tx.copilotAccount.update({
           where: { id: aiKey.copilotAccountId },
-          data: { boundAiKeyId: null, boundUserId: null, boundAt: null },
+          data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
         });
       }
     });

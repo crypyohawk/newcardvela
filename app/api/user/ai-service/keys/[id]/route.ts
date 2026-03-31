@@ -82,19 +82,27 @@ export async function PUT(
       }
     }
 
+    // 禁用 Key 时解绑号池账号，合并事务防止数据不一致
+    if (body.status === 'disabled' && aiKey.copilotAccountId) {
+      const [updated] = await db.$transaction([
+        db.aIKey.update({
+          where: { id: params.id },
+          data: updateData,
+          include: { tier: { select: { name: true, displayName: true } } },
+        }),
+        db.copilotAccount.update({
+          where: { id: aiKey.copilotAccountId },
+          data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
+        }),
+      ]);
+      return NextResponse.json({ success: true, key: updated });
+    }
+
     const updated = await db.aIKey.update({
       where: { id: params.id },
       data: updateData,
       include: { tier: { select: { name: true, displayName: true } } },
     });
-
-    // 禁用 Key 时解绑号池账号，启用时不自动重新绑定（需创建新 Key）
-    if (body.status === 'disabled' && aiKey.copilotAccountId) {
-      await db.copilotAccount.update({
-        where: { id: aiKey.copilotAccountId },
-        data: { boundAiKeyId: null, boundUserId: null, boundAt: null },
-      });
-    }
 
     return NextResponse.json({ success: true, key: updated });
   } catch (error: any) {
@@ -145,7 +153,7 @@ export async function DELETE(
       if (aiKey.copilotAccountId) {
         await tx.copilotAccount.update({
           where: { id: aiKey.copilotAccountId },
-          data: { boundAiKeyId: null, boundUserId: null, boundAt: null },
+          data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
         });
       }
     });
