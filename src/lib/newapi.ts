@@ -181,8 +181,11 @@ async function readTokenFromDb(name: string): Promise<{ id: number; key: string 
     const result = await readTokenFromRemoteDb(name);
     if (result) return result;
   }
-  // 回退到 SQLite（同机部署场景）
-  return readTokenFromSqlite(name);
+
+  // 不再默认回退到 SQLite。
+  // 服务器上的 better-sqlite3 原生模块可能直接导致进程崩溃（segmentation fault），
+  // 因此这里只保留远程数据库读取；本地部署优先走 new-api HTTP API 查询。
+  return null;
 }
 
 /**
@@ -239,24 +242,34 @@ export async function createNewApiToken(params: {
         return { id: detail.id, key };
       }
     } catch (e: any) {
-      console.warn('[newapi] GET token detail failed, falling back to DB:', e.message);
+      console.warn('[newapi] GET token detail failed, trying search API:', e.message);
     }
   }
 
-  // 策略 3：从数据库读取（远程DB → SQLite）
-  // 等待数据写入
+  // 策略 3：通过搜索 API 先按名称找到 token，再查详情。
   await new Promise(r => setTimeout(r, 300));
+  const searchedTokenId = await findNewApiTokenIdByName(params.name);
+  if (searchedTokenId) {
+    const detail = await getNewApiTokenDetail(searchedTokenId);
+    if (detail.key) {
+      const key = detail.key.startsWith('sk-') ? detail.key : `sk-${detail.key}`;
+      console.log(`[newapi] createToken from search API: id=${detail.id}, key=${key.slice(0,8)}...`);
+      return { id: detail.id, key };
+    }
+  }
+
+  // 策略 4：远程数据库读取（仅限显式配置了 NEW_API_DB_URL 的场景）
   const fromDb = await readTokenFromDb(params.name);
   if (fromDb) {
-    console.log(`[newapi] createToken from DB: id=${fromDb.id}, key=${fromDb.key.slice(0, 8)}...${fromDb.key.slice(-4)}`);
+    console.log(`[newapi] createToken from remote DB: id=${fromDb.id}, key=${fromDb.key.slice(0, 8)}...${fromDb.key.slice(-4)}`);
     return fromDb;
   }
 
   // 所有策略都失败
   throw new Error(
     'new-api 创建 token 成功但无法获取 key。' +
-    `token ID=${tokenId || '未知'}。` +
-    '请检查 GET /api/token/:id 是否正常，或配置 NEW_API_DB_URL / NEW_API_SQLITE_PATH'
+    `token ID=${tokenId || searchedTokenId || '未知'}。` +
+    '请检查 GET /api/token/:id、/api/token/search 是否正常，或配置 NEW_API_DB_URL'
   );
 }
 
@@ -265,11 +278,7 @@ export async function createNewApiToken(params: {
  * 先尝试数据库，再尝试 API
  */
 export async function findNewApiTokenIdByName(name: string): Promise<number | null> {
-  // 尝试数据库
-  const fromDb = await readTokenFromDb(name);
-  if (fromDb) return fromDb.id;
-
-  // 回退到 API 搜索
+  // 优先走 API 搜索，避免本地 SQLite 原生模块导致进程崩溃。
   try {
     const data = await newApiRequest(`/api/token/search?keyword=${encodeURIComponent(name)}`);
     const items = data.data?.items || data.data || [];
@@ -278,8 +287,11 @@ export async function findNewApiTokenIdByName(name: string): Promise<number | nu
     return token ? token.id : null;
   } catch (e: any) {
     console.error('[newapi] 查找 token ID 失败:', e.message);
-    return null;
   }
+
+  // 最后回退到远程数据库，不再走 SQLite。
+  const fromDb = await readTokenFromDb(name);
+  return fromDb ? fromDb.id : null;
 }
 
 /**
