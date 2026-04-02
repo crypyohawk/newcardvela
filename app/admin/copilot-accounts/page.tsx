@@ -590,7 +590,7 @@ export default function CopilotAccountsPage() {
           <h3 className="font-semibold mb-2">使用步骤</h3>
           <ol className="list-decimal list-inside space-y-1">
             <li>添加 Copilot Pro 账号（GitHub ID + Token）</li>
-            <li>在 <a href="https://api.cardvela.com/console/channel" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">new-api 渠道管理</a> 创建 OpenAI 类型渠道（地址填 <code className="bg-gray-200 px-1 rounded">http://127.0.0.1:4141</code>）</li>
+            <li>在 <a href="https://api.cardvela.com/console/channel" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">new-api 渠道管理</a> 创建 OpenAI 类型渠道（地址填 <code className="bg-gray-200 px-1 rounded">http://172.17.0.1:4141</code>）</li>
             <li>回到此页面，点击「绑定渠道」将账号关联到 new-api 渠道</li>
             <li>服务器上运行 <code className="bg-gray-200 px-1 rounded">copilot-pool.sh start</code> 启动所有 copilot-api 实例</li>
             <li>用户通过 new-api 的 sk-xxx 密钥即可调用 Copilot 模型</li>

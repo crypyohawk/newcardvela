@@ -36,6 +36,9 @@ const COPILOT_MODELS = [
 
 const COPILOT_PORT_BASE = 4141;
 
+// Docker 容器内需要用宿主机 IP（docker0 网桥），不能用 127.0.0.1
+const COPILOT_API_HOST = process.env.COPILOT_API_HOST || '172.17.0.1';
+
 /**
  * GET /api/admin/copilot-accounts/sync
  * 获取 new-api 现有渠道列表（供前端选择绑定）
@@ -91,7 +94,7 @@ export async function POST(request: NextRequest) {
       // 更新 new-api 渠道配置
       await updateNewApiChannel(body.channelId, {
         name: `copilot-${account.githubId}`,
-        baseUrl: `http://127.0.0.1:${port}`,
+        baseUrl: `http://${COPILOT_API_HOST}:${port}`,
         key: 'sk-copilot',
         models: COPILOT_MODELS,
         group: 'copilot',
@@ -136,7 +139,7 @@ export async function POST(request: NextRequest) {
 
           await updateNewApiChannel(account.newApiChannelId!, {
             name: `copilot-${account.githubId}`,
-            baseUrl: `http://127.0.0.1:${port}`,
+            baseUrl: `http://${COPILOT_API_HOST}:${port}`,
             key: 'sk-copilot',
             models: COPILOT_MODELS,
             group: 'copilot',
