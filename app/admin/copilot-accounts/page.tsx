@@ -238,7 +238,8 @@ export default function CopilotAccountsPage() {
     }
   };
 
-  const activeCount = accounts.filter(a => a.status === 'active').length;
+  // 用 boundAiKeyId 判断是否已绑定（比 status 字段更可靠）
+  const idleCount = accounts.filter(a => !a.boundAiKeyId && a.status !== 'inactive').length;
   const boundCount = accounts.filter(a => a.boundAiKeyId).length;
   const syncedCount = accounts.filter(a => a.newApiChannelId).length;
   const totalQuotaUsed = accounts.reduce((sum, a) => sum + a.quotaUsed, 0);
@@ -292,7 +293,7 @@ export default function CopilotAccountsPage() {
           <div>
             <h1 className="text-2xl font-bold">Copilot 账号池管理</h1>
             <p className="text-gray-500 text-sm mt-1">
-              共 {accounts.length} 个账号 · {activeCount} 个空闲 · {boundCount} 个已绑定 · {syncedCount} 个已绑渠道 · 本月总消耗 ${totalQuotaUsed.toFixed(2)}
+              共 {accounts.length} 个账号 · {idleCount} 个空闲 · {boundCount} 个已绑定 · {syncedCount} 个已绑渠道 · 本月总消耗 ${totalQuotaUsed.toFixed(2)}
             </p>
           </div>
           <div className="flex gap-2">
@@ -474,14 +475,15 @@ export default function CopilotAccountsPage() {
                   <td className="px-4 py-3">{account.githubId}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded text-sm ${
-                      account.status === 'active' ? 'bg-green-100 text-green-800' :
-                      account.status === 'bound' ? 'bg-blue-100 text-blue-800' :
+                      account.boundAiKeyId ? 'bg-blue-100 text-blue-800' :
                       account.status === 'inactive' ? 'bg-gray-100 text-gray-800' :
-                      'bg-red-100 text-red-800'
+                      account.status === 'error' ? 'bg-red-100 text-red-800' :
+                      'bg-green-100 text-green-800'
                     }`}>
-                      {account.status === 'active' ? '空闲' :
-                       account.status === 'bound' ? '已绑定' :
-                       account.status}
+                      {account.boundAiKeyId ? '已绑定' :
+                       account.status === 'inactive' ? '已禁用' :
+                       account.status === 'error' ? '异常' :
+                       '空闲'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm">
@@ -547,12 +549,18 @@ export default function CopilotAccountsPage() {
                     {account.lastUsed ? new Date(account.lastUsed).toLocaleString() : '从未'}
                   </td>
                   <td className="px-4 py-3 space-x-2">
-                    <button
-                      onClick={() => handleStatusChange(account.id, account.status === 'active' ? 'inactive' : 'active')}
-                      className="text-blue-600 hover:text-blue-800"
-                    >
-                      {account.status === 'active' ? '禁用' : '启用'}
-                    </button>
+                    {account.boundAiKeyId ? (
+                      <span className="text-gray-400 text-sm" title="已绑定 Key，需用户删除 Key 后才能操作">
+                        禁用
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleStatusChange(account.id, account.status === 'inactive' ? 'active' : 'inactive')}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        {account.status === 'inactive' ? '启用' : '禁用'}
+                      </button>
+                    )}
                     <button
                       onClick={() => handleResetQuota(account.id)}
                       className="text-yellow-600 hover:text-yellow-800"

@@ -27,7 +27,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
 
     const updateData: any = {};
-    if (status) updateData.status = status;
+    if (status) {
+      // 如果账号已绑定 Key，不允许直接改 status（需要用户先删除 Key 释放绑定）
+      const existing = await prisma.copilotAccount.findUnique({ where: { id } });
+      if (existing?.boundAiKeyId && status !== existing.status) {
+        return NextResponse.json({ error: '该账号已绑定 Key，无法手动更改状态。用户删除 Key 后会自动释放' }, { status: 400 });
+      }
+      updateData.status = status;
+    }
     if (quotaLimit !== undefined) updateData.quotaLimit = parseFloat(quotaLimit);
 
     const account = await prisma.copilotAccount.update({
