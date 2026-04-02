@@ -6,15 +6,32 @@ import {
   getNewApiChannels,
 } from '@/lib/newapi';
 
-// copilot-api 支持的主要模型
+// copilot-api 支持的主要模型（基于 copilot-api 0.7.0 实际返回）
 const COPILOT_MODELS = [
+  // Claude
   'claude-sonnet-4',
-  'claude-opus-4',
+  'claude-sonnet-4.5',
+  'claude-sonnet-4.6',
+  'claude-opus-4.5',
+  'claude-opus-4.6',
+  'claude-opus-4.6-fast',
+  'claude-haiku-4.5',
+  // GPT
   'gpt-4o',
+  'gpt-4o-mini',
   'gpt-4',
+  'gpt-4.1',
+  'gpt-5.1',
+  'gpt-5.2',
+  'gpt-5.4',
+  'gpt-5.4-mini',
+  'gpt-5-mini',
+  // Gemini
   'gemini-2.5-pro',
-  'o3-mini',
-  'o4-mini',
+  'gemini-3-flash-preview',
+  'gemini-3.1-pro-preview',
+  // Grok
+  'grok-code-fast-1',
 ].join(',');
 
 const COPILOT_PORT_BASE = 4141;
