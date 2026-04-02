@@ -1,47 +1,21 @@
-===== 修复 Key 创建 502 / SQLite 崩溃 (2026-04-01) =====
+========================================
+  服务器更新命令 - 手动绑定卡片功能
+  2026-04-02
+========================================
 
-已确认事实:
-  1. NEW_API_ADMIN_TOKEN 有效
-  2. .env.local / .env.production 覆盖问题已清理
-  3. cron 已恢复正常，可返回 {"message":"无新日志"}
-  4. 当前真正根因是 better-sqlite3 在服务器上触发 Segmentation fault
+# 1. 进入项目目录拉取最新代码
+cd /opt/cardvela
+git pull origin main
 
-现象:
-  - 日志先出现: [newapi] createToken API response: {"message":"","success":true}
-  - 随后进程崩溃: Segmentation fault (core dumped)
-  - 前端收到 nginx 返回的 HTML 502
+# 2. 重新构建前端（因为改了页面组件）
+npx next build
 
-原因:
-  创建 token 已成功，但代码随后回退到 SQLite 读取完整 key。
-  服务器上的 better-sqlite3 原生模块直接把 Next.js 进程打崩。
+# 3. 重启应用让后端 API 生效
+pm2 restart cardvela --update-env
 
-本地代码已修复:
-  - createNewApiToken 改为 API 优先，不再默认走 SQLite 回退
-  - findNewApiTokenIdByName 改为 API 优先
-  - readTokenFromDb 不再默认触发 SQLite
+# 4. 检查是否启动成功
+pm2 logs cardvela --nostream --lines 20
 
-服务器执行步骤:
-
-  # 1. 拉最新修复代码
-  cd ~/cardvela
-  git pull origin main
-
-  # 2. 重建并重启
-  npm run build
-  pm2 delete cardvela
-  pm2 start npm --name cardvela -- start
-  pm2 save
-
-  # 3. 等 10 秒后验证 cron 仍正常
-  sleep 10
-  curl "http://localhost:3000/api/cron/sync-usage?secret=CardVela-MonthlyFee-2026-Secret"
-
-  # 4. 再去网页测试创建 Key
-
-一键执行:
-
-  cd ~/cardvela && git pull origin main && npm run build && pm2 delete cardvela && pm2 start npm --name cardvela -- start && pm2 save && sleep 10 && curl "http://localhost:3000/api/cron/sync-usage?secret=CardVela-MonthlyFee-2026-Secret"
-
-如果还要继续看日志:
-
-  pm2 logs cardvela --lines 30
+# 如果 build 报错，先装一下依赖再 build：
+# npm install
+# npx next build

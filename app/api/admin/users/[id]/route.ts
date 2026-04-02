@@ -5,6 +5,28 @@ import { prisma } from '../../../../../src/lib/prisma';
 import { verifyAdmin, adminError } from '../../../../../src/lib/adminAuth';
 import { getCardDetail } from '../../../../../src/lib/gsalary';
 
+function mapUpstreamCardStatus(status?: string | null) {
+  switch ((status || '').toUpperCase()) {
+    case 'ACTIVE':
+      return 'active';
+    case 'FROZEN':
+      return 'frozen';
+    case 'CANCELLED':
+    case 'CANCELED':
+      return 'cancelled';
+    case 'INACTIVE':
+      return 'inactive';
+    default:
+      return 'pending';
+  }
+}
+
+function extractCardLast4(upstreamCard: any) {
+  const maskCardNumber = upstreamCard?.mask_card_number || upstreamCard?.card_no || '';
+  const matched = String(maskCardNumber).match(/(\d{4})$/);
+  return matched ? matched[1] : null;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -106,6 +128,110 @@ export async function GET(
         createdAt: k.createdAt,
       })),
       aiStats,
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const admin = await verifyAdmin(request);
+  if (!admin) return adminError('未授权');
+
+  try {
+    const body = await request.json();
+    const { action, gsalaryCardId, cardTypeId } = body;
+
+    if (action !== 'bindExistingCard') {
+      return NextResponse.json({ error: '未知操作' }, { status: 400 });
+    }
+
+    if (!gsalaryCardId || !cardTypeId) {
+      return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
+    }
+
+    const trimmedCardId = String(gsalaryCardId).trim();
+    if (!trimmedCardId || /[\/\\\.]{2}/.test(trimmedCardId)) {
+      return NextResponse.json({ error: '卡 ID 格式无效' }, { status: 400 });
+    }
+
+    const [user, cardType, existedCard] = await Promise.all([
+      prisma.user.findUnique({ where: { id: params.id } }),
+      prisma.cardType.findUnique({ where: { id: cardTypeId } }),
+      prisma.userCard.findFirst({
+        where: { gsalaryCardId: trimmedCardId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+              email: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    if (!user) {
+      return NextResponse.json({ error: '用户不存在' }, { status: 404 });
+    }
+
+    if (!cardType) {
+      return NextResponse.json({ error: '卡类型不存在' }, { status: 404 });
+    }
+
+    if (existedCard) {
+      return NextResponse.json({
+        error: `该卡已绑定到用户 ${existedCard.user.username} (${existedCard.user.email})`,
+      }, { status: 409 });
+    }
+
+    const upstreamCard = await getCardDetail(trimmedCardId);
+    const cardNoLast4 = extractCardLast4(upstreamCard);
+    const balance = Number(upstreamCard?.available_balance ?? upstreamCard?.balance ?? 0) || 0;
+    const status = mapUpstreamCardStatus(upstreamCard?.status);
+
+    const createdAt = upstreamCard?.create_time ? new Date(upstreamCard.create_time) : null;
+    const bindData: any = {
+      userId: user.id,
+      cardTypeId: cardType.id,
+      gsalaryCardId: trimmedCardId,
+      cardNoLast4,
+      balance,
+      status,
+      openFee: cardType.openFee,
+    };
+
+    if (createdAt && !Number.isNaN(createdAt.getTime())) {
+      bindData.createdAt = createdAt;
+    }
+
+    const card = await prisma.userCard.create({
+      data: bindData,
+      include: {
+        cardType: {
+          select: {
+            id: true,
+            name: true,
+            cardBin: true,
+          },
+        },
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      card,
+      upstreamCard: {
+        cardId: trimmedCardId,
+        status: upstreamCard?.status || null,
+        balance,
+        cardNoLast4,
+        createTime: upstreamCard?.create_time || null,
+      },
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

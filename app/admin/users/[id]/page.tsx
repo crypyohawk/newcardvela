@@ -1,8 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
+
+interface CardTypeOption {
+  id: string;
+  name: string;
+  cardBin: string;
+  openFee: number;
+  isActive: boolean;
+}
 
 interface UserDetail {
   id: string;
@@ -63,18 +71,23 @@ interface AIStats {
 
 export default function UserDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const [user, setUser] = useState<UserDetail | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<'cards' | 'transactions' | 'ai'>('cards');
   const [aiKeys, setAiKeys] = useState<AIKeyInfo[]>([]);
   const [aiStats, setAiStats] = useState<AIStats | null>(null);
+  const [cardTypes, setCardTypes] = useState<CardTypeOption[]>([]);
+  const [bindForm, setBindForm] = useState({ gsalaryCardId: '', cardTypeId: '' });
+  const [binding, setBinding] = useState(false);
+  const [bindError, setBindError] = useState('');
+  const [bindSuccess, setBindSuccess] = useState('');
 
   const getToken = () => localStorage.getItem('token') || '';
 
   useEffect(() => {
     fetchUserDetail();
+    fetchCardTypes();
   }, []);
 
   const fetchUserDetail = async () => {
@@ -92,6 +105,66 @@ export default function UserDetailPage() {
       console.error('获取用户详情失败:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCardTypes = async () => {
+    try {
+      const res = await fetch('/api/admin/card-types', {
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+      });
+      const data = await res.json();
+      const options = (data.cardTypes || []) as CardTypeOption[];
+      setCardTypes(options);
+      setBindForm((current) => {
+        if (current.cardTypeId || options.length === 0) {
+          return current;
+        }
+        return { ...current, cardTypeId: options[0].id };
+      });
+    } catch (error) {
+      console.error('获取卡类型失败:', error);
+    }
+  };
+
+  const handleBindCard = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!bindForm.gsalaryCardId.trim() || !bindForm.cardTypeId) {
+      setBindError('请填写上游卡 ID 并选择卡类型');
+      return;
+    }
+
+    try {
+      setBinding(true);
+      setBindError('');
+      setBindSuccess('');
+
+      const res = await fetch(`/api/admin/users/${params.id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          action: 'bindExistingCard',
+          gsalaryCardId: bindForm.gsalaryCardId.trim(),
+          cardTypeId: bindForm.cardTypeId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || '绑定失败');
+      }
+
+      setBindSuccess(`绑定成功：卡尾号 ${data?.upstreamCard?.cardNoLast4 || '未知'}，余额 $${Number(data?.upstreamCard?.balance || 0).toFixed(2)}`);
+      setBindForm((current) => ({ ...current, gsalaryCardId: '' }));
+      await fetchUserDetail();
+    } catch (error: any) {
+      setBindError(error.message || '绑定失败');
+    } finally {
+      setBinding(false);
     }
   };
 
@@ -270,7 +343,69 @@ export default function UserDetailPage() {
         {/* 卡片列表 */}
         {activeSection === 'cards' && (
           <div className="bg-slate-800 rounded-xl p-6">
-            <h3 className="text-lg font-bold mb-4">卡片列表</h3>
+            <div className="flex flex-col gap-6">
+              <div>
+                <h3 className="text-lg font-bold mb-4">卡片列表</h3>
+
+                <form onSubmit={handleBindCard} className="bg-slate-900/60 border border-slate-700 rounded-xl p-4 mb-6 space-y-4">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div>
+                      <h4 className="text-base font-semibold">手动绑定上游卡</h4>
+                      <p className="text-sm text-gray-400 mt-1">适用于老用户本地数据丢失，但 GSalary 上游卡仍存在的情况。此操作只补建本地卡记录，不会再次扣费。</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm text-gray-300 mb-2">GSalary 卡 ID</label>
+                      <input
+                        type="text"
+                        value={bindForm.gsalaryCardId}
+                        onChange={(e) => setBindForm((current) => ({ ...current, gsalaryCardId: e.target.value }))}
+                        placeholder="例如：card_xxx"
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-300 mb-2">卡类型</label>
+                      <select
+                        value={bindForm.cardTypeId}
+                        onChange={(e) => setBindForm((current) => ({ ...current, cardTypeId: e.target.value }))}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="">请选择卡类型</option>
+                        {cardTypes.map((cardType) => (
+                          <option key={cardType.id} value={cardType.id}>
+                            {cardType.name} ({cardType.cardBin}){cardType.isActive ? '' : ' [已停用]'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        type="submit"
+                        disabled={binding}
+                        className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed rounded-lg px-4 py-2 font-medium"
+                      >
+                        {binding ? '绑定中...' : '绑定到当前用户'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {bindError && (
+                    <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                      {bindError}
+                    </div>
+                  )}
+
+                  {bindSuccess && (
+                    <div className="text-sm text-green-400 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
+                      {bindSuccess}
+                    </div>
+                  )}
+                </form>
+              </div>
+
             {user.userCards.length === 0 ? (
               <p className="text-gray-400 text-center py-8">该用户暂无卡片</p>
             ) : (
@@ -289,7 +424,10 @@ export default function UserDetailPage() {
                     <tr key={card.id} className="border-b border-slate-700">
                       <td className="py-3">{card.cardType?.name || '-'}</td>
                       <td className="py-3 font-mono text-sm">
-                        {card.cardNoLast4 ? `**** **** **** ${card.cardNoLast4}` : '-'}
+                        <div>{card.cardNoLast4 ? `**** **** **** ${card.cardNoLast4}` : '-'}</div>
+                        {card.gsalaryCardId && (
+                          <div className="text-xs text-gray-500 mt-1">ID: {card.gsalaryCardId}</div>
+                        )}
                       </td>
                       <td className="py-3 text-green-400">${card.balance.toFixed(2)}</td>
                       <td className="py-3">{getCardStatusLabel(card.status)}</td>
@@ -301,6 +439,7 @@ export default function UserDetailPage() {
                 </tbody>
               </table>
             )}
+            </div>
           </div>
         )}
 
