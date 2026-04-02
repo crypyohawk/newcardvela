@@ -19,3 +19,117 @@ pm2 logs cardvela --nostream --lines 20
 # 如果 build 报错，先装一下依赖再 build：
 # npm install
 # npx next build
+
+
+========================================
+  new-api 域名排查与修复命令
+  2026-04-02
+========================================
+
+# 当前已确认：
+# - http://127.0.0.1:3001/ 正常
+# - http://127.0.0.1:3001/console 正常
+# - http://127.0.0.1:3001/console/channel 正常
+# - 说明 new-api 本体没问题
+# - 问题大概率在 nginx 的公网域名转发，尤其是 https / 443
+
+# 1. 继续确认本机 nginx 对 api.cardvela.com 的 HTTP 转发是否正确
+curl -I -H "Host: api.cardvela.com" http://127.0.0.1/console
+curl -I -H "Host: api.cardvela.com" http://127.0.0.1/console/channel
+
+# 2. 直接检查公网 HTTP / HTTPS
+curl -I http://api.cardvela.com/console
+curl -I https://api.cardvela.com/console
+
+# 3. 正确查看 nginx 当前生效配置
+nginx -T | grep -nE "api.cardvela.com|cardvela.com|proxy_pass|server_name|listen 443"
+
+# 4. 如果 http 正常但 https 404，就给 api.cardvela.com 单独补 nginx 反代
+cat > /etc/nginx/conf.d/cardvela.conf <<'EOF'
+server {
+  listen 80;
+  server_name cardvela.com www.cardvela.com;
+
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection 'upgrade';
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_cache_bypass $http_upgrade;
+  }
+}
+
+server {
+  listen 80;
+  server_name api.cardvela.com;
+
+  location / {
+    proxy_pass http://127.0.0.1:3001;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection 'upgrade';
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_cache_bypass $http_upgrade;
+  }
+}
+
+server {
+  listen 443 ssl http2;
+  server_name cardvela.com www.cardvela.com;
+
+  ssl_certificate /etc/letsencrypt/live/cardvela.com/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/cardvela.com/privkey.pem;
+
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection 'upgrade';
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_cache_bypass $http_upgrade;
+  }
+}
+
+server {
+  listen 443 ssl http2;
+  server_name api.cardvela.com;
+
+  ssl_certificate /etc/letsencrypt/live/cardvela.com/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/cardvela.com/privkey.pem;
+
+  location / {
+    proxy_pass http://127.0.0.1:3001;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection 'upgrade';
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_cache_bypass $http_upgrade;
+  }
+}
+EOF
+
+# 5. 测试并重载 nginx
+nginx -t
+systemctl reload nginx
+
+# 6. 重新验证
+curl -I http://api.cardvela.com/console
+curl -I https://api.cardvela.com/console
+
+# 7. 如果浏览器仍然不对，再去 Cloudflare 面板确认：
+# - api.cardvela.com 是否解析到 23.106.142.166
+# - 是否开了橙云代理
+# - 如有缓存问题，可先临时切灰云再测试

@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
         baseUrl: `http://127.0.0.1:${port}`,
         key: 'sk-copilot',
         models: COPILOT_MODELS,
-        group: 'default',
+        group: 'copilot',
         status: 1,
       });
 
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
             baseUrl: `http://127.0.0.1:${port}`,
             key: 'sk-copilot',
             models: COPILOT_MODELS,
-            group: 'default',
+            group: 'copilot',
             status,
           });
 
