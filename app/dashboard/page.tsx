@@ -787,28 +787,30 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-slate-900 text-white">
       {/* 导航栏 */}
       <nav className="bg-slate-800 border-b border-slate-700">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="text-xl font-bold">CardVela卡维拉</Link>
+        <div className="max-w-7xl mx-auto px-4 py-2 flex flex-col gap-2 sm:flex-row sm:h-16 sm:items-center sm:justify-between sm:py-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Link href="/" className="text-xl font-bold">CardVela卡维拉</Link>
+              {(user.role === 'admin' || user.role === 'ADMIN') && (
+                <Link href="/admin" className="text-purple-400 hover:text-purple-300 font-semibold text-sm">
+                  管理后台
+                </Link>
+              )}
+            </div>
             {supportEmail && (
-              <span className="text-gray-400 text-sm">
+              <span className="text-gray-400 text-xs sm:text-sm hidden sm:inline">
                 客服邮箱：<a href={`mailto:${supportEmail}`} className="text-blue-400 hover:text-blue-300">{supportEmail}</a>
               </span>
             )}
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-300">欢迎, {user.username}</span>
-            {(user.role === 'admin' || user.role === 'ADMIN') && (
-              <Link href="/admin" className="text-purple-400 hover:text-purple-300 font-semibold">
-                管理后台
-              </Link>
-            )}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-gray-300 text-sm">欢迎, {user.username}</span>
             <div className="flex items-center gap-2">
-              <div className="bg-green-600 px-3 py-2 rounded-l-lg">
+              <div className="bg-green-600 px-3 py-1.5 rounded-l-lg">
                 <span className="text-xs text-green-200">账户</span>
                 <span className="font-bold text-sm ml-1">${user.balance.toFixed(2)}</span>
               </div>
-              <div className="bg-blue-600 px-3 py-2">
+              <div className="bg-blue-600 px-3 py-1.5">
                 <span className="text-xs text-blue-200">AI</span>
                 <span className="font-bold text-sm ml-1">${(user.aiBalance ?? 0).toFixed(2)}</span>
               </div>
@@ -817,13 +819,20 @@ export default function DashboardPage() {
                   localStorage.removeItem('token');
                   router.push('/login');
                 }}
-                className="text-gray-400 hover:text-white"
+                className="text-gray-400 hover:text-white text-sm"
               >
                 退出
               </button>
             </div>
           </div>
         </div>
+        {supportEmail && (
+          <div className="sm:hidden max-w-7xl mx-auto px-4 pb-2">
+            <span className="text-gray-400 text-xs">
+              客服邮箱：<a href={`mailto:${supportEmail}`} className="text-blue-400 hover:text-blue-300">{supportEmail}</a>
+            </span>
+          </div>
+        )}
       </nav>
 
       <div className="max-w-7xl mx-auto px-4 py-8">

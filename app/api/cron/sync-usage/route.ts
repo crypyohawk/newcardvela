@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getNewApiLogs } from '../../../../src/lib/newapi';
-import { processUsageLogs } from '../../../../src/lib/usageSync';
+import { getNewApiTokenUsage, updateNewApiToken, quotaToUSD, usdToQuota } from '../../../../src/lib/newapi';
 import { db } from '../../../../src/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -8,7 +7,11 @@ export const maxDuration = 60; // 允许最长 60 秒执行
 
 /**
  * 用量同步定时任务端点
- * 由 crontab 每 5 分钟调用，主动从 new-api 拉取日志并扣费
+ * 由 crontab 每 5 分钟调用
+ * 
+ * 计费逻辑：直接读取 new-api 每个 token 的 used_quota（new-api 已有完整计费规则），
+ * 计算与上次同步的差值，扣除用户 AI 余额。
+ * 不再拉取日志，不再本地建 AIUsageLog，轻量高效。
  * 
  * GET /api/cron/sync-usage?secret=xxx
  */
@@ -27,106 +30,169 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '未授权' }, { status: 401 });
     }
 
-    // 获取上次同步时间戳
-    let lastSyncConfig = await db.systemConfig.findUnique({
-      where: { key: 'usage_sync_last_timestamp' },
-    });
+    console.log(`[cron] 开始同步 Key 用量...`);
 
-    // 默认从 10 分钟前开始拉（首次运行或配置丢失时的安全回退）
-    const tenMinutesAgo = Math.floor(Date.now() / 1000) - 600;
-    let startTimestamp = lastSyncConfig
-      ? parseInt(lastSyncConfig.value, 10)
-      : tenMinutesAgo;
+    // 1. 从 new-api 同步所有 Key 的用量
+    const syncResult = await syncKeyUsages();
 
-    // 安全限制：最多回溯 24 小时，防止首次运行拉太多数据
-    const maxLookback = Math.floor(Date.now() / 1000) - 86400;
-    if (startTimestamp < maxLookback) {
-      startTimestamp = maxLookback;
-    }
-
-    const nowTimestamp = Math.floor(Date.now() / 1000);
-
-    console.log(`[cron] 开始同步用量, 时间范围: ${new Date(startTimestamp * 1000).toISOString()} ~ ${new Date(nowTimestamp * 1000).toISOString()}`);
-
-    // 分页拉取所有日志
-    let allLogs: any[] = [];
-    let page = 0;
-    const pageSize = 100;
-    let hasMore = true;
-
-    while (hasMore) {
-      const result = await getNewApiLogs({
-        startTimestamp,
-        endTimestamp: nowTimestamp,
-        page,
-        pageSize,
-      });
-
-      if (result.logs && result.logs.length > 0) {
-        allLogs = allLogs.concat(result.logs);
-        page++;
-        // 安全上限：最多拉 5000 条（50 页），防止无限循环
-        if (result.logs.length < pageSize || allLogs.length >= 5000) {
-          hasMore = false;
-        }
-      } else {
-        hasMore = false;
-      }
-    }
-
-    console.log(`[cron] 从 new-api 拉取到 ${allLogs.length} 条日志`);
-
-    if (allLogs.length === 0) {
-      // 即使没有日志也更新同步时间戳
-      await db.systemConfig.upsert({
-        where: { key: 'usage_sync_last_timestamp' },
-        update: { value: String(nowTimestamp) },
-        create: { key: 'usage_sync_last_timestamp', value: String(nowTimestamp) },
-      });
-
-      // 即使没有日志也执行自动解绑检查
-      const autoUnbindResult = await autoUnbindIdleAccounts();
-
-      return NextResponse.json({ message: '无新日志', synced: 0, autoUnbind: autoUnbindResult, debug: {
-        lastSyncAt: new Date(startTimestamp * 1000).toISOString(),
-        queriedUntil: new Date(nowTimestamp * 1000).toISOString(),
-      }});
-    }
-
-    // 转换日志格式并处理
-    const formattedLogs = allLogs.map(log => ({
-      id: log.id,
-      token_name: log.token_name,
-      model_name: log.model_name,
-      prompt_tokens: log.prompt_tokens,
-      completion_tokens: log.completion_tokens,
-      channel: log.channel,
-    }));
-
-    const result = await processUsageLogs(formattedLogs);
-
-    // 更新同步时间戳
-    await db.systemConfig.upsert({
-      where: { key: 'usage_sync_last_timestamp' },
-      update: { value: String(nowTimestamp) },
-      create: { key: 'usage_sync_last_timestamp', value: String(nowTimestamp) },
-    });
-
-    console.log(`[cron] 同步完成: synced=${result.synced}, skipped=${result.skipped}, duplicated=${result.duplicated}, cost=$${result.totalCostDeducted}`);
-
-    // === 自动解绑空闲号池账号 ===
+    // 2. 自动解绑空闲号池账号
     const autoUnbindResult = await autoUnbindIdleAccounts();
+
+    console.log(`[cron] 同步完成: checked=${syncResult.checked}, synced=${syncResult.synced}, deducted=$${syncResult.totalDeducted}`);
 
     return NextResponse.json({
       success: true,
-      fetched: allLogs.length,
-      ...result,
+      ...syncResult,
       autoUnbind: autoUnbindResult,
     });
   } catch (error: any) {
     console.error('[cron] 用量同步失败:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+}
+
+/**
+ * 从 new-api 同步所有 Key 的用量，按 new-api 的计费规则扣费
+ * 
+ * 原理：new-api 内部已按模型倍率计算每个 token 的 used_quota，
+ * 我们只需读取 used_quota 转换为 USD，与上次记录的 totalUsed 做差值即为新消费。
+ */
+async function syncKeyUsages() {
+  const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
+  const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
+
+  // 查所有有 new-api token 且未作废的 Key（含 disabled，因为可能还有未结算的消费）
+  const keys = await db.aIKey.findMany({
+    where: {
+      newApiTokenId: { not: null },
+      status: { in: ['active', 'disabled'] },
+    },
+    select: {
+      id: true, userId: true, newApiTokenId: true, copilotAccountId: true,
+      totalUsed: true, monthUsed: true, monthlyLimit: true,
+      status: true, lastSyncAt: true,
+    },
+  });
+
+  let synced = 0;
+  let totalDeducted = 0;
+  const errors: string[] = [];
+
+  for (const key of keys) {
+    try {
+      // 1. 从 new-api 获取 token 用量
+      const usage = await getNewApiTokenUsage(key.newApiTokenId!);
+      const usedUSD = quotaToUSD(usage.usedQuota);
+
+      // 2. 计算新增消费（与上次同步的差值）
+      const delta = Math.round((usedUSD - key.totalUsed) * 10000) / 10000;
+
+      if (delta < 0.0001) {
+        // 无新消费，仅刷新 token 可用配额（确保用户充值后能用）
+        if (key.status === 'active') {
+          const user = await db.user.findUnique({ where: { id: key.userId }, select: { aiBalance: true } });
+          if (user) {
+            const newQuota = Math.max(0, usdToQuota(user.aiBalance + creditLimit));
+            try { await updateNewApiToken(key.newApiTokenId!, { remainQuota: newQuota }); } catch (_) {}
+          }
+        }
+        continue;
+      }
+
+      // 3. 跨月自动重置 monthUsed
+      const now = new Date();
+      let currentMonthUsed = key.monthUsed;
+      if (key.lastSyncAt) {
+        if (key.lastSyncAt.getMonth() !== now.getMonth() || key.lastSyncAt.getFullYear() !== now.getFullYear()) {
+          currentMonthUsed = 0;
+        }
+      }
+
+      // 4. 事务：更新 Key 用量 + 从 aiBalance 扣费
+      await db.$transaction(async (tx) => {
+        await tx.aIKey.update({
+          where: { id: key.id },
+          data: {
+            totalUsed: usedUSD,
+            monthUsed: currentMonthUsed + delta,
+            lastUsedAt: new Date(),
+            lastSyncAt: new Date(),
+          },
+        });
+        await tx.user.update({
+          where: { id: key.userId },
+          data: { aiBalance: { decrement: delta } },
+        });
+        // 写入交易记录（$0.01 以上才记录，避免微小噪音）
+        if (delta >= 0.01) {
+          await tx.transaction.create({
+            data: {
+              userId: key.userId,
+              type: 'ai_usage',
+              amount: -delta,
+              status: 'completed',
+            },
+          });
+        }
+      });
+
+      // 5. 追踪号池账号用量（通过 Key 绑定关系）
+      if (key.copilotAccountId) {
+        try {
+          await db.copilotAccount.update({
+            where: { id: key.copilotAccountId },
+            data: {
+              quotaUsed: { increment: delta },
+              lastUsed: new Date(),
+            },
+          });
+        } catch (_) {}
+      }
+
+      synced++;
+      totalDeducted += delta;
+      console.log(`[cron] Key ${key.id}: new-api=$${usedUSD.toFixed(4)}, delta=$${delta.toFixed(4)}`);
+
+      // 6. 刷新 token 可用配额 + 检查余额
+      const user = await db.user.findUnique({ where: { id: key.userId }, select: { aiBalance: true } });
+      if (user) {
+        const newQuota = Math.max(0, usdToQuota(user.aiBalance + creditLimit));
+        try { await updateNewApiToken(key.newApiTokenId!, { remainQuota: newQuota }); } catch (_) {}
+
+        // 余额耗尽：禁用该用户所有活跃 Key
+        if (user.aiBalance <= -creditLimit) {
+          const activeKeys = await db.aIKey.findMany({
+            where: { userId: key.userId, status: 'active' },
+            select: { id: true, newApiTokenId: true },
+          });
+          for (const k of activeKeys) {
+            await db.aIKey.update({ where: { id: k.id }, data: { status: 'disabled' } });
+            if (k.newApiTokenId) {
+              try { await updateNewApiToken(k.newApiTokenId, { status: 2 }); } catch (_) {}
+            }
+          }
+          console.log(`[cron] 用户 ${key.userId} 超出信用额度 (余额 $${user.aiBalance.toFixed(2)})，已禁用所有 Key`);
+        }
+      }
+
+      // 7. 月限额检查
+      if (key.monthlyLimit && currentMonthUsed + delta > key.monthlyLimit && key.status === 'active') {
+        await db.aIKey.update({ where: { id: key.id }, data: { status: 'disabled' } });
+        try { await updateNewApiToken(key.newApiTokenId!, { status: 2 }); } catch (_) {}
+        console.log(`[cron] Key ${key.id} 超出月限额 $${key.monthlyLimit}，已禁用`);
+      }
+    } catch (e: any) {
+      errors.push(`Key ${key.id}: ${e.message}`);
+      console.error(`[cron] 同步 Key ${key.id} 失败:`, e.message);
+    }
+  }
+
+  return {
+    checked: keys.length,
+    synced,
+    totalDeducted: Math.round(totalDeducted * 10000) / 10000,
+    errors: errors.length > 0 ? errors : undefined,
+  };
 }
 
 /**
@@ -152,7 +218,7 @@ async function autoUnbindIdleAccounts() {
     const keyIds = boundAccounts.map(a => a.boundAiKeyId!);
     const keys = await db.aIKey.findMany({
       where: { id: { in: keyIds } },
-      select: { id: true, lastUsedAt: true, status: true },
+      select: { id: true, lastUsedAt: true, status: true, newApiTokenId: true },
     });
     const keyMap = Object.fromEntries(keys.map(k => [k.id, k]));
 
@@ -182,6 +248,15 @@ async function autoUnbindIdleAccounts() {
             }),
           ] : []),
         ]);
+
+        // 同步禁用 new-api token，防止本地 disabled 但网关仍可调用
+        if (key && key.newApiTokenId && key.status !== 'revoked') {
+          try {
+            await updateNewApiToken(key.newApiTokenId, { status: 2 });
+          } catch (e: any) {
+            console.warn(`[auto-unbind] 禁用 new-api token 失败: key=${account.boundAiKeyId}, err=${e.message}`);
+          }
+        }
         console.log(`[auto-unbind] 解绑空闲号池: account=${account.githubId}, key=${account.boundAiKeyId}, 绑定于 ${account.boundAt?.toISOString()}`);
         unboundCount++;
       }

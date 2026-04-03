@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../../src/lib/auth';
-import { updateNewApiToken, deleteNewApiToken } from '../../../../../../src/lib/newapi';
+import { updateNewApiToken, deleteNewApiToken, usdToQuota } from '../../../../../../src/lib/newapi';
 
 // 获取单个 Key 详情
 export async function GET(
@@ -64,12 +64,77 @@ export async function PUT(
       }
     }
     if (body.status !== undefined && ['active', 'disabled'].includes(body.status)) {
-      // 重新启用 Key 时必须检查 AI 余额（非主余额）
       const isCopilotPool = aiKey.tier.channelGroup === 'copilot' || aiKey.tier.provider?.type === 'copilot-pool';
-      if (body.status === 'active') {
-        if (isCopilotPool && aiKey.status === 'disabled') {
-          return NextResponse.json({ error: '号池 Key 禁用后不可重新启用，请直接创建新的 Key' }, { status: 400 });
+
+      // === 启用号池 Key：自动绑定空闲号池账号 ===
+      if (body.status === 'active' && isCopilotPool && aiKey.status === 'disabled') {
+        const user = await db.user.findUnique({ where: { id: payload.userId }, select: { aiBalance: true } });
+        if (!user || user.aiBalance <= 0) {
+          return NextResponse.json({ error: 'AI 余额不足，无法启用 Key，请先从账户余额转入 AI 钱包' }, { status: 400 });
         }
+
+        // 查找空闲号池账号（用量最低优先）
+        const idleAccount = await db.copilotAccount.findFirst({
+          where: { status: 'active', boundAiKeyId: null },
+          orderBy: { quotaUsed: 'asc' },
+        });
+        if (!idleAccount) {
+          return NextResponse.json({ error: '号池暂无空闲账号，请稍后再试或联系管理员' }, { status: 400 });
+        }
+
+        // 事务绑定（防并发竞争）
+        try {
+          const txResult = await db.$transaction(async (tx) => {
+            const account = await tx.copilotAccount.findUnique({
+              where: { id: idleAccount.id },
+            });
+            if (!account || account.boundAiKeyId) {
+              throw new Error('POOL_RACE_CONDITION');
+            }
+
+            const updatedKey = await tx.aIKey.update({
+              where: { id: params.id },
+              data: { status: 'active', copilotAccountId: idleAccount.id },
+              include: { tier: { select: { name: true, displayName: true } } },
+            });
+
+            await tx.copilotAccount.update({
+              where: { id: idleAccount.id },
+              data: {
+                status: 'bound',
+                boundAiKeyId: params.id,
+                boundUserId: payload.userId,
+                boundAt: new Date(),
+              },
+            });
+
+            return updatedKey;
+          });
+
+          // 同步启用 new-api token + 刷新配额
+          if (aiKey.newApiTokenId) {
+            try {
+              const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
+              const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
+              const freshQuota = usdToQuota(Math.max(user.aiBalance + creditLimit, creditLimit));
+              await updateNewApiToken(aiKey.newApiTokenId, { status: 1, remainQuota: freshQuota });
+            } catch (e: any) {
+              console.error('同步 new-api 启用失败:', e.message);
+            }
+          }
+
+          console.log(`[pool-rebind] Key ${params.id} 重新绑定号池账号 ${idleAccount.githubId}`);
+          return NextResponse.json({ success: true, key: txResult });
+        } catch (e: any) {
+          if (e.message === 'POOL_RACE_CONDITION') {
+            return NextResponse.json({ error: '号池账号已被其他请求抢占，请重试' }, { status: 409 });
+          }
+          throw e;
+        }
+      }
+
+      // === 启用非号池 Key：普通余额检查 ===
+      if (body.status === 'active') {
         const user = await db.user.findUnique({ where: { id: payload.userId }, select: { aiBalance: true } });
         if (!user || user.aiBalance <= 0) {
           return NextResponse.json({ error: 'AI 余额不足，无法启用 Key，请先从账户余额转入 AI 钱包' }, { status: 400 });

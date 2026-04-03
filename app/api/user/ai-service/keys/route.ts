@@ -176,12 +176,17 @@ export async function POST(request: NextRequest) {
     }
 
     // 在 new-api 创建 token，获取 new-api 实际生成的 key
+    // 配额 = 用户 AI 余额 + 信用额度（cron 会每 5 分钟刷新，确保余额变动后同步）
     let newApiTokenId: number | null = null;
     let apiKey: string = '';
     const tokenName = obfuscateKeyName(payload.userId, keyName.trim());
     try {
-      const maxQuota = monthlyLimit ? Math.min(monthlyLimit, user.aiBalance * 2) : Math.min(user.aiBalance * 2, 100);
-      const quotaAmount = usdToQuota(maxQuota);
+      const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
+      const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
+      let maxQuotaUSD = user.aiBalance + creditLimit;
+      if (monthlyLimit) maxQuotaUSD = Math.min(maxQuotaUSD, Number(monthlyLimit));
+      maxQuotaUSD = Math.max(maxQuotaUSD, creditLimit); // 至少给信用额度
+      const quotaAmount = usdToQuota(maxQuotaUSD);
       const result = await createNewApiToken({
         name: tokenName,
         remainQuota: quotaAmount,
@@ -189,7 +194,7 @@ export async function POST(request: NextRequest) {
       });
       newApiTokenId = result.id;
       apiKey = result.key;  // 使用 new-api 实际返回的 key
-      console.log(`[key-create] success: id=${result.id}, key=${apiKey.slice(0,8)}...${apiKey.slice(-4)}`);
+      console.log(`[key-create] success: id=${result.id}, key=${apiKey.slice(0,8)}...${apiKey.slice(-4)}, quota=$${maxQuotaUSD.toFixed(2)}`);
     } catch (e: any) {
       console.error('new-api 创建 token 失败:', e.message, e.stack);
       return NextResponse.json({

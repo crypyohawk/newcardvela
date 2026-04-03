@@ -15,10 +15,6 @@ export async function GET(request: NextRequest) {
     const user = await db.user.findUnique({ where: { id: payload.userId } });
     if (!user) return NextResponse.json({ error: '用户不存在' }, { status: 404 });
 
-    // 本月起始
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
     // Key 统计（排除已吊销的 Key）
     const keys = await db.aIKey.findMany({
       where: { userId: payload.userId, status: { not: 'revoked' } },
@@ -29,23 +25,13 @@ export async function GET(request: NextRequest) {
     const monthUsed = keys.reduce((sum, k) => sum + k.monthUsed, 0);
     const totalUsed = keys.reduce((sum, k) => sum + k.totalUsed, 0);
 
-    // 本月日志统计
-    const monthLogs = await db.aIUsageLog.aggregate({
-      where: {
-        userId: payload.userId,
-        createdAt: { gte: monthStart },
-      },
-      _sum: { cost: true, inputTokens: true, outputTokens: true },
-      _count: true,
-    });
-
     return NextResponse.json({
       balance: user.balance,
       aiBalance: user.aiBalance,
-      monthCost: Math.round((monthLogs._sum.cost || 0) * 100) / 100,
+      monthCost: Math.round(monthUsed * 100) / 100,
       totalCost: Math.round(totalUsed * 100) / 100,
-      monthTokens: (monthLogs._sum.inputTokens || 0) + (monthLogs._sum.outputTokens || 0),
-      monthRequests: monthLogs._count,
+      monthTokens: 0,    // 新计费模式不再单独追踪 token 数
+      monthRequests: 0,   // 请求数可在 new-api 后台查看
       totalKeys: keys.length,
       activeKeys,
     });
