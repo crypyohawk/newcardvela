@@ -9,11 +9,16 @@ const NEW_API_COOKIE = process.env.NEW_API_ADMIN_COOKIE || '';
 const NEW_API_USER = process.env.NEW_API_ADMIN_USER || '1';
 const NEW_API_SQLITE_PATH = process.env.NEW_API_SQLITE_PATH || '/home/ubuntu/new-api/data/one-api.db';
 const NEW_API_DB_URL = process.env.NEW_API_DB_URL || '';  // MySQL/PostgreSQL 连接串
+const NEW_API_DISABLE_SQLITE_FALLBACK = process.env.NEW_API_DISABLE_SQLITE_FALLBACK === '1';
 
 interface NewApiResponse<T = any> {
   success: boolean;
   message: string;
   data?: T;
+}
+
+function isMaskedTokenKey(key: string | undefined | null): boolean {
+  return !!key && key.includes('*');
 }
 
 function getNewApiAuthHeaders(): Record<string, string> {
@@ -182,10 +187,17 @@ async function readTokenFromDb(name: string): Promise<{ id: number; key: string 
     if (result) return result;
   }
 
-  // 不再默认回退到 SQLite。
-  // 服务器上的 better-sqlite3 原生模块可能直接导致进程崩溃（segmentation fault），
-  // 因此这里只保留远程数据库读取；本地部署优先走 new-api HTTP API 查询。
+  if (!NEW_API_DISABLE_SQLITE_FALLBACK) {
+    const result = readTokenFromSqlite(name);
+    if (result) return result;
+  }
+
   return null;
+}
+
+export async function getNewApiTokenPlaintextKeyByName(name: string): Promise<string | null> {
+  const result = await readTokenFromDb(name);
+  return result?.key || null;
 }
 
 /**
@@ -222,7 +234,7 @@ export async function createNewApiToken(params: {
   }
 
   // 策略 1：从 POST 响应直接获取 key（部分 new-api 版本返回完整对象）
-  if (data.data && typeof data.data === 'object' && data.data.key) {
+  if (data.data && typeof data.data === 'object' && data.data.key && !isMaskedTokenKey(data.data.key)) {
     const key = data.data.key.startsWith('sk-') ? data.data.key : `sk-${data.data.key}`;
     console.log(`[newapi] createToken from response: id=${data.data.id}, key=${key.slice(0,8)}...`);
     return { id: data.data.id, key };
@@ -237,7 +249,7 @@ export async function createNewApiToken(params: {
   if (tokenId) {
     try {
       const detail = await getNewApiTokenDetail(tokenId);
-      if (detail.key) {
+      if (detail.key && !isMaskedTokenKey(detail.key)) {
         const key = detail.key.startsWith('sk-') ? detail.key : `sk-${detail.key}`;
         console.log(`[newapi] createToken from GET API: id=${detail.id}, key=${key.slice(0,8)}...`);
         return { id: detail.id, key };
@@ -252,7 +264,7 @@ export async function createNewApiToken(params: {
   const searchedTokenId = await findNewApiTokenIdByName(params.name);
   if (searchedTokenId) {
     const detail = await getNewApiTokenDetail(searchedTokenId);
-    if (detail.key) {
+    if (detail.key && !isMaskedTokenKey(detail.key)) {
       const key = detail.key.startsWith('sk-') ? detail.key : `sk-${detail.key}`;
       console.log(`[newapi] createToken from search API: id=${detail.id}, key=${key.slice(0,8)}...`);
       return { id: detail.id, key };
@@ -268,9 +280,9 @@ export async function createNewApiToken(params: {
 
   // 所有策略都失败
   throw new Error(
-    'new-api 创建 token 成功但无法获取 key。' +
+    'new-api 创建 token 成功但无法获取完整 key。' +
     `token ID=${tokenId || searchedTokenId || '未知'}。` +
-    '请检查 GET /api/token/:id、/api/token/search 是否正常，或配置 NEW_API_DB_URL'
+    '请检查 GET /api/token/:id、/api/token/search 是否是否返回脱敏 key，或配置 NEW_API_DB_URL / NEW_API_SQLITE_PATH'
   );
 }
 
@@ -460,6 +472,7 @@ export async function updateNewApiChannel(channelId: number, params: {
   baseUrl?: string;
   key?: string;
   models?: string;
+  modelMapping?: string;
   group?: string;
   weight?: number;
 }): Promise<void> {
@@ -469,6 +482,7 @@ export async function updateNewApiChannel(channelId: number, params: {
   if (params.baseUrl !== undefined) body.base_url = params.baseUrl;
   if (params.key !== undefined) body.key = params.key;
   if (params.models !== undefined) body.models = params.models;
+  if (params.modelMapping !== undefined) body.model_mapping = params.modelMapping;
   if (params.group !== undefined) { body.group = params.group; body.groups = [params.group]; }
   if (params.weight !== undefined) body.weight = params.weight;
   await newApiRequest('/api/channel/', {

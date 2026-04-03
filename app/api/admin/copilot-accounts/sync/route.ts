@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { verifyAdmin, adminError } from '@/lib/adminAuth';
+import { prisma } from '../../../../../src/lib/prisma';
+import { verifyAdmin, adminError } from '../../../../../src/lib/adminAuth';
 import {
   updateNewApiChannel,
   getNewApiChannels,
-} from '@/lib/newapi';
+} from '../../../../../src/lib/newapi';
 
-// copilot-api 支持的主要模型（基于 copilot-api 0.7.0 实际返回）
-const COPILOT_MODELS = [
-  // Claude
+const BASE_COPILOT_MODELS = [
   'claude-sonnet-4',
   'claude-sonnet-4.5',
   'claude-sonnet-4.6',
@@ -16,7 +14,6 @@ const COPILOT_MODELS = [
   'claude-opus-4.6',
   'claude-opus-4.6-fast',
   'claude-haiku-4.5',
-  // GPT
   'gpt-4o',
   'gpt-4o-mini',
   'gpt-4',
@@ -26,13 +23,22 @@ const COPILOT_MODELS = [
   'gpt-5.4',
   'gpt-5.4-mini',
   'gpt-5-mini',
-  // Gemini
   'gemini-2.5-pro',
   'gemini-3-flash-preview',
   'gemini-3.1-pro-preview',
-  // Grok
   'grok-code-fast-1',
-].join(',');
+];
+
+const COPILOT_MODELS = Array.from(new Set([
+  ...BASE_COPILOT_MODELS,
+  ...BASE_COPILOT_MODELS.filter(model => model.includes('.')).map(model => model.replace(/\./g, '-')),
+])).join(',');
+
+const COPILOT_MODEL_MAPPING = JSON.stringify(Object.fromEntries(
+  BASE_COPILOT_MODELS
+    .filter(model => model.includes('.'))
+    .map(model => [model.replace(/\./g, '-'), model])
+));
 
 const COPILOT_PORT_BASE = 4141;
 
@@ -87,7 +93,7 @@ export async function POST(request: NextRequest) {
         where: { port: { not: null } },
         orderBy: { port: 'asc' },
       });
-      const usedPorts = existingAccounts.map(a => a.port!);
+      const usedPorts = existingAccounts.map((account) => account.port!);
       let port = COPILOT_PORT_BASE;
       while (usedPorts.includes(port)) port++;
 
@@ -97,6 +103,7 @@ export async function POST(request: NextRequest) {
         baseUrl: `http://${COPILOT_API_HOST}:${port}`,
         key: 'sk-copilot',
         models: COPILOT_MODELS,
+        modelMapping: COPILOT_MODEL_MAPPING,
         group: 'copilot',
         status: 1,
       });
@@ -142,6 +149,7 @@ export async function POST(request: NextRequest) {
             baseUrl: `http://${COPILOT_API_HOST}:${port}`,
             key: 'sk-copilot',
             models: COPILOT_MODELS,
+            modelMapping: COPILOT_MODEL_MAPPING,
             group: 'copilot',
             status,
           });

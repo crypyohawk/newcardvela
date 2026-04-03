@@ -54,6 +54,7 @@ export default function CopilotAccountsPage() {
   const [accounts, setAccounts] = useState<CopilotAccount[]>([]);
   const [channels, setChannels] = useState<NewApiChannel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -74,15 +75,20 @@ export default function CopilotAccountsPage() {
 
   const fetchAccounts = async () => {
     try {
+      setLoadError(null);
       const res = await fetch('/api/admin/copilot-accounts', {
         headers: { 'Authorization': `Bearer ${getToken()}` }
       });
       if (res.ok) {
         const data = await res.json();
         setAccounts(data);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setLoadError(data.error || `加载失败 (${res.status})`);
       }
     } catch (error) {
       console.error('Failed to fetch accounts:', error);
+      setLoadError('加载号池账号失败，请检查管理员登录状态或服务端日志');
     } finally {
       setLoading(false);
     }
@@ -355,6 +361,12 @@ export default function CopilotAccountsPage() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {loadError && (
+          <div className="mb-6 rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            账号池加载失败：{loadError}
           </div>
         )}
 

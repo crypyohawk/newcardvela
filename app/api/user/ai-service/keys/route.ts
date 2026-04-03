@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
-import { createNewApiToken, getNewApiTokenDetail, deleteNewApiToken, usdToQuota } from '../../../../../src/lib/newapi';
+import { createNewApiToken, deleteNewApiToken, getNewApiTokenPlaintextKeyByName, usdToQuota } from '../../../../../src/lib/newapi';
 
 /** 生成混淆名称，防止上游识别客户身份 */
 function obfuscateKeyName(userId: string, keyName: string): string {
@@ -35,7 +35,28 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json({ keys });
+    const repairedKeys = await Promise.all(keys.map(async (key) => {
+      if (!key.apiKey.includes('*') || !key.newApiTokenName) {
+        return key;
+      }
+
+      try {
+        const plaintextKey = await getNewApiTokenPlaintextKeyByName(key.newApiTokenName);
+        if (!plaintextKey) return key;
+
+        await db.aIKey.update({
+          where: { id: key.id },
+          data: { apiKey: plaintextKey },
+        });
+
+        return { ...key, apiKey: plaintextKey };
+      } catch (repairError: any) {
+        console.warn(`[key-repair] restore apiKey failed for ${key.id}:`, repairError.message);
+        return key;
+      }
+    }));
+
+    return NextResponse.json({ keys: repairedKeys });
   } catch (error: any) {
     console.error('获取 Key 失败:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
