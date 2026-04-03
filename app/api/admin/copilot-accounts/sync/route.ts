@@ -6,6 +6,7 @@ import {
   getNewApiChannels,
 } from '../../../../../src/lib/newapi';
 
+// copilot-api 原生支持的模型名（GitHub Copilot 格式，含点号版本）
 const BASE_COPILOT_MODELS = [
   'claude-sonnet-4',
   'claude-sonnet-4.5',
@@ -29,16 +30,42 @@ const BASE_COPILOT_MODELS = [
   'grok-code-fast-1',
 ];
 
+// 标准 Anthropic 模型名 → copilot-api 模型名 的映射
+// 客户端（Cline / Claude Code 等）通常发送标准 Anthropic 名称，需要映射到 copilot-api 支持的名称
+const LEGACY_ANTHROPIC_MAP: Record<string, string> = {
+  // Claude 3.x 系列 → 对应 copilot-api 版本
+  'claude-3-5-sonnet-20241022':    'claude-sonnet-4.5',
+  'claude-3-5-sonnet-latest':      'claude-sonnet-4.5',
+  'claude-3-7-sonnet-20250219':    'claude-sonnet-4.6',
+  'claude-3-7-sonnet-latest':      'claude-sonnet-4.6',
+  'claude-3-5-haiku-20241022':     'claude-haiku-4.5',
+  'claude-3-5-haiku-latest':       'claude-haiku-4.5',
+  'claude-3-haiku-20240307':       'claude-haiku-4.5',
+  'claude-3-opus-20240229':        'claude-opus-4.5',
+  'claude-3-opus-latest':          'claude-opus-4.5',
+  // claude-3.5-sonnet（中间加点，某些客户端格式）
+  'claude-3.5-sonnet':             'claude-sonnet-4.5',
+  'claude-3.7-sonnet':             'claude-sonnet-4.6',
+  'claude-3.5-haiku':              'claude-haiku-4.5',
+  'claude-3.5-opus':               'claude-opus-4.5',
+};
+
+// 完整模型列表 = copilot 原生名 + 连字符替换版 + 标准 Anthropic 名
 const COPILOT_MODELS = Array.from(new Set([
   ...BASE_COPILOT_MODELS,
-  ...BASE_COPILOT_MODELS.filter(model => model.includes('.')).map(model => model.replace(/\./g, '-')),
+  ...BASE_COPILOT_MODELS.filter(m => m.includes('.')).map(m => m.replace(/\./g, '-')),
+  ...Object.keys(LEGACY_ANTHROPIC_MAP),
 ])).join(',');
 
-const COPILOT_MODEL_MAPPING = JSON.stringify(Object.fromEntries(
-  BASE_COPILOT_MODELS
-    .filter(model => model.includes('.'))
-    .map(model => [model.replace(/\./g, '-'), model])
-));
+// 模型映射：连字符版→点号版 + 标准 Anthropic 名→ copilot-api 名
+const COPILOT_MODEL_MAPPING = JSON.stringify({
+  ...Object.fromEntries(
+    BASE_COPILOT_MODELS
+      .filter(m => m.includes('.'))
+      .map(m => [m.replace(/\./g, '-'), m])
+  ),
+  ...LEGACY_ANTHROPIC_MAP,
+});
 
 const COPILOT_PORT_BASE = 4141;
 
