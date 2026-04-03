@@ -71,6 +71,7 @@ async function syncKeyUsages() {
       id: true, userId: true, newApiTokenId: true, copilotAccountId: true,
       totalUsed: true, monthUsed: true, monthlyLimit: true,
       status: true, lastSyncAt: true,
+      tier: { select: { channelGroup: true } },
     },
   });
 
@@ -93,7 +94,12 @@ async function syncKeyUsages() {
           const user = await db.user.findUnique({ where: { id: key.userId }, select: { aiBalance: true } });
           if (user) {
             const newQuota = Math.max(0, usdToQuota(user.aiBalance + creditLimit));
-            try { await updateNewApiToken(key.newApiTokenId!, { remainQuota: newQuota }); } catch (_) {}
+            try {
+              await updateNewApiToken(key.newApiTokenId!, {
+                remainQuota: newQuota,
+                group: key.tier.channelGroup || 'default',
+              });
+            } catch (_) {}
           }
         }
         continue;
@@ -144,18 +150,28 @@ async function syncKeyUsages() {
       const user = await db.user.findUnique({ where: { id: key.userId }, select: { aiBalance: true } });
       if (user) {
         const newQuota = Math.max(0, usdToQuota(user.aiBalance + creditLimit));
-        try { await updateNewApiToken(key.newApiTokenId!, { remainQuota: newQuota }); } catch (_) {}
+        try {
+          await updateNewApiToken(key.newApiTokenId!, {
+            remainQuota: newQuota,
+            group: key.tier.channelGroup || 'default',
+          });
+        } catch (_) {}
 
         // 余额耗尽：禁用该用户所有活跃 Key
         if (user.aiBalance <= -creditLimit) {
           const activeKeys = await db.aIKey.findMany({
             where: { userId: key.userId, status: 'active' },
-            select: { id: true, newApiTokenId: true },
+            select: { id: true, newApiTokenId: true, tier: { select: { channelGroup: true } } },
           });
           for (const k of activeKeys) {
             await db.aIKey.update({ where: { id: k.id }, data: { status: 'disabled' } });
             if (k.newApiTokenId) {
-              try { await updateNewApiToken(k.newApiTokenId, { status: 2 }); } catch (_) {}
+              try {
+                await updateNewApiToken(k.newApiTokenId, {
+                  status: 2,
+                  group: k.tier.channelGroup || 'default',
+                });
+              } catch (_) {}
             }
           }
           console.log(`[cron] 用户 ${key.userId} 超出信用额度 (余额 $${user.aiBalance.toFixed(2)})，已禁用所有 Key`);
@@ -165,7 +181,12 @@ async function syncKeyUsages() {
       // 7. 月限额检查
       if (key.monthlyLimit && currentMonthUsed + delta > key.monthlyLimit && key.status === 'active') {
         await db.aIKey.update({ where: { id: key.id }, data: { status: 'disabled' } });
-        try { await updateNewApiToken(key.newApiTokenId!, { status: 2 }); } catch (_) {}
+        try {
+          await updateNewApiToken(key.newApiTokenId!, {
+            status: 2,
+            group: key.tier.channelGroup || 'default',
+          });
+        } catch (_) {}
         console.log(`[cron] Key ${key.id} 超出月限额 $${key.monthlyLimit}，已禁用`);
       }
     } catch (e: any) {

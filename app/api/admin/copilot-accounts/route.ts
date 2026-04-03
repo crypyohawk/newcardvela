@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { verifyAdmin, adminError } from '@/lib/adminAuth';
+import { prisma } from '../../../../src/lib/prisma';
+import { verifyAdmin, adminError } from '../../../../src/lib/adminAuth';
 
 // GET /api/admin/copilot-accounts - 获取所有账号
 export async function GET(request: NextRequest) {
@@ -11,33 +11,33 @@ export async function GET(request: NextRequest) {
 
   try {
     const accounts = await prisma.copilotAccount.findMany({
-      orderBy: { createdAt: 'desc' },
+      orderBy: { githubId: 'asc' },
     });
 
     // 查询绑定用户信息
-    const boundUserIds = accounts.map(a => a.boundUserId).filter(Boolean) as string[];
+    const boundUserIds = accounts.map((account) => account.boundUserId).filter(Boolean) as string[];
     const boundUsers = boundUserIds.length > 0
       ? await prisma.user.findMany({
           where: { id: { in: boundUserIds } },
-          select: { id: true, email: true, name: true },
+          select: { id: true, email: true },
         })
       : [];
-    const userMap = Object.fromEntries(boundUsers.map(u => [u.id, u]));
+    const userMap = Object.fromEntries(boundUsers.map((user) => [user.id, user]));
 
     // 查询绑定的 AIKey 信息
-    const boundKeyIds = accounts.map(a => a.boundAiKeyId).filter(Boolean) as string[];
+    const boundKeyIds = accounts.map((account) => account.boundAiKeyId).filter(Boolean) as string[];
     const boundKeys = boundKeyIds.length > 0
       ? await prisma.aIKey.findMany({
           where: { id: { in: boundKeyIds } },
           select: { id: true, keyName: true, lastUsedAt: true, status: true },
         })
       : [];
-    const keyMap = Object.fromEntries(boundKeys.map(k => [k.id, k]));
+    const keyMap = Object.fromEntries(boundKeys.map((key) => [key.id, key]));
 
-    const result = accounts.map(a => ({
-      ...a,
-      boundUser: a.boundUserId ? userMap[a.boundUserId] || null : null,
-      boundKey: a.boundAiKeyId ? keyMap[a.boundAiKeyId] || null : null,
+    const result = accounts.map((account) => ({
+      ...account,
+      boundUser: account.boundUserId ? userMap[account.boundUserId] || null : null,
+      boundKey: account.boundAiKeyId ? keyMap[account.boundAiKeyId] || null : null,
     }));
 
     return NextResponse.json(result);

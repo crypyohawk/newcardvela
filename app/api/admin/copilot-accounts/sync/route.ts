@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
     if (body.action === 'update-all') {
       const accounts = await prisma.copilotAccount.findMany({
         where: { newApiChannelId: { not: null } },
-        orderBy: { createdAt: 'asc' },
+        orderBy: { githubId: 'asc' },
       });
 
       const results: Array<{

@@ -334,7 +334,7 @@ export async function updateNewApiToken(tokenId: number, params: {
   if (params.remainQuota !== undefined) body.remain_quota = params.remainQuota;
   if (params.name !== undefined) body.name = params.name;
   if (params.group !== undefined) body.group = params.group;
-  if (params.expiredTime !== undefined) body.expired_time = params.expiredTime;
+  body.expired_time = params.expiredTime !== undefined ? params.expiredTime : -1;
   await newApiRequest(`/api/token/`, {
     method: 'PUT',
     body: JSON.stringify(body),
