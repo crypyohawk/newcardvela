@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
       for (const account of accounts) {
         try {
           const port = account.port || COPILOT_PORT_BASE;
-          const status = account.status === 'active' ? 1 : 2;
+          const status = account.status === 'inactive' || account.status === 'error' ? 2 : 1;
 
           await updateNewApiChannel(account.newApiChannelId!, {
             name: `copilot-${account.githubId}`,
