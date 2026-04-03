@@ -136,19 +136,6 @@ async function syncKeyUsages() {
         }
       });
 
-      // 5. 追踪号池账号用量（通过 Key 绑定关系）
-      if (key.copilotAccountId) {
-        try {
-          await db.copilotAccount.update({
-            where: { id: key.copilotAccountId },
-            data: {
-              quotaUsed: { increment: delta },
-              lastUsed: new Date(),
-            },
-          });
-        } catch (_) {}
-      }
-
       synced++;
       totalDeducted += delta;
       console.log(`[cron] Key ${key.id}: new-api=$${usedUSD.toFixed(4)}, delta=$${delta.toFixed(4)}`);
@@ -197,6 +184,10 @@ async function syncKeyUsages() {
 
 /**
  * 自动解绑空闲超过 2 小时的号池账号
+ * 
+ * 共享池租约模型：只释放号池账号绑定关系，不禁用用户 Key，不禁用 new-api token。
+ * 用户下次调用仍可直接使用原 token（new-api 按 group 路由到可用渠道）。
+ * 
  * - 条件1：绑定时间超过 2 小时
  * - 条件2：绑定的 Key 最后使用时间超过 2 小时（或从未使用）
  */
@@ -218,7 +209,7 @@ async function autoUnbindIdleAccounts() {
     const keyIds = boundAccounts.map(a => a.boundAiKeyId!);
     const keys = await db.aIKey.findMany({
       where: { id: { in: keyIds } },
-      select: { id: true, lastUsedAt: true, status: true, newApiTokenId: true },
+      select: { id: true, lastUsedAt: true, status: true },
     });
     const keyMap = Object.fromEntries(keys.map(k => [k.id, k]));
 
@@ -230,6 +221,7 @@ async function autoUnbindIdleAccounts() {
         !key.lastUsedAt || key.lastUsedAt < cutoff;
 
       if (keyIdle) {
+        // 只释放号池账号绑定，Key 和 token 保持不变
         await db.$transaction([
           db.copilotAccount.update({
             where: { id: account.id },
@@ -240,30 +232,22 @@ async function autoUnbindIdleAccounts() {
               boundAt: null,
             },
           }),
-          // 如果 Key 还存在且未吊销，标记为 disabled（不再有号池资源）
+          // 清除 Key 上的 copilotAccountId（不改 status，不动 token）
           ...(key && key.status !== 'revoked' ? [
             db.aIKey.update({
               where: { id: account.boundAiKeyId! },
-              data: { copilotAccountId: null, status: 'disabled' },
+              data: { copilotAccountId: null },
             }),
           ] : []),
         ]);
 
-        // 同步禁用 new-api token，防止本地 disabled 但网关仍可调用
-        if (key && key.newApiTokenId && key.status !== 'revoked') {
-          try {
-            await updateNewApiToken(key.newApiTokenId, { status: 2 });
-          } catch (e: any) {
-            console.warn(`[auto-unbind] 禁用 new-api token 失败: key=${account.boundAiKeyId}, err=${e.message}`);
-          }
-        }
-        console.log(`[auto-unbind] 解绑空闲号池: account=${account.githubId}, key=${account.boundAiKeyId}, 绑定于 ${account.boundAt?.toISOString()}`);
+        console.log(`[auto-unbind] 释放号池: account=${account.githubId}, key=${account.boundAiKeyId} (key/token 保持活跃)`);
         unboundCount++;
       }
     }
 
     if (unboundCount > 0) {
-      console.log(`[auto-unbind] 共解绑 ${unboundCount} 个空闲号池账号`);
+      console.log(`[auto-unbind] 共释放 ${unboundCount} 个空闲号池账号`);
     }
 
     return { checked: boundAccounts.length, unbound: unboundCount };

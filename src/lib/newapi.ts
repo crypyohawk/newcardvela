@@ -208,6 +208,7 @@ export async function createNewApiToken(params: {
       name: params.name,
       remain_quota: params.remainQuota,
       unlimited_quota: params.remainQuota <= 0,
+      expired_time: -1,  // -1 = 永不过期
       model_limits_enabled: !!params.modelLimits,
       model_limits: params.modelLimits || '',
       group: params.group || '',
@@ -313,11 +314,15 @@ export async function updateNewApiToken(tokenId: number, params: {
   status?: number;        // 1=启用, 2=禁用
   remainQuota?: number;
   name?: string;
+  group?: string;
+  expiredTime?: number;   // -1=永不过期
 }): Promise<void> {
   const body: any = { id: tokenId };
   if (params.status !== undefined) body.status = params.status;
   if (params.remainQuota !== undefined) body.remain_quota = params.remainQuota;
   if (params.name !== undefined) body.name = params.name;
+  if (params.group !== undefined) body.group = params.group;
+  if (params.expiredTime !== undefined) body.expired_time = params.expiredTime;
   await newApiRequest(`/api/token/`, {
     method: 'PUT',
     body: JSON.stringify(body),

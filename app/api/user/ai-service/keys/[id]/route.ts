@@ -111,13 +111,18 @@ export async function PUT(
             return updatedKey;
           });
 
-          // 同步启用 new-api token + 刷新配额
+          // 同步启用 new-api token + 刷新配额 + 确保 group 正确
           if (aiKey.newApiTokenId) {
             try {
               const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
               const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
               const freshQuota = usdToQuota(Math.max(user.aiBalance + creditLimit, creditLimit));
-              await updateNewApiToken(aiKey.newApiTokenId, { status: 1, remainQuota: freshQuota });
+              await updateNewApiToken(aiKey.newApiTokenId, {
+                status: 1,
+                remainQuota: freshQuota,
+                group: aiKey.tier.channelGroup || 'default',
+                expiredTime: -1,
+              });
             } catch (e: any) {
               console.error('同步 new-api 启用失败:', e.message);
             }
