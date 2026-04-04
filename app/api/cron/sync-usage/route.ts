@@ -56,6 +56,7 @@ async function syncKeyUsages() {
       id: true,
       userId: true,
       newApiTokenId: true,
+      newApiTokenName: true,
       monthlyLimit: true,
       status: true,
       lastSyncAt: true,
@@ -158,6 +159,7 @@ async function syncKeyUsages() {
         try {
           await updateNewApiToken(key.newApiTokenId, {
             remainQuota: newQuota,
+            name: !usage.tokenName && key.newApiTokenName ? key.newApiTokenName : undefined,
             group: key.tier.channelGroup || 'default',
           });
         } catch (_) {}

@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       where: { userId: payload.userId, status: { not: 'revoked' } },
       select: {
         id: true, keyName: true, label: true, status: true,
-        monthlyLimit: true, lastUsedAt: true,
+        monthlyLimit: true, lastUsedAt: true, monthUsed: true, totalUsed: true,
         newApiTokenId: true, newApiTokenName: true,
       },
     });
@@ -63,6 +63,14 @@ export async function GET(request: NextRequest) {
           monthCost = logs.logs.reduce((s, l) => s + quotaToUSD(l.quota || 0), 0);
           monthRequests = logs.logs.length;
         } catch (_) {}
+      }
+
+      if (monthCost <= 0 && key.monthUsed > 0) {
+        monthCost = key.monthUsed;
+      }
+
+      if (allTimeCost <= 0 && key.totalUsed > 0) {
+        allTimeCost = key.totalUsed;
       }
 
       totalMonthCost += monthCost;

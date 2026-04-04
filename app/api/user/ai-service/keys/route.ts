@@ -26,6 +26,7 @@ async function syncCurrentUserKeyUsage(userId: string) {
       id: true,
       userId: true,
       newApiTokenId: true,
+      newApiTokenName: true,
       status: true,
       totalUsed: true,
       monthUsed: true,
@@ -113,6 +114,7 @@ async function syncCurrentUserKeyUsage(userId: string) {
         try {
           await updateNewApiToken(key.newApiTokenId, {
             remainQuota: newQuota,
+            name: !usage.tokenName && key.newApiTokenName ? key.newApiTokenName : undefined,
             group: key.tier.channelGroup || 'default',
           });
         } catch (_) {}
@@ -358,6 +360,15 @@ export async function POST(request: NextRequest) {
       });
       newApiTokenId = result.id;
       apiKey = result.key;  // 使用 new-api 实际返回的 key
+      try {
+        await updateNewApiToken(result.id, {
+          name: tokenName,
+          remainQuota: quotaAmount,
+          group: tier.channelGroup || 'default',
+        });
+      } catch (repairError: any) {
+        console.warn(`[key-create] token name repair failed for ${result.id}:`, repairError.message);
+      }
       console.log(`[key-create] success: id=${result.id}, key=${apiKey.slice(0,8)}...${apiKey.slice(-4)}, quota=$${maxQuotaUSD.toFixed(2)}`);
     } catch (e: any) {
       console.error('new-api 创建 token 失败:', e.message, e.stack);

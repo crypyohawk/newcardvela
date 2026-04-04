@@ -357,12 +357,14 @@ export async function getNewApiTokenUsage(tokenId: number): Promise<{
   usedQuota: number;
   remainQuota: number;
   requestCount: number;
+  tokenName: string;
 }> {
   const data = await newApiRequest(`/api/token/${tokenId}`);
   return {
     usedQuota: data.data?.used_quota || 0,
     remainQuota: data.data?.remain_quota || 0,
     requestCount: data.data?.request_count || 0,
+    tokenName: data.data?.name || '',
   };
 }
 

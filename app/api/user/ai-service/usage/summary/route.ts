@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     // Key 统计（排除已吊销的 Key）
     const keys = await db.aIKey.findMany({
       where: { userId: payload.userId, status: { not: 'revoked' } },
-      select: { id: true, status: true, newApiTokenId: true, newApiTokenName: true },
+      select: { id: true, status: true, newApiTokenId: true, newApiTokenName: true, monthUsed: true, totalUsed: true },
     });
 
     const activeKeys = keys.filter(k => k.status === 'active').length;
@@ -58,14 +58,18 @@ export async function GET(request: NextRequest) {
     });
 
     const totalCost = results.reduce((s, r) => s + r.totalUsed, 0);
-    const monthCost = results.reduce((s, r) => s + r.monthCost, 0);
+    const monthCostFromLogs = results.reduce((s, r) => s + r.monthCost, 0);
     const monthRequests = results.reduce((s, r) => s + r.monthRequests, 0);
+    const localMonthCost = keys.reduce((s, k) => s + (k.monthUsed || 0), 0);
+    const localTotalCost = keys.reduce((s, k) => s + (k.totalUsed || 0), 0);
+    const monthCost = monthCostFromLogs > 0 ? monthCostFromLogs : localMonthCost;
+    const resolvedTotalCost = totalCost > 0 ? totalCost : localTotalCost;
 
     return NextResponse.json({
       balance: user.balance,
       aiBalance: user.aiBalance,
       monthCost: Math.round(monthCost * 100) / 100,
-      totalCost: Math.round(totalCost * 100) / 100,
+      totalCost: Math.round(resolvedTotalCost * 100) / 100,
       monthTokens: 0,
       monthRequests,
       totalKeys: keys.length,
