@@ -103,6 +103,7 @@ export async function GET(request: NextRequest) {
       welfareGuide: configMap['welfare_guide'] || '',
       welfareQrcode: configMap['welfare_qrcode'] || '',
       aiApiBaseUrl: configMap['ai_api_base_url'] || '',
+      aiTransferMultiplier: parseFloat(configMap['ai_balance_recharge_multiplier'] || '1') || 1,
     });
   } catch (error) {
     console.error('获取配置失败:', error);
@@ -120,6 +121,7 @@ export async function GET(request: NextRequest) {
         cardFeePercent: 1,
         cardFeeMin: 1.5,
       },
+      aiTransferMultiplier: 1,
     });
   }
 }

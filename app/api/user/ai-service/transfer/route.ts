@@ -4,6 +4,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
 
+const AI_TRANSFER_MULTIPLIER_KEY = 'ai_balance_recharge_multiplier';
+
+async function getAiTransferMultiplier() {
+  const config = await db.systemConfig.findUnique({
+    where: { key: AI_TRANSFER_MULTIPLIER_KEY },
+    select: { value: true },
+  });
+
+  const parsed = parseFloat(config?.value || '1');
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
 // POST: 从主余额转入 AI 钱包
 export async function POST(request: NextRequest) {
   try {
@@ -26,7 +38,22 @@ export async function POST(request: NextRequest) {
     const user = await db.user.findUnique({ where: { id: payload.userId } });
     if (!user) return NextResponse.json({ error: '用户不存在' }, { status: 404 });
 
+    const multiplier = await getAiTransferMultiplier();
+    const normalizedRole = (user.role || '').toLowerCase();
+
     if (direction === 'ai_to_main') {
+      if (normalizedRole === 'enterprise') {
+        return NextResponse.json({
+          error: '企业账号的 AI 钱包余额仅可用于 API 消费，不支持转回账户余额',
+        }, { status: 403 });
+      }
+
+      if (multiplier > 1) {
+        return NextResponse.json({
+          error: '当前 AI 钱包已启用充值倍率，为避免套利风险，暂不支持转回账户余额',
+        }, { status: 400 });
+      }
+
       // AI 等级升级后余额锁定，不可转出
       if (user.aiBalanceLocked) {
         return NextResponse.json({
@@ -71,12 +98,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: `账户余额不足，当前 $${user.balance.toFixed(2)}` }, { status: 400 });
       }
 
+      const creditedAmount = Number((transferAmount * multiplier).toFixed(2));
+
       await db.$transaction([
         db.user.update({
           where: { id: payload.userId },
           data: {
             balance: { decrement: transferAmount },
-            aiBalance: { increment: transferAmount },
+            aiBalance: { increment: creditedAmount },
           },
         }),
         db.transaction.create({
@@ -100,6 +129,8 @@ export async function POST(request: NextRequest) {
       success: true,
       balance: updated?.balance ?? 0,
       aiBalance: updated?.aiBalance ?? 0,
+      multiplier,
+      creditedAmount: direction === 'ai_to_main' ? transferAmount : Number((transferAmount * multiplier).toFixed(2)),
     });
   } catch (error: any) {
     console.error('余额转账失败:', error);

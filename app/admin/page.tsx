@@ -425,6 +425,8 @@ export default function AdminPage() {
 
   // 添加客服邮箱状态
   const [supportEmail, setSupportEmail] = useState('');
+  const [aiTransferMultiplier, setAiTransferMultiplier] = useState('1');
+  const [aiTransferMultiplierSaving, setAiTransferMultiplierSaving] = useState(false);
 
   // 获取推荐设置
   const fetchReferralSettings = async () => {
@@ -670,6 +672,7 @@ export default function AdminPage() {
         if (data.configs?.subscription_guide) setSubscriptionGuide(data.configs.subscription_guide);
         if (data.configs?.welfare_guide) setWelfareGuide(data.configs.welfare_guide);
         if (data.configs?.welfare_qrcode) setWelfareQrcode(data.configs.welfare_qrcode);
+        setAiTransferMultiplier(data.configs?.ai_balance_recharge_multiplier || '1');
       }
     } catch (error) {
       console.error('获取系统配置失败:', error);
@@ -2388,6 +2391,60 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
+
+            <div className="bg-slate-800 p-6 rounded-xl">
+              <h3 className="text-lg font-bold mb-3">💸 AI 钱包充值倍率</h3>
+              <p className="text-sm text-gray-400 mb-4">用户从账户余额转入 AI 钱包时，按倍率放大到账金额。例如倍率 5 时，转入 $50，AI 钱包到账 $250。为避免套利，只要倍率大于 1，AI 钱包将禁止转回账户余额。</p>
+              <div className="flex flex-col md:flex-row gap-3 md:items-end">
+                <div className="flex-1">
+                  <label className="block text-sm text-gray-400 mb-1">到账倍率</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.1"
+                    value={aiTransferMultiplier}
+                    onChange={(e) => setAiTransferMultiplier(e.target.value)}
+                    className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <button
+                  onClick={async () => {
+                    const parsed = parseFloat(aiTransferMultiplier);
+                    if (!Number.isFinite(parsed) || parsed < 1) {
+                      setMessage({ type: 'error', text: '倍率必须大于等于 1' });
+                      return;
+                    }
+
+                    setAiTransferMultiplierSaving(true);
+                    try {
+                      const res = await fetch('/api/admin/config', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${getToken()}`,
+                        },
+                        body: JSON.stringify({ key: 'ai_balance_recharge_multiplier', value: String(parsed) }),
+                      });
+
+                      if (res.ok) {
+                        setAiTransferMultiplier(String(parsed));
+                        setMessage({ type: 'success', text: 'AI 钱包倍率已保存' });
+                      } else {
+                        setMessage({ type: 'error', text: '保存失败' });
+                      }
+                    } catch {
+                      setMessage({ type: 'error', text: '保存失败' });
+                    } finally {
+                      setAiTransferMultiplierSaving(false);
+                    }
+                  }}
+                  disabled={aiTransferMultiplierSaving}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-6 py-2 rounded-lg text-sm"
+                >
+                  {aiTransferMultiplierSaving ? '保存中...' : '保存倍率'}
+                </button>
+              </div>
+            </div>
 
             {/* 上游服务商管理 */}
             <div>

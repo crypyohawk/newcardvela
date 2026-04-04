@@ -135,6 +135,7 @@ export default function DashboardPage() {
   const [aiTransferAmount, setAiTransferAmount] = useState('');
   const [aiTransferDirection, setAiTransferDirection] = useState<'main_to_ai' | 'ai_to_main'>('main_to_ai');
   const [aiTransfering, setAiTransfering] = useState(false);
+  const [aiTransferMultiplier, setAiTransferMultiplier] = useState(1);
 
   // 企业用量
   const [enterpriseUsage, setEnterpriseUsage] = useState<any>(null);
@@ -215,6 +216,8 @@ export default function DashboardPage() {
       if (configData.aiApiBaseUrl) {
         setPlatformApiUrl(configData.aiApiBaseUrl);
       }
+
+      setAiTransferMultiplier(Number(configData.aiTransferMultiplier) > 0 ? Number(configData.aiTransferMultiplier) : 1);
 
       // 获取订阅公告
       if (configData.subscriptionGuide) {
@@ -337,9 +340,14 @@ export default function DashboardPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setMessage({ type: 'success', text: `转账成功！AI 余额: $${data.aiBalance.toFixed(2)}` });
+      if (aiTransferDirection === 'main_to_ai') {
+        setMessage({ type: 'success', text: `转账成功，扣除账户余额 $${amount.toFixed(2)}，AI 钱包到账 $${Number(data.creditedAmount || 0).toFixed(2)}` });
+      } else {
+        setMessage({ type: 'success', text: `转账成功，账户余额已增加 $${amount.toFixed(2)}` });
+      }
       setShowAiTransfer(false);
       setAiTransferAmount('');
+      setAiTransferDirection('main_to_ai');
       refreshUser();
       fetchAIData();
     } catch (error: any) {
@@ -2356,6 +2364,16 @@ export default function DashboardPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-slate-800 p-6 rounded-xl w-full max-w-sm">
             <h3 className="text-lg font-bold mb-4">💰 AI 钱包转账</h3>
+            {(() => {
+              const normalizedRole = user?.role?.toLowerCase();
+              const transferOutBlockedByRole = normalizedRole === 'enterprise';
+              const transferOutBlockedByMultiplier = aiTransferMultiplier > 1;
+              const canTransferOut = !transferOutBlockedByRole && !transferOutBlockedByMultiplier;
+              const previewAmount = parseFloat(aiTransferAmount || '0');
+              const creditedPreview = previewAmount > 0 ? previewAmount * aiTransferMultiplier : 0;
+
+              return (
+                <>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-2 text-center text-sm">
                 <div className="bg-green-600/20 border border-green-500/30 rounded-lg p-3">
@@ -2375,7 +2393,7 @@ export default function DashboardPage() {
                   className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="main_to_ai">账户余额 → AI 钱包</option>
-                  <option value="ai_to_main">AI 钱包 → 账户余额</option>
+                  {canTransferOut && <option value="ai_to_main">AI 钱包 → 账户余额</option>}
                 </select>
               </div>
               <div>
@@ -2390,6 +2408,19 @@ export default function DashboardPage() {
                   className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+              {aiTransferDirection === 'main_to_ai' && (
+                <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-200">
+                  当前到账倍率为 {aiTransferMultiplier}x。
+                  {creditedPreview > 0 ? ` 本次预计到账 AI 余额 $${creditedPreview.toFixed(2)}。` : ''}
+                </div>
+              )}
+              {!canTransferOut && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+                  {transferOutBlockedByRole
+                    ? '企业账号的 AI 钱包余额仅可用于 API 消费，不支持转回账户余额。'
+                    : '当前已启用 AI 钱包充值倍率。为避免套利风险，AI 钱包暂不支持转回账户余额。'}
+                </div>
+              )}
               <p className="text-xs text-gray-500">AI 服务使用独立余额，与开卡、充卡业务互不影响，防止延迟扣费风险。</p>
             </div>
             <div className="flex gap-3 mt-6">
@@ -2401,12 +2432,15 @@ export default function DashboardPage() {
                 {aiTransfering ? '转账中...' : '确认转账'}
               </button>
               <button
-                onClick={() => { setShowAiTransfer(false); setAiTransferAmount(''); }}
+                onClick={() => { setShowAiTransfer(false); setAiTransferAmount(''); setAiTransferDirection('main_to_ai'); }}
                 className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded-lg font-medium transition"
               >
                 取消
               </button>
             </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
