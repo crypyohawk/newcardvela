@@ -3,9 +3,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../src/lib/db';
 import { verifyAdmin } from '../../../../src/lib/adminAuth';
-import { getAllNewApiLogs, quotaToUSD } from '../../../../src/lib/newapi';
 
-// 全局 AI 用量统计 — 数据从 new-api 日志 + AIKey 聚合字段获取
+// 全局 AI 用量统计 — 数据从本地聚合字段 + 按天统计表获取
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return NextResponse.json({ error: '需要管理员权限' }, { status: 403 });
@@ -16,27 +15,26 @@ export async function GET(request: NextRequest) {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // ---- 从 new-api 拉取日志（本月，自动分页） ----
-    const monthTimestamp = Math.floor(monthStart.getTime() / 1000);
-    const todayTimestamp = Math.floor(today.getTime() / 1000);
-    const sevenDaysTimestamp = Math.floor(sevenDaysAgo.getTime() / 1000);
+    const [todayAgg, monthAgg, recentDaily] = await Promise.all([
+      db.aIKeyDailyStat.aggregate({
+        where: { date: { gte: today } },
+        _sum: { cost: true, requestCount: true },
+      }),
+      db.aIKey.aggregate({
+        where: { status: { not: 'revoked' } },
+        _sum: { monthUsed: true, monthRequestCount: true },
+      }),
+      db.aIKeyDailyStat.groupBy({
+        by: ['date'],
+        where: { date: { gte: sevenDaysAgo } },
+        _sum: { cost: true },
+      }),
+    ]);
 
-    let allMonthLogs: Array<{ quota: number; created_at: number }> = [];
-    try {
-      const result = await getAllNewApiLogs({ startTimestamp: monthTimestamp });
-      allMonthLogs = result.logs;
-    } catch (e: any) {
-      console.error('[admin-ai-usage] 拉取 new-api 日志失败:', e.message);
-    }
-
-    // 今日费用 & 请求数
-    const todayLogs = allMonthLogs.filter(l => l.created_at >= todayTimestamp);
-    const todayCost = todayLogs.reduce((s, l) => s + quotaToUSD(l.quota || 0), 0);
-    const todayRequests = todayLogs.length;
-
-    // 本月费用 & 请求数
-    const monthCost = allMonthLogs.reduce((s, l) => s + quotaToUSD(l.quota || 0), 0);
-    const monthRequests = allMonthLogs.length;
+    const todayCost = todayAgg._sum.cost || 0;
+    const todayRequests = todayAgg._sum.requestCount || 0;
+    const monthCost = monthAgg._sum.monthUsed || 0;
+    const monthRequests = monthAgg._sum.monthRequestCount || 0;
 
     // ---- Key 统计（从本地数据库，排除已吊销） ----
     const keyStats = await db.aIKey.groupBy({
@@ -65,14 +63,8 @@ export async function GET(request: NextRequest) {
     const tierMap = new Map(tiers.map(t => [t.id, t.displayName]));
 
     // 7 天每日用量（从 new-api 日志聚合）
-    const recentLogs = allMonthLogs.filter(l => l.created_at >= sevenDaysTimestamp);
-    const dailyMap = new Map<string, number>();
-    for (const log of recentLogs) {
-      const day = new Date(log.created_at * 1000).toISOString().slice(0, 10);
-      dailyMap.set(day, (dailyMap.get(day) || 0) + quotaToUSD(log.quota || 0));
-    }
-    const dailyChart = Array.from(dailyMap.entries())
-      .map(([date, cost]) => ({ date, cost: Math.round(cost * 100) / 100 }))
+    const dailyChart = recentDaily
+      .map((item) => ({ date: item.date.toISOString().slice(0, 10), cost: Math.round((item._sum.cost || 0) * 100) / 100 }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     // 返回平铺字段，匹配前端读取方式

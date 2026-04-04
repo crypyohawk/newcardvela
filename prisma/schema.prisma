@@ -400,18 +400,43 @@ model AIKey {
   monthlyLimit    Float?                        // 每月用量上限 (USD)，null=不限
   totalUsed       Float    @default(0)          // 累计消费 (USD)
   monthUsed       Float    @default(0)          // 本月消费 (USD)
+  totalRequestCount Int    @default(0)          // 累计请求数
+  monthRequestCount Int    @default(0)          // 本月请求数
+  totalPromptTokens Float  @default(0)          // 累计输入 tokens
+  totalCompletionTokens Float @default(0)       // 累计输出 tokens
+  monthPromptTokens Float  @default(0)          // 本月输入 tokens
+  monthCompletionTokens Float @default(0)       // 本月输出 tokens
   lastUsedAt      DateTime?
   lastSyncAt      DateTime?                     // 上次用量同步时间
+  lastStatsSyncAt DateTime?                     // 上次统计同步时间
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   usageLogs       AIUsageLog[]
+  dailyStats      AIKeyDailyStat[]
 
   @@index([userId])
   @@index([apiKey])
   @@index([status])
   @@index([newApiTokenName])
+}
+
+model AIKeyDailyStat {
+  id               String   @id @default(cuid())
+  aiKeyId          String
+  aiKey            AIKey    @relation(fields: [aiKeyId], references: [id], onDelete: Cascade)
+  date             DateTime                      // 当天 00:00:00 UTC
+  requestCount     Int      @default(0)
+  promptTokens     Float    @default(0)
+  completionTokens Float    @default(0)
+  cost             Float    @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([aiKeyId, date])
+  @@index([date])
+  @@index([aiKeyId, date])
 }
 
 // API 调用日志

@@ -1,9 +1,206 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getNewApiTokenUsage, updateNewApiToken, quotaToUSD, usdToQuota } from '../../../../src/lib/newapi';
+import { getAllNewApiLogs, getNewApiTokenUsage, updateNewApiToken, quotaToUSD, usdToQuota } from '../../../../src/lib/newapi';
 import { db } from '../../../../src/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
+
+const STATS_SYNC_INTERVAL_SECONDS = 2 * 60 * 60;
+const STATS_LAST_SYNC_KEY = 'ai_stats_last_sync_at';
+const STATS_LAST_LOG_ID_KEY = 'ai_stats_last_log_id';
+
+function getMonthStartTimestamp(date: Date) {
+  return Math.floor(new Date(date.getFullYear(), date.getMonth(), 1).getTime() / 1000);
+}
+
+function startOfUtcDayFromTimestamp(timestamp: number) {
+  const date = new Date(timestamp * 1000);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+async function setSystemConfigValue(key: string, value: string) {
+  await db.systemConfig.upsert({
+    where: { key },
+    update: { value },
+    create: { key, value },
+  });
+}
+
+async function syncUsageStatsIfDue() {
+  const now = new Date();
+  const nowTimestamp = Math.floor(now.getTime() / 1000);
+  const [lastSyncConfig, lastLogIdConfig] = await Promise.all([
+    db.systemConfig.findUnique({ where: { key: STATS_LAST_SYNC_KEY } }),
+    db.systemConfig.findUnique({ where: { key: STATS_LAST_LOG_ID_KEY } }),
+  ]);
+
+  const lastSyncTimestamp = Number(lastSyncConfig?.value || 0);
+  const lastLogId = Number(lastLogIdConfig?.value || 0);
+  const secondsSinceLastSync = lastSyncTimestamp > 0 ? nowTimestamp - lastSyncTimestamp : null;
+
+  if (secondsSinceLastSync !== null && secondsSinceLastSync < STATS_SYNC_INTERVAL_SECONDS) {
+    return {
+      skipped: true,
+      reason: 'interval-not-reached',
+      lastSyncTimestamp,
+      nextRunInSeconds: STATS_SYNC_INTERVAL_SECONDS - secondsSinceLastSync,
+    };
+  }
+
+  if (lastSyncTimestamp > 0) {
+    const lastSyncDate = new Date(lastSyncTimestamp * 1000);
+    if (lastSyncDate.getFullYear() !== now.getFullYear() || lastSyncDate.getMonth() !== now.getMonth()) {
+      await db.aIKey.updateMany({
+        where: { status: { not: 'revoked' } },
+        data: {
+          monthRequestCount: 0,
+          monthPromptTokens: 0,
+          monthCompletionTokens: 0,
+        },
+      });
+    }
+  }
+
+  const startTimestamp = lastSyncTimestamp || getMonthStartTimestamp(now);
+  const allLogs = await getAllNewApiLogs({
+    startTimestamp,
+    maxPages: 20,
+  });
+
+  const logs = allLogs.logs
+    .filter((log) => log.created_at > lastSyncTimestamp || (log.created_at === lastSyncTimestamp && log.id > lastLogId))
+    .sort((left, right) => left.created_at - right.created_at || left.id - right.id);
+
+  const keys = await db.aIKey.findMany({
+    where: {
+      status: { not: 'revoked' },
+      newApiTokenName: { not: null },
+    },
+    select: {
+      id: true,
+      newApiTokenName: true,
+    },
+  });
+
+  const keyByTokenName = new Map(keys.map((key) => [key.newApiTokenName!, key.id]));
+  const keyAggregates = new Map<string, {
+    requestCount: number;
+    promptTokens: number;
+    completionTokens: number;
+    lastTimestamp: number;
+  }>();
+  const dailyAggregates = new Map<string, {
+    aiKeyId: string;
+    date: Date;
+    requestCount: number;
+    promptTokens: number;
+    completionTokens: number;
+    cost: number;
+  }>();
+
+  let processedLogs = 0;
+  let matchedLogs = 0;
+  let unmatchedLogs = 0;
+  let maxSeenTimestamp = lastSyncTimestamp;
+  let maxSeenLogId = lastLogId;
+
+  for (const log of logs) {
+    processedLogs += 1;
+    maxSeenTimestamp = log.created_at;
+    maxSeenLogId = log.id;
+
+    const aiKeyId = keyByTokenName.get(log.token_name || '');
+    if (!aiKeyId) {
+      unmatchedLogs += 1;
+      continue;
+    }
+
+    matchedLogs += 1;
+    const promptTokens = Math.max(0, Number(log.prompt_tokens) || 0);
+    const completionTokens = Math.max(0, Number(log.completion_tokens) || 0);
+    const cost = quotaToUSD(log.quota || 0);
+    const day = startOfUtcDayFromTimestamp(log.created_at);
+
+    const keyAggregate = keyAggregates.get(aiKeyId) || {
+      requestCount: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      lastTimestamp: log.created_at,
+    };
+    keyAggregate.requestCount += 1;
+    keyAggregate.promptTokens += promptTokens;
+    keyAggregate.completionTokens += completionTokens;
+    keyAggregate.lastTimestamp = Math.max(keyAggregate.lastTimestamp, log.created_at);
+    keyAggregates.set(aiKeyId, keyAggregate);
+
+    const dailyKey = `${aiKeyId}:${day.toISOString()}`;
+    const dailyAggregate = dailyAggregates.get(dailyKey) || {
+      aiKeyId,
+      date: day,
+      requestCount: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      cost: 0,
+    };
+    dailyAggregate.requestCount += 1;
+    dailyAggregate.promptTokens += promptTokens;
+    dailyAggregate.completionTokens += completionTokens;
+    dailyAggregate.cost += cost;
+    dailyAggregates.set(dailyKey, dailyAggregate);
+  }
+
+  await db.$transaction(async (tx) => {
+    for (const [aiKeyId, aggregate] of keyAggregates.entries()) {
+      await tx.aIKey.update({
+        where: { id: aiKeyId },
+        data: {
+          totalRequestCount: { increment: aggregate.requestCount },
+          monthRequestCount: { increment: aggregate.requestCount },
+          totalPromptTokens: { increment: aggregate.promptTokens },
+          totalCompletionTokens: { increment: aggregate.completionTokens },
+          monthPromptTokens: { increment: aggregate.promptTokens },
+          monthCompletionTokens: { increment: aggregate.completionTokens },
+          lastStatsSyncAt: new Date(aggregate.lastTimestamp * 1000),
+        },
+      });
+    }
+
+    for (const aggregate of dailyAggregates.values()) {
+      await tx.aIKeyDailyStat.upsert({
+        where: {
+          aiKeyId_date: {
+            aiKeyId: aggregate.aiKeyId,
+            date: aggregate.date,
+          },
+        },
+        update: {
+          requestCount: { increment: aggregate.requestCount },
+          promptTokens: { increment: aggregate.promptTokens },
+          completionTokens: { increment: aggregate.completionTokens },
+          cost: { increment: aggregate.cost },
+        },
+        create: aggregate,
+      });
+    }
+  });
+
+  await Promise.all([
+    setSystemConfigValue(STATS_LAST_SYNC_KEY, String(processedLogs > 0 ? maxSeenTimestamp : nowTimestamp)),
+    setSystemConfigValue(STATS_LAST_LOG_ID_KEY, String(processedLogs > 0 ? maxSeenLogId : lastLogId)),
+  ]);
+
+  return {
+    skipped: false,
+    startTimestamp,
+    processedLogs,
+    matchedLogs,
+    unmatchedLogs,
+    affectedKeys: keyAggregates.size,
+    truncated: allLogs.truncated,
+    lastSyncTimestamp: processedLogs > 0 ? maxSeenTimestamp : nowTimestamp,
+    lastLogId: processedLogs > 0 ? maxSeenLogId : lastLogId,
+  };
+}
 
 /**
  * 定时任务：按 new-api 用量同步本地扣费，并处理号池自动解绑
@@ -29,12 +226,14 @@ export async function GET(request: NextRequest) {
 
     console.log('[cron] 开始同步 Key 用量与号池解绑检查...');
     const syncResult = await syncKeyUsages();
+    const statsSyncResult = await syncUsageStatsIfDue();
     const autoUnbindResult = await autoUnbindIdleAccounts();
     console.log(`[cron] 完成: checked=${syncResult.checked}, synced=${syncResult.synced}, deducted=$${syncResult.totalDeducted}`);
 
     return NextResponse.json({
       success: true,
       ...syncResult,
+      statsSync: statsSyncResult,
       autoUnbind: autoUnbindResult,
     });
   } catch (error: any) {

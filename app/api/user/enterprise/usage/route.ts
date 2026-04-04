@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
-import { getNewApiTokenUsage, getAllNewApiLogs, mapWithConcurrencyLimit, quotaToUSD } from '../../../../../src/lib/newapi';
+import { getNewApiTokenUsage, mapWithConcurrencyLimit, quotaToUSD } from '../../../../../src/lib/newapi';
 
 // 获取企业所有 Key 的用量汇总（按员工 Key 分组）
 // 数据来源：new-api token 用量 + 日志（new-api 自带计费规则）
@@ -25,7 +25,9 @@ export async function GET(request: NextRequest) {
       select: {
         id: true, keyName: true, label: true, status: true,
         monthlyLimit: true, lastUsedAt: true, monthUsed: true, totalUsed: true,
-        newApiTokenId: true, newApiTokenName: true,
+        monthRequestCount: true, totalRequestCount: true,
+        monthPromptTokens: true, monthCompletionTokens: true,
+        newApiTokenId: true,
       },
     });
 
@@ -37,37 +39,23 @@ export async function GET(request: NextRequest) {
     // 并行拉取每个 Key 的 token 累计用量 + 本月日志
     let totalMonthCost = 0;
     let totalMonthRequests = 0;
+    let totalMonthTokens = 0;
     let totalAllTimeCost = 0;
     let totalAllTimeRequests = 0;
 
     const perKey = await mapWithConcurrencyLimit(keys, 4, async (key) => {
       let allTimeCost = 0, allTimeRequests = 0;
-      let monthCost = 0, monthRequests = 0;
+      const monthCost = key.monthUsed || 0;
+      const monthRequests = key.monthRequestCount || 0;
+      const monthTokens = (key.monthPromptTokens || 0) + (key.monthCompletionTokens || 0);
 
-      // token 累计用量
       if (key.newApiTokenId) {
         try {
           const usage = await getNewApiTokenUsage(key.newApiTokenId);
           allTimeCost = quotaToUSD(usage.usedQuota);
-          allTimeRequests = usage.requestCount || 0;
         } catch (_) {}
       }
-
-      // 本月日志
-      if (key.newApiTokenName) {
-        try {
-          const logs = await getAllNewApiLogs({
-            tokenName: key.newApiTokenName,
-            startTimestamp: monthTimestamp,
-          });
-          monthCost = logs.logs.reduce((s, l) => s + quotaToUSD(l.quota || 0), 0);
-          monthRequests = logs.logs.length;
-        } catch (_) {}
-      }
-
-      if (monthCost <= 0 && key.monthUsed > 0) {
-        monthCost = key.monthUsed;
-      }
+      allTimeRequests = key.totalRequestCount || 0;
 
       if (allTimeCost <= 0 && key.totalUsed > 0) {
         allTimeCost = key.totalUsed;
@@ -75,6 +63,7 @@ export async function GET(request: NextRequest) {
 
       totalMonthCost += monthCost;
       totalMonthRequests += monthRequests;
+      totalMonthTokens += monthTokens;
       totalAllTimeCost += allTimeCost;
       totalAllTimeRequests += allTimeRequests;
 
@@ -94,7 +83,7 @@ export async function GET(request: NextRequest) {
       keyCount: keys.length,
       month: {
         cost: Math.round(totalMonthCost * 10000) / 10000,
-        tokens: 0,
+        tokens: Math.round(totalMonthTokens),
         requests: totalMonthRequests,
       },
       total: {
