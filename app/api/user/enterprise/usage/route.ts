@@ -3,8 +3,10 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
+import { getNewApiTokenUsage, getAllNewApiLogs, mapWithConcurrencyLimit, quotaToUSD } from '../../../../../src/lib/newapi';
 
 // 获取企业所有 Key 的用量汇总（按员工 Key 分组）
+// 数据来源：new-api token 用量 + 日志（new-api 自带计费规则）
 export async function GET(request: NextRequest) {
   try {
     const token = getTokenFromRequest(request);
@@ -17,55 +19,65 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '仅企业账户/管理员可使用此功能' }, { status: 403 });
     }
 
+    // 获取企业自身所有有效 Key（排除已删除/吊销的）
+    const keys = await db.aIKey.findMany({
+      where: { userId: payload.userId, status: { not: 'revoked' } },
+      select: {
+        id: true, keyName: true, label: true, status: true,
+        monthlyLimit: true, lastUsedAt: true,
+        newApiTokenId: true, newApiTokenName: true,
+      },
+    });
+
+    // 本月起始时间戳
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthTimestamp = Math.floor(monthStart.getTime() / 1000);
 
-    // 获取企业自身所有 Key
-    const keys = await db.aIKey.findMany({
-      where: { userId: payload.userId },
-      select: { id: true, keyName: true, label: true, status: true, monthUsed: true, totalUsed: true, monthlyLimit: true, lastUsedAt: true },
-    });
+    // 并行拉取每个 Key 的 token 累计用量 + 本月日志
+    let totalMonthCost = 0;
+    let totalMonthRequests = 0;
+    let totalAllTimeCost = 0;
+    let totalAllTimeRequests = 0;
 
-    // 本月用量汇总
-    const monthUsage = await db.aIUsageLog.aggregate({
-      where: {
-        userId: payload.userId,
-        createdAt: { gte: monthStart },
-      },
-      _sum: { cost: true, inputTokens: true, outputTokens: true },
-      _count: true,
-    });
+    const perKey = await mapWithConcurrencyLimit(keys, 4, async (key) => {
+      let allTimeCost = 0, allTimeRequests = 0;
+      let monthCost = 0, monthRequests = 0;
 
-    // 总用量
-    const totalUsage = await db.aIUsageLog.aggregate({
-      where: { userId: payload.userId },
-      _sum: { cost: true },
-      _count: true,
-    });
+      // token 累计用量
+      if (key.newApiTokenId) {
+        try {
+          const usage = await getNewApiTokenUsage(key.newApiTokenId);
+          allTimeCost = quotaToUSD(usage.usedQuota);
+          allTimeRequests = usage.requestCount || 0;
+        } catch (_) {}
+      }
 
-    // 按 Key 分组的本月消费
-    const perKeyUsage = await db.aIUsageLog.groupBy({
-      by: ['aiKeyId'],
-      where: {
-        userId: payload.userId,
-        createdAt: { gte: monthStart },
-      },
-      _sum: { cost: true },
-      _count: true,
-    });
+      // 本月日志
+      if (key.newApiTokenName) {
+        try {
+          const logs = await getAllNewApiLogs({
+            tokenName: key.newApiTokenName,
+            startTimestamp: monthTimestamp,
+          });
+          monthCost = logs.logs.reduce((s, l) => s + quotaToUSD(l.quota || 0), 0);
+          monthRequests = logs.logs.length;
+        } catch (_) {}
+      }
 
-    // 匹配 Key 名称
-    const keyMap = new Map(keys.map(k => [k.id, k]));
-    const perKey = perKeyUsage.map(u => {
-      const key = keyMap.get(u.aiKeyId);
+      totalMonthCost += monthCost;
+      totalMonthRequests += monthRequests;
+      totalAllTimeCost += allTimeCost;
+      totalAllTimeRequests += allTimeRequests;
+
       return {
-        keyId: u.aiKeyId,
-        keyName: key?.keyName || '未知',
-        label: key?.label || null,
-        monthCost: Math.round((u._sum.cost || 0) * 10000) / 10000,
-        requestCount: u._count,
-        monthlyLimit: key?.monthlyLimit || null,
-        status: key?.status || 'unknown',
+        keyId: key.id,
+        keyName: key.keyName,
+        label: key.label || null,
+        monthCost: Math.round(monthCost * 10000) / 10000,
+        requestCount: monthRequests,
+        monthlyLimit: key.monthlyLimit || null,
+        status: key.status,
       };
     });
 
@@ -73,17 +85,18 @@ export async function GET(request: NextRequest) {
       enterpriseBalance: user.balance,
       keyCount: keys.length,
       month: {
-        cost: Math.round((monthUsage._sum.cost || 0) * 10000) / 10000,
-        tokens: (monthUsage._sum.inputTokens || 0) + (monthUsage._sum.outputTokens || 0),
-        requests: monthUsage._count,
+        cost: Math.round(totalMonthCost * 10000) / 10000,
+        tokens: 0,
+        requests: totalMonthRequests,
       },
       total: {
-        cost: Math.round((totalUsage._sum.cost || 0) * 10000) / 10000,
-        requests: totalUsage._count,
+        cost: Math.round(totalAllTimeCost * 10000) / 10000,
+        requests: totalAllTimeRequests,
       },
       perKey,
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('获取企业用量失败:', error);
+    return NextResponse.json({ error: '获取企业用量失败' }, { status: 500 });
   }
 }

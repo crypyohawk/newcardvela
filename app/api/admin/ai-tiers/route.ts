@@ -12,7 +12,8 @@ export async function GET(request: NextRequest) {
   const tiers = await db.aIServiceTier.findMany({
     orderBy: { sortOrder: 'asc' },
     include: {
-      _count: { select: { aiKeys: true } },
+      // 只统计有效 Key（排除已吊销/删除的）
+      _count: { select: { aiKeys: { where: { status: { not: 'revoked' } } } } },
       provider: { select: { id: true, name: true, displayName: true, type: true } },
     },
   });

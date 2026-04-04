@@ -3,21 +3,18 @@ import { getNewApiTokenUsage, updateNewApiToken, quotaToUSD, usdToQuota } from '
 import { db } from '../../../../src/lib/db';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // 允许最长 60 秒执行
+export const maxDuration = 60;
 
 /**
- * 用量同步定时任务端点
- * 由 crontab 每 5 分钟调用
- * 
- * 计费逻辑：直接读取 new-api 每个 token 的 used_quota（new-api 已有完整计费规则），
- * 计算与上次同步的差值，扣除用户 AI 余额。
- * 不再拉取日志，不再本地建 AIUsageLog，轻量高效。
- * 
+ * 定时任务：按 new-api 用量同步本地扣费，并处理号池自动解绑
+ * 由 crontab 定期调用（建议 5 分钟）
+ *
+ * new-api 负责真实用量统计；平台负责把用量同步成本地 aiBalance/聚合字段。
+ *
  * GET /api/cron/sync-usage?secret=xxx
  */
 export async function GET(request: NextRequest) {
   try {
-    // 验证 cron secret
     const cronSecret = process.env.CRON_SECRET || process.env.NEW_API_WEBHOOK_SECRET;
     if (!cronSecret) {
       console.error('[cron] CRON_SECRET 未配置');
@@ -30,15 +27,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '未授权' }, { status: 401 });
     }
 
-    console.log(`[cron] 开始同步 Key 用量...`);
-
-    // 1. 从 new-api 同步所有 Key 的用量
+    console.log('[cron] 开始同步 Key 用量与号池解绑检查...');
     const syncResult = await syncKeyUsages();
-
-    // 2. 自动解绑空闲号池账号
     const autoUnbindResult = await autoUnbindIdleAccounts();
-
-    console.log(`[cron] 同步完成: checked=${syncResult.checked}, synced=${syncResult.synced}, deducted=$${syncResult.totalDeducted}`);
+    console.log(`[cron] 完成: checked=${syncResult.checked}, synced=${syncResult.synced}, deducted=$${syncResult.totalDeducted}`);
 
     return NextResponse.json({
       success: true,
@@ -46,31 +38,29 @@ export async function GET(request: NextRequest) {
       autoUnbind: autoUnbindResult,
     });
   } catch (error: any) {
-    console.error('[cron] 用量同步失败:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('[cron] 失败:', error);
+    return NextResponse.json({ error: '内部错误' }, { status: 500 });
   }
 }
 
-/**
- * 从 new-api 同步所有 Key 的用量，按 new-api 的计费规则扣费
- * 
- * 原理：new-api 内部已按模型倍率计算每个 token 的 used_quota，
- * 我们只需读取 used_quota 转换为 USD，与上次记录的 totalUsed 做差值即为新消费。
- */
 async function syncKeyUsages() {
   const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
   const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
 
-  // 查所有有 new-api token 且未作废的 Key（含 disabled，因为可能还有未结算的消费）
   const keys = await db.aIKey.findMany({
     where: {
       newApiTokenId: { not: null },
       status: { in: ['active', 'disabled'] },
     },
     select: {
-      id: true, userId: true, newApiTokenId: true, copilotAccountId: true,
-      totalUsed: true, monthUsed: true, monthlyLimit: true,
-      status: true, lastSyncAt: true,
+      id: true,
+      userId: true,
+      newApiTokenId: true,
+      monthlyLimit: true,
+      status: true,
+      lastSyncAt: true,
+      totalUsed: true,
+      monthUsed: true,
       tier: { select: { channelGroup: true } },
     },
   });
@@ -81,113 +71,133 @@ async function syncKeyUsages() {
 
   for (const key of keys) {
     try {
-      // 1. 从 new-api 获取 token 用量
       const usage = await getNewApiTokenUsage(key.newApiTokenId!);
-      const usedUSD = quotaToUSD(usage.usedQuota);
+      const usedUSD = Math.round(quotaToUSD(usage.usedQuota) * 10000) / 10000;
 
-      // 2. 计算新增消费（与上次同步的差值）
-      const delta = Math.round((usedUSD - key.totalUsed) * 10000) / 10000;
-
-      if (delta < 0.0001) {
-        // 无新消费，仅刷新 token 可用配额（确保用户充值后能用）
-        if (key.status === 'active') {
-          const user = await db.user.findUnique({ where: { id: key.userId }, select: { aiBalance: true } });
-          if (user) {
-            const newQuota = Math.max(0, usdToQuota(user.aiBalance + creditLimit));
-            try {
-              await updateNewApiToken(key.newApiTokenId!, {
-                remainQuota: newQuota,
-                group: key.tier.channelGroup || 'default',
-              });
-            } catch (_) {}
-          }
-        }
-        continue;
-      }
-
-      // 3. 跨月自动重置 monthUsed
-      const now = new Date();
-      let currentMonthUsed = key.monthUsed;
-      if (key.lastSyncAt) {
-        if (key.lastSyncAt.getMonth() !== now.getMonth() || key.lastSyncAt.getFullYear() !== now.getFullYear()) {
-          currentMonthUsed = 0;
-        }
-      }
-
-      // 4. 事务：更新 Key 用量 + 从 aiBalance 扣费
-      await db.$transaction(async (tx) => {
-        await tx.aIKey.update({
+      const txResult = await db.$transaction(async (tx) => {
+        const currentKey = await tx.aIKey.findUnique({
           where: { id: key.id },
-          data: {
-            totalUsed: usedUSD,
-            monthUsed: currentMonthUsed + delta,
-            lastUsedAt: new Date(),
-            lastSyncAt: new Date(),
+          select: {
+            id: true,
+            userId: true,
+            status: true,
+            totalUsed: true,
+            monthUsed: true,
+            monthlyLimit: true,
+            lastSyncAt: true,
           },
         });
+
+        if (!currentKey) return { delta: 0, skipped: true, reason: 'missing-key' };
+
+        const delta = Math.round((usedUSD - currentKey.totalUsed) * 10000) / 10000;
+        if (delta <= 0) {
+          return { delta: 0, skipped: true, reason: 'no-new-usage' };
+        }
+
+        const now = new Date();
+        let nextMonthUsed = currentKey.monthUsed;
+        if (
+          currentKey.lastSyncAt &&
+          (currentKey.lastSyncAt.getMonth() !== now.getMonth() || currentKey.lastSyncAt.getFullYear() !== now.getFullYear())
+        ) {
+          nextMonthUsed = 0;
+        }
+        nextMonthUsed += delta;
+
+        const updated = await tx.aIKey.updateMany({
+          where: {
+            id: currentKey.id,
+            totalUsed: currentKey.totalUsed,
+          },
+          data: {
+            totalUsed: usedUSD,
+            monthUsed: nextMonthUsed,
+            lastUsedAt: now,
+            lastSyncAt: now,
+          },
+        });
+
+        if (updated.count === 0) {
+          return { delta: 0, skipped: true, reason: 'race' };
+        }
+
         await tx.user.update({
-          where: { id: key.userId },
+          where: { id: currentKey.userId },
           data: { aiBalance: { decrement: delta } },
         });
-        // 写入交易记录（$0.01 以上才记录，避免微小噪音）
+
         if (delta >= 0.01) {
           await tx.transaction.create({
             data: {
-              userId: key.userId,
+              userId: currentKey.userId,
               type: 'ai_usage',
               amount: -delta,
               status: 'completed',
             },
           });
         }
+
+        return {
+          delta,
+          skipped: false,
+          monthUsed: nextMonthUsed,
+          monthlyLimit: currentKey.monthlyLimit,
+          userId: currentKey.userId,
+          status: currentKey.status,
+        };
       });
 
-      synced++;
-      totalDeducted += delta;
-      console.log(`[cron] Key ${key.id}: new-api=$${usedUSD.toFixed(4)}, delta=$${delta.toFixed(4)}`);
+      const user = await db.user.findUnique({
+        where: { id: key.userId },
+        select: { aiBalance: true },
+      });
 
-      // 6. 刷新 token 可用配额 + 检查余额
-      const user = await db.user.findUnique({ where: { id: key.userId }, select: { aiBalance: true } });
-      if (user) {
+      if (user && key.newApiTokenId) {
         const newQuota = Math.max(0, usdToQuota(user.aiBalance + creditLimit));
         try {
-          await updateNewApiToken(key.newApiTokenId!, {
+          await updateNewApiToken(key.newApiTokenId, {
             remainQuota: newQuota,
             group: key.tier.channelGroup || 'default',
           });
         } catch (_) {}
+      }
 
-        // 余额耗尽：禁用该用户所有活跃 Key
-        if (user.aiBalance <= -creditLimit) {
-          const activeKeys = await db.aIKey.findMany({
-            where: { userId: key.userId, status: 'active' },
-            select: { id: true, newApiTokenId: true, tier: { select: { channelGroup: true } } },
-          });
-          for (const k of activeKeys) {
-            await db.aIKey.update({ where: { id: k.id }, data: { status: 'disabled' } });
-            if (k.newApiTokenId) {
-              try {
-                await updateNewApiToken(k.newApiTokenId, {
-                  status: 2,
-                  group: k.tier.channelGroup || 'default',
-                });
-              } catch (_) {}
-            }
+      if (txResult.skipped) {
+        continue;
+      }
+
+      synced++;
+      totalDeducted += txResult.delta;
+
+      if (user && user.aiBalance <= -creditLimit) {
+        const activeKeys = await db.aIKey.findMany({
+          where: { userId: key.userId, status: 'active' },
+          select: { id: true, newApiTokenId: true, tier: { select: { channelGroup: true } } },
+        });
+        for (const activeKey of activeKeys) {
+          await db.aIKey.update({ where: { id: activeKey.id }, data: { status: 'disabled' } });
+          if (activeKey.newApiTokenId) {
+            try {
+              await updateNewApiToken(activeKey.newApiTokenId, {
+                status: 2,
+                group: activeKey.tier.channelGroup || 'default',
+              });
+            } catch (_) {}
           }
-          console.log(`[cron] 用户 ${key.userId} 超出信用额度 (余额 $${user.aiBalance.toFixed(2)})，已禁用所有 Key`);
         }
       }
 
-      // 7. 月限额检查
-      if (key.monthlyLimit && currentMonthUsed + delta > key.monthlyLimit && key.status === 'active') {
+      if (txResult.monthlyLimit && txResult.monthUsed > txResult.monthlyLimit && key.status === 'active') {
         await db.aIKey.update({ where: { id: key.id }, data: { status: 'disabled' } });
-        try {
-          await updateNewApiToken(key.newApiTokenId!, {
-            status: 2,
-            group: key.tier.channelGroup || 'default',
-          });
-        } catch (_) {}
-        console.log(`[cron] Key ${key.id} 超出月限额 $${key.monthlyLimit}，已禁用`);
+        if (key.newApiTokenId) {
+          try {
+            await updateNewApiToken(key.newApiTokenId, {
+              status: 2,
+              group: key.tier.channelGroup || 'default',
+            });
+          } catch (_) {}
+        }
       }
     } catch (e: any) {
       errors.push(`Key ${key.id}: ${e.message}`);

@@ -407,6 +407,84 @@ export async function getNewApiLogs(params: {
   return { logs, total };
 }
 
+/**
+ * 分页拉取 new-api 日志（自动循环翻页直到拉完或达到安全上限）
+ * 适用于需要完整统计而非单页预览的场景
+ */
+export async function getAllNewApiLogs(params: {
+  tokenName?: string;
+  startTimestamp?: number;
+  endTimestamp?: number;
+  maxPages?: number;
+}): Promise<{
+  logs: Array<{
+    id: number;
+    token_name: string;
+    model_name: string;
+    prompt_tokens: number;
+    completion_tokens: number;
+    quota: number;
+    created_at: number;
+    channel: number;
+  }>;
+  total: number;
+  truncated: boolean;
+}> {
+  const PAGE_SIZE = 500;
+  const MAX_PAGES = params.maxPages || 20; // 安全上限 10000 条
+  let allLogs: any[] = [];
+  let total = 0;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const result = await getNewApiLogs({
+      tokenName: params.tokenName,
+      startTimestamp: params.startTimestamp,
+      endTimestamp: params.endTimestamp,
+      page,
+      pageSize: PAGE_SIZE,
+    });
+
+    allLogs.push(...result.logs);
+    total = result.total;
+
+    if (result.logs.length < PAGE_SIZE || allLogs.length >= total) break;
+  }
+
+  return {
+    logs: allLogs,
+    total,
+    truncated: allLogs.length < total,
+  };
+}
+
+export async function mapWithConcurrencyLimit<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return [];
+
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function runWorker() {
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+
+      if (currentIndex >= items.length) {
+        return;
+      }
+
+      results[currentIndex] = await worker(items[currentIndex], currentIndex);
+    }
+  }
+
+  const workerCount = Math.min(Math.max(limit, 1), items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+  return results;
+}
+
 // ==================== 渠道管理 ====================
 
 /**

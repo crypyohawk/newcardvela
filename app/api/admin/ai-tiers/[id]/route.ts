@@ -45,7 +45,7 @@ export async function PUT(
   }
 }
 
-// 删除套餐（仅无关联 Key 时）
+// 删除套餐（软删除：标记为不可用，保留数据完整性）
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -53,11 +53,17 @@ export async function DELETE(
   const admin = await verifyAdmin(request);
   if (!admin) return NextResponse.json({ error: '需要管理员权限' }, { status: 403 });
 
-  const keyCount = await db.aIKey.count({ where: { tierId: params.id } });
-  if (keyCount > 0) {
-    return NextResponse.json({ error: `该套餐下有 ${keyCount} 个 Key，无法删除。请先下线套餐。` }, { status: 400 });
+  // 只统计有效 Key（排除已软删除/吊销的），已吊销的 Key 不阻止套餐下线
+  const activeKeyCount = await db.aIKey.count({ where: { tierId: params.id, status: { not: 'revoked' } } });
+  if (activeKeyCount > 0) {
+    return NextResponse.json({ error: `该套餐下有 ${activeKeyCount} 个有效 Key，无法删除。请先下线套餐。` }, { status: 400 });
   }
 
-  await db.aIServiceTier.delete({ where: { id: params.id } });
+  // 软删除：标记为不可用，保留关联数据（已吊销的 Key、审计日志等）
+  await db.aIServiceTier.update({
+    where: { id: params.id },
+    data: { isActive: false },
+  });
+
   return NextResponse.json({ success: true });
 }
