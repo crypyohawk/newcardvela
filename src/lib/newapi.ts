@@ -400,10 +400,12 @@ export async function getNewApiLogs(params: {
   // 使用管理员端点 /api/log/ 获取所有用户日志（/api/log/self/ 只返回当前认证用户自己的）
   const data = await newApiRequest(`/api/log/?${query.toString()}`);
   // 兼容不同 new-api 版本的响应格式：
-  // 有的返回 { data: { logs: [...], total: N } }，有的返回 { data: [...] }
+  // 有的返回 { data: { logs: [...], total: N } }，有的返回 { data: { items: [...], total: N } }，有的返回 { data: [...] }
   const rawData = data.data;
-  const logs = Array.isArray(rawData) ? rawData : (rawData?.logs || rawData?.data || []);
-  const total = Array.isArray(rawData) ? rawData.length : (rawData?.total || logs.length);
+  const logs = Array.isArray(rawData)
+    ? rawData
+    : (rawData?.logs || rawData?.items || rawData?.data?.items || rawData?.data || rawData?.list || []);
+  const total = Array.isArray(rawData) ? rawData.length : (rawData?.total || rawData?.data?.total || logs.length);
   return { logs, total };
 }
 

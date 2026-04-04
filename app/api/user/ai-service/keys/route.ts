@@ -4,12 +4,153 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
-import { createNewApiToken, deleteNewApiToken, getNewApiTokenPlaintextKeyByName, usdToQuota } from '../../../../../src/lib/newapi';
+import { createNewApiToken, deleteNewApiToken, getNewApiTokenPlaintextKeyByName, getNewApiTokenUsage, mapWithConcurrencyLimit, quotaToUSD, updateNewApiToken, usdToQuota } from '../../../../../src/lib/newapi';
 
 /** 生成混淆名称，防止上游识别客户身份 */
 function obfuscateKeyName(userId: string, keyName: string): string {
   const hash = crypto.createHash('sha256').update(`${userId}-${keyName}-${Date.now()}`).digest('hex').slice(0, 8);
   return `proj-${hash}`;
+}
+
+async function syncCurrentUserKeyUsage(userId: string) {
+  const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
+  const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
+
+  const keys = await db.aIKey.findMany({
+    where: {
+      userId,
+      newApiTokenId: { not: null },
+      status: { in: ['active', 'disabled'] },
+    },
+    select: {
+      id: true,
+      userId: true,
+      newApiTokenId: true,
+      status: true,
+      totalUsed: true,
+      monthUsed: true,
+      monthlyLimit: true,
+      lastSyncAt: true,
+      tier: { select: { channelGroup: true } },
+    },
+  });
+
+  await mapWithConcurrencyLimit(keys, 4, async (key) => {
+    try {
+      const usage = await getNewApiTokenUsage(key.newApiTokenId!);
+      const usedUSD = Math.round(quotaToUSD(usage.usedQuota) * 10000) / 10000;
+
+      const txResult = await db.$transaction(async (tx) => {
+        const currentKey = await tx.aIKey.findUnique({
+          where: { id: key.id },
+          select: {
+            id: true,
+            userId: true,
+            status: true,
+            totalUsed: true,
+            monthUsed: true,
+            monthlyLimit: true,
+            lastSyncAt: true,
+          },
+        });
+
+        if (!currentKey) return { skipped: true, delta: 0, monthUsed: 0, monthlyLimit: null };
+
+        const delta = Math.round((usedUSD - currentKey.totalUsed) * 10000) / 10000;
+        if (delta <= 0) return { skipped: true, delta: 0, monthUsed: currentKey.monthUsed, monthlyLimit: currentKey.monthlyLimit };
+
+        const now = new Date();
+        let nextMonthUsed = currentKey.monthUsed;
+        if (
+          currentKey.lastSyncAt &&
+          (currentKey.lastSyncAt.getMonth() !== now.getMonth() || currentKey.lastSyncAt.getFullYear() !== now.getFullYear())
+        ) {
+          nextMonthUsed = 0;
+        }
+        nextMonthUsed += delta;
+
+        const updated = await tx.aIKey.updateMany({
+          where: { id: currentKey.id, totalUsed: currentKey.totalUsed },
+          data: {
+            totalUsed: usedUSD,
+            monthUsed: nextMonthUsed,
+            lastUsedAt: now,
+            lastSyncAt: now,
+          },
+        });
+
+        if (updated.count === 0) {
+          return { skipped: true, delta: 0, monthUsed: currentKey.monthUsed, monthlyLimit: currentKey.monthlyLimit };
+        }
+
+        await tx.user.update({
+          where: { id: currentKey.userId },
+          data: { aiBalance: { decrement: delta } },
+        });
+
+        if (delta >= 0.01) {
+          await tx.transaction.create({
+            data: {
+              userId: currentKey.userId,
+              type: 'ai_usage',
+              amount: -delta,
+              status: 'completed',
+            },
+          });
+        }
+
+        return {
+          skipped: false,
+          delta,
+          monthUsed: nextMonthUsed,
+          monthlyLimit: currentKey.monthlyLimit,
+        };
+      });
+
+      const user = await db.user.findUnique({ where: { id: userId }, select: { aiBalance: true } });
+      if (user && key.newApiTokenId) {
+        const newQuota = Math.max(0, usdToQuota(user.aiBalance + creditLimit));
+        try {
+          await updateNewApiToken(key.newApiTokenId, {
+            remainQuota: newQuota,
+            group: key.tier.channelGroup || 'default',
+          });
+        } catch (_) {}
+
+        if (user.aiBalance <= -creditLimit) {
+          const activeKeys = await db.aIKey.findMany({
+            where: { userId, status: 'active' },
+            select: { id: true, newApiTokenId: true, tier: { select: { channelGroup: true } } },
+          });
+          for (const activeKey of activeKeys) {
+            await db.aIKey.update({ where: { id: activeKey.id }, data: { status: 'disabled' } });
+            if (activeKey.newApiTokenId) {
+              try {
+                await updateNewApiToken(activeKey.newApiTokenId, {
+                  status: 2,
+                  group: activeKey.tier.channelGroup || 'default',
+                });
+              } catch (_) {}
+            }
+          }
+        }
+      }
+
+      if (!txResult.skipped && txResult.monthlyLimit && txResult.monthUsed > txResult.monthlyLimit && key.status === 'active') {
+        await db.aIKey.update({ where: { id: key.id }, data: { status: 'disabled' } });
+        if (key.newApiTokenId) {
+          try {
+            await updateNewApiToken(key.newApiTokenId, {
+              status: 2,
+              group: key.tier.channelGroup || 'default',
+            });
+          } catch (_) {}
+        }
+      }
+    } catch (error: any) {
+      console.warn(`[key-sync] sync failed for ${key.id}:`, error.message);
+    }
+  });
 }
 
 // 获取用户的所有 Key
@@ -19,6 +160,8 @@ export async function GET(request: NextRequest) {
     if (!token) return NextResponse.json({ error: '未授权' }, { status: 401 });
     const payload = verifyToken(token);
     if (!payload) return NextResponse.json({ error: '无效的令牌' }, { status: 401 });
+
+    await syncCurrentUserKeyUsage(payload.userId);
 
     const keys = await db.aIKey.findMany({
       where: { userId: payload.userId, status: { not: 'revoked' } },
