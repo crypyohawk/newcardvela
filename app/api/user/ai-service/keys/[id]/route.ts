@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../../src/lib/auth';
+import { getAvailableTokenUsd } from '../../../../../../src/lib/aiKeyQuota';
 import { updateNewApiToken, deleteNewApiToken, usdToQuota } from '../../../../../../src/lib/newapi';
 
 // 获取单个 Key 详情
@@ -116,9 +117,14 @@ export async function PUT(
             try {
               const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
               const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
-              const freshQuota = usdToQuota(Math.max(user.aiBalance + creditLimit, creditLimit));
+              const freshQuota = usdToQuota(getAvailableTokenUsd({
+                aiBalance: user.aiBalance,
+                creditLimit,
+                monthUsed: aiKey.monthUsed,
+                monthlyLimit: aiKey.monthlyLimit,
+              }));
               await updateNewApiToken(aiKey.newApiTokenId, {
-                status: 1,
+                status: freshQuota > 0 ? 1 : 2,
                 remainQuota: freshQuota,
                 group: aiKey.tier.channelGroup || 'default',
                 expiredTime: -1,

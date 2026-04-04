@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
+import { getAvailableTokenUsd, isAiKeyQuotaExhausted } from '../../../../../src/lib/aiKeyQuota';
+import { ensureCopilotPoolKeyLease } from '../../../../../src/lib/copilotPool';
 import { createNewApiToken, deleteNewApiToken, getNewApiTokenPlaintextKeyByName, getNewApiTokenUsage, mapWithConcurrencyLimit, quotaToUSD, updateNewApiToken, usdToQuota } from '../../../../../src/lib/newapi';
 
 /** 生成混淆名称，防止上游识别客户身份 */
@@ -152,7 +154,13 @@ async function syncCurrentUserKeyUsage(userId: string) {
 
       const user = await db.user.findUnique({ where: { id: userId }, select: { aiBalance: true } });
       if (user && key.newApiTokenId) {
-        const newQuota = Math.max(0, usdToQuota(user.aiBalance + creditLimit));
+        const availableUsd = getAvailableTokenUsd({
+          aiBalance: user.aiBalance,
+          creditLimit,
+          monthUsed: txResult.monthUsed,
+          monthlyLimit: txResult.monthlyLimit,
+        });
+        const newQuota = usdToQuota(availableUsd);
         try {
           await updateNewApiToken(key.newApiTokenId, {
             remainQuota: newQuota,
@@ -161,7 +169,12 @@ async function syncCurrentUserKeyUsage(userId: string) {
           });
         } catch (_) {}
 
-        if (user.aiBalance <= -creditLimit) {
+        if (isAiKeyQuotaExhausted({
+          aiBalance: user.aiBalance,
+          creditLimit,
+          monthUsed: txResult.monthUsed,
+          monthlyLimit: txResult.monthlyLimit,
+        })) {
           const activeKeys = await db.aIKey.findMany({
             where: { userId, status: 'active' },
             select: { id: true, newApiTokenId: true, tier: { select: { channelGroup: true } } },
@@ -180,7 +193,7 @@ async function syncCurrentUserKeyUsage(userId: string) {
         }
       }
 
-      if (!txResult.skipped && txResult.monthlyLimit && txResult.monthUsed > txResult.monthlyLimit && key.status === 'active') {
+      if (!txResult.skipped && txResult.monthlyLimit && txResult.monthUsed >= txResult.monthlyLimit && key.status === 'active') {
         await db.aIKey.update({ where: { id: key.id }, data: { status: 'disabled' } });
         if (key.newApiTokenId) {
           try {
@@ -207,7 +220,7 @@ export async function GET(request: NextRequest) {
 
     await syncCurrentUserKeyUsage(payload.userId);
 
-    const keys = await db.aIKey.findMany({
+    let keys = await db.aIKey.findMany({
       where: { userId: payload.userId, status: { not: 'revoked' } },
       include: {
         tier: {
@@ -215,12 +228,44 @@ export async function GET(request: NextRequest) {
             name: true,
             displayName: true,
             modelGroup: true,
+            channelGroup: true,
             provider: { select: { type: true, displayName: true, baseUrl: true } },
           },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    const releasedPoolKeys = keys.filter((key) => {
+      const isCopilotPool = key.tier?.channelGroup === 'copilot' || key.tier?.provider?.type === 'copilot-pool';
+      return key.status === 'active' && isCopilotPool && !key.copilotAccountId;
+    });
+
+    if (releasedPoolKeys.length > 0) {
+      await Promise.all(releasedPoolKeys.map(async (key) => {
+        try {
+          await ensureCopilotPoolKeyLease(key.id);
+        } catch (error: any) {
+          console.warn(`[pool-lease] ensure failed for key ${key.id}:`, error.message);
+        }
+      }));
+
+      keys = await db.aIKey.findMany({
+        where: { userId: payload.userId, status: { not: 'revoked' } },
+        include: {
+          tier: {
+            select: {
+              name: true,
+              displayName: true,
+              modelGroup: true,
+              channelGroup: true,
+              provider: { select: { type: true, displayName: true, baseUrl: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
 
     const repairedKeys = await Promise.all(keys.map(async (key) => {
       if (!key.apiKey.includes('*') || !key.newApiTokenName) {
@@ -391,9 +436,12 @@ export async function POST(request: NextRequest) {
     try {
       const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
       const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
-      let maxQuotaUSD = user.aiBalance + creditLimit;
-      if (monthlyLimit) maxQuotaUSD = Math.min(maxQuotaUSD, Number(monthlyLimit));
-      maxQuotaUSD = Math.max(maxQuotaUSD, creditLimit); // 至少给信用额度
+      const maxQuotaUSD = getAvailableTokenUsd({
+        aiBalance: user.aiBalance,
+        creditLimit,
+        monthUsed: 0,
+        monthlyLimit: monthlyLimit == null || monthlyLimit === '' ? null : Number(monthlyLimit),
+      });
       const quotaAmount = usdToQuota(maxQuotaUSD);
       const result = await createNewApiToken({
         name: tokenName,

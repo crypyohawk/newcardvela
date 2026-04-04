@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getAvailableTokenUsd, isAiKeyQuotaExhausted } from '../../../../src/lib/aiKeyQuota';
 import { getAllNewApiLogs, getNewApiTokenUsage, updateNewApiToken, quotaToUSD, usdToQuota } from '../../../../src/lib/newapi';
 import { db } from '../../../../src/lib/db';
 
@@ -406,7 +407,15 @@ async function syncKeyUsages() {
       });
 
       if (user && key.newApiTokenId) {
-        const newQuota = Math.max(0, usdToQuota(user.aiBalance + creditLimit));
+        const monthUsed = txResult.monthUsed ?? key.monthUsed;
+        const monthlyLimit = txResult.monthlyLimit ?? key.monthlyLimit;
+        const availableUsd = getAvailableTokenUsd({
+          aiBalance: user.aiBalance,
+          creditLimit,
+          monthUsed,
+          monthlyLimit,
+        });
+        const newQuota = usdToQuota(availableUsd);
         try {
           await updateNewApiToken(key.newApiTokenId, {
             remainQuota: newQuota,
@@ -451,7 +460,12 @@ async function syncKeyUsages() {
         `[cron] key=${key.id} token=${key.newApiTokenId} synced delta=$${txResult.delta} local=$${localTotalUsedBefore} remote=$${usedUSD} quota=${usage.usedQuota} remoteName=${usage.tokenName || '(empty)'}`
       );
 
-      if (user && user.aiBalance <= -creditLimit) {
+      if (user && isAiKeyQuotaExhausted({
+        aiBalance: user.aiBalance,
+        creditLimit,
+        monthUsed: txResult.monthUsed ?? key.monthUsed,
+        monthlyLimit: txResult.monthlyLimit ?? key.monthlyLimit,
+      })) {
         const activeKeys = await db.aIKey.findMany({
           where: { userId: key.userId, status: 'active' },
           select: { id: true, newApiTokenId: true, tier: { select: { channelGroup: true } } },
@@ -469,7 +483,7 @@ async function syncKeyUsages() {
         }
       }
 
-      if (txResult.monthlyLimit && txResult.monthUsed > txResult.monthlyLimit && key.status === 'active') {
+      if (txResult.monthlyLimit && txResult.monthUsed >= txResult.monthlyLimit && key.status === 'active') {
         await db.aIKey.update({ where: { id: key.id }, data: { status: 'disabled' } });
         if (key.newApiTokenId) {
           try {
@@ -505,8 +519,8 @@ async function syncKeyUsages() {
 /**
  * 自动解绑空闲超过 2 小时的号池账号
  * 
- * 共享池租约模型：只释放号池账号绑定关系，不禁用用户 Key，不禁用 new-api token。
- * 用户下次调用仍可直接使用原 token（new-api 按 group 路由到可用渠道）。
+ * 共享池租约模型：释放号池账号绑定关系前，先禁用对应的 new-api token。
+ * 这样可以避免 Key 在本地已释放租约时，仍通过 group 路由继续占用共享池账号。
  * 
  * - 条件1：绑定时间超过 2 小时
  * - 条件2：绑定的 Key 最后使用时间超过 2 小时（或从未使用）
@@ -529,7 +543,13 @@ async function autoUnbindIdleAccounts() {
     const keyIds = boundAccounts.map(a => a.boundAiKeyId!);
     const keys = await db.aIKey.findMany({
       where: { id: { in: keyIds } },
-      select: { id: true, lastUsedAt: true, status: true },
+      select: {
+        id: true,
+        lastUsedAt: true,
+        status: true,
+        newApiTokenId: true,
+        tier: { select: { channelGroup: true } },
+      },
     });
     const keyMap = Object.fromEntries(keys.map(k => [k.id, k]));
 
@@ -541,7 +561,19 @@ async function autoUnbindIdleAccounts() {
         !key.lastUsedAt || key.lastUsedAt < cutoff;
 
       if (keyIdle) {
-        // 只释放号池账号绑定，Key 和 token 保持不变
+        if (key?.newApiTokenId) {
+          try {
+            await updateNewApiToken(key.newApiTokenId, {
+              status: 2,
+              group: key.tier?.channelGroup || 'default',
+            });
+          } catch (error: any) {
+            console.warn(`[auto-unbind] 禁用 key token 失败，跳过释放: key=${key.id}, token=${key.newApiTokenId}, error=${error.message}`);
+            continue;
+          }
+        }
+
+        // 释放号池账号绑定，Key 本身保持 active，等待后续重新获取租约
         await db.$transaction([
           db.copilotAccount.update({
             where: { id: account.id },
@@ -561,7 +593,7 @@ async function autoUnbindIdleAccounts() {
           ] : []),
         ]);
 
-        console.log(`[auto-unbind] 释放号池: account=${account.githubId}, key=${account.boundAiKeyId} (key/token 保持活跃)`);
+        console.log(`[auto-unbind] 释放号池: account=${account.githubId}, key=${account.boundAiKeyId} (token 已禁用，等待重新获取租约)`);
         unboundCount++;
       }
     }
