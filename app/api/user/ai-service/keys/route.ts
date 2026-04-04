@@ -30,6 +30,7 @@ async function syncCurrentUserKeyUsage(userId: string) {
       status: true,
       totalUsed: true,
       monthUsed: true,
+      lastRemoteUsedUsd: true,
       monthlyLimit: true,
       lastSyncAt: true,
       tier: { select: { channelGroup: true } },
@@ -50,6 +51,7 @@ async function syncCurrentUserKeyUsage(userId: string) {
             status: true,
             totalUsed: true,
             monthUsed: true,
+            lastRemoteUsedUsd: true,
             monthlyLimit: true,
             lastSyncAt: true,
           },
@@ -57,10 +59,45 @@ async function syncCurrentUserKeyUsage(userId: string) {
 
         if (!currentKey) return { skipped: true, delta: 0, monthUsed: 0, monthlyLimit: null };
 
-        const delta = Math.round((usedUSD - currentKey.totalUsed) * 10000) / 10000;
-        if (delta <= 0) return { skipped: true, delta: 0, monthUsed: currentKey.monthUsed, monthlyLimit: currentKey.monthlyLimit };
-
         const now = new Date();
+        let remoteBaseline = currentKey.lastRemoteUsedUsd;
+        let baselineReason: string | null = null;
+
+        if (remoteBaseline == null) {
+          remoteBaseline = currentKey.totalUsed > 0 && usedUSD < currentKey.totalUsed
+            ? usedUSD
+            : currentKey.totalUsed;
+          baselineReason = currentKey.totalUsed > 0 && usedUSD < currentKey.totalUsed
+            ? 'bootstrap-remote-reset'
+            : 'bootstrap';
+        } else if (usedUSD < remoteBaseline) {
+          remoteBaseline = usedUSD;
+          baselineReason = 'remote-counter-reset';
+        }
+
+        const delta = Math.round((usedUSD - remoteBaseline) * 10000) / 10000;
+        if (delta <= 0) {
+          if (baselineReason) {
+            const updated = await tx.aIKey.updateMany({
+              where: {
+                id: currentKey.id,
+                totalUsed: currentKey.totalUsed,
+                lastRemoteUsedUsd: currentKey.lastRemoteUsedUsd,
+              },
+              data: {
+                lastRemoteUsedUsd: usedUSD,
+                lastSyncAt: now,
+              },
+            });
+
+            if (updated.count === 0) {
+              return { skipped: true, delta: 0, monthUsed: currentKey.monthUsed, monthlyLimit: currentKey.monthlyLimit };
+            }
+          }
+
+          return { skipped: true, delta: 0, monthUsed: currentKey.monthUsed, monthlyLimit: currentKey.monthlyLimit };
+        }
+
         let nextMonthUsed = currentKey.monthUsed;
         if (
           currentKey.lastSyncAt &&
@@ -71,10 +108,15 @@ async function syncCurrentUserKeyUsage(userId: string) {
         nextMonthUsed += delta;
 
         const updated = await tx.aIKey.updateMany({
-          where: { id: currentKey.id, totalUsed: currentKey.totalUsed },
+          where: {
+            id: currentKey.id,
+            totalUsed: currentKey.totalUsed,
+            lastRemoteUsedUsd: currentKey.lastRemoteUsedUsd,
+          },
           data: {
-            totalUsed: usedUSD,
+            totalUsed: { increment: delta },
             monthUsed: nextMonthUsed,
+            lastRemoteUsedUsd: usedUSD,
             lastUsedAt: now,
             lastSyncAt: now,
           },

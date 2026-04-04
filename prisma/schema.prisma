@@ -406,6 +406,7 @@ model AIKey {
   totalCompletionTokens Float @default(0)       // 累计输出 tokens
   monthPromptTokens Float  @default(0)          // 本月输入 tokens
   monthCompletionTokens Float @default(0)       // 本月输出 tokens
+  lastRemoteUsedUsd Float?                      // 上次同步时 new-api 返回的累计消费 (USD)
   lastUsedAt      DateTime?
   lastSyncAt      DateTime?                     // 上次用量同步时间
   lastStatsSyncAt DateTime?                     // 上次统计同步时间
