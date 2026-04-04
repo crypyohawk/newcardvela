@@ -263,6 +263,7 @@ async function syncKeyUsages() {
       totalUsed: true,
       monthUsed: true,
       lastRemoteUsedUsd: true,
+      copilotAccountId: true,
       tier: { select: { channelGroup: true } },
     },
   });
@@ -441,6 +442,21 @@ async function syncKeyUsages() {
           `[cron] key=${key.id} token=${key.newApiTokenId} skipped=${txResult.reason || 'skipped'} local=$${localTotalUsedBefore} remote=$${usedUSD} quota=${usage.usedQuota} remoteName=${usage.tokenName || '(empty)'}`
         );
         continue;
+      }
+
+      // 回写绑定的号池账号用量
+      if (key.copilotAccountId && txResult.delta > 0) {
+        try {
+          await db.copilotAccount.update({
+            where: { id: key.copilotAccountId },
+            data: {
+              quotaUsed: { increment: txResult.delta },
+              lastUsed: new Date(),
+            },
+          });
+        } catch (e: any) {
+          console.warn(`[cron] 回写号池账号用量失败: account=${key.copilotAccountId}, error=${e.message}`);
+        }
       }
 
       synced++;

@@ -35,6 +35,7 @@ async function syncCurrentUserKeyUsage(userId: string) {
       lastRemoteUsedUsd: true,
       monthlyLimit: true,
       lastSyncAt: true,
+      copilotAccountId: true,
       tier: { select: { channelGroup: true } },
     },
   });
@@ -151,6 +152,19 @@ async function syncCurrentUserKeyUsage(userId: string) {
           monthlyLimit: currentKey.monthlyLimit,
         };
       });
+
+      // 回写绑定的号池账号用量
+      if (key.copilotAccountId && !txResult.skipped && txResult.delta > 0) {
+        try {
+          await db.copilotAccount.update({
+            where: { id: key.copilotAccountId },
+            data: {
+              quotaUsed: { increment: txResult.delta },
+              lastUsed: new Date(),
+            },
+          });
+        } catch (_) {}
+      }
 
       const user = await db.user.findUnique({ where: { id: userId }, select: { aiBalance: true } });
       if (user && key.newApiTokenId) {
