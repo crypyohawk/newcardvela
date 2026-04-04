@@ -69,11 +69,23 @@ async function syncKeyUsages() {
   let synced = 0;
   let totalDeducted = 0;
   const errors: string[] = [];
+  const diagnostics: Array<{
+    keyId: string;
+    tokenId: number | null;
+    tokenName: string | null;
+    remoteTokenName: string;
+    usedQuota?: number;
+    remoteUsedUSD?: number;
+    localTotalUsed?: number;
+    delta?: number;
+    reason: string;
+  }> = [];
 
   for (const key of keys) {
     try {
       const usage = await getNewApiTokenUsage(key.newApiTokenId!);
       const usedUSD = Math.round(quotaToUSD(usage.usedQuota) * 10000) / 10000;
+      let localTotalUsedBefore = key.totalUsed;
 
       const txResult = await db.$transaction(async (tx) => {
         const currentKey = await tx.aIKey.findUnique({
@@ -90,6 +102,8 @@ async function syncKeyUsages() {
         });
 
         if (!currentKey) return { delta: 0, skipped: true, reason: 'missing-key' };
+
+        localTotalUsedBefore = currentKey.totalUsed;
 
         const delta = Math.round((usedUSD - currentKey.totalUsed) * 10000) / 10000;
         if (delta <= 0) {
@@ -166,11 +180,39 @@ async function syncKeyUsages() {
       }
 
       if (txResult.skipped) {
+        diagnostics.push({
+          keyId: key.id,
+          tokenId: key.newApiTokenId,
+          tokenName: key.newApiTokenName,
+          remoteTokenName: usage.tokenName,
+          usedQuota: usage.usedQuota,
+          remoteUsedUSD: usedUSD,
+          localTotalUsed: localTotalUsedBefore,
+          delta: Math.round((usedUSD - localTotalUsedBefore) * 10000) / 10000,
+          reason: txResult.reason || 'skipped',
+        });
+        console.log(
+          `[cron] key=${key.id} token=${key.newApiTokenId} skipped=${txResult.reason || 'skipped'} local=$${localTotalUsedBefore} remote=$${usedUSD} quota=${usage.usedQuota} remoteName=${usage.tokenName || '(empty)'}`
+        );
         continue;
       }
 
       synced++;
       totalDeducted += txResult.delta;
+      diagnostics.push({
+        keyId: key.id,
+        tokenId: key.newApiTokenId,
+        tokenName: key.newApiTokenName,
+        remoteTokenName: usage.tokenName,
+        usedQuota: usage.usedQuota,
+        remoteUsedUSD: usedUSD,
+        localTotalUsed: localTotalUsedBefore,
+        delta: txResult.delta,
+        reason: 'synced',
+      });
+      console.log(
+        `[cron] key=${key.id} token=${key.newApiTokenId} synced delta=$${txResult.delta} local=$${localTotalUsedBefore} remote=$${usedUSD} quota=${usage.usedQuota} remoteName=${usage.tokenName || '(empty)'}`
+      );
 
       if (user && user.aiBalance <= -creditLimit) {
         const activeKeys = await db.aIKey.findMany({
@@ -203,6 +245,13 @@ async function syncKeyUsages() {
       }
     } catch (e: any) {
       errors.push(`Key ${key.id}: ${e.message}`);
+      diagnostics.push({
+        keyId: key.id,
+        tokenId: key.newApiTokenId,
+        tokenName: key.newApiTokenName,
+        remoteTokenName: '',
+        reason: `error:${e.message}`,
+      });
       console.error(`[cron] 同步 Key ${key.id} 失败:`, e.message);
     }
   }
@@ -211,6 +260,7 @@ async function syncKeyUsages() {
     checked: keys.length,
     synced,
     totalDeducted: Math.round(totalDeducted * 10000) / 10000,
+    diagnostics,
     errors: errors.length > 0 ? errors : undefined,
   };
 }
