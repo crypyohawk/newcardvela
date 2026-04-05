@@ -1,6 +1,6 @@
 import { db } from './db';
 import { getAvailableTokenUsd } from './aiKeyQuota';
-import { updateNewApiToken } from './newapi';
+import { isNewApiRecordNotFoundError, repairAiKeyNewApiTokenId, updateNewApiToken } from './newapi';
 
 function isCopilotPoolKey(key: {
   tier: { channelGroup: string | null; provider: { type: string } | null } | null;
@@ -14,6 +14,36 @@ function resolveTokenGroup(key: {
   return key.tier?.channelGroup || 'default';
 }
 
+async function syncKeyTokenState(key: {
+  id: string;
+  newApiTokenId: number | null;
+  newApiTokenName?: string | null;
+}, params: Parameters<typeof updateNewApiToken>[1]) {
+  const tokenId = await repairAiKeyNewApiTokenId(key, { forceValidate: true });
+  if (!tokenId) {
+    throw new Error('missing-new-api-token-id');
+  }
+
+  try {
+    await updateNewApiToken(tokenId, params);
+  } catch (error: any) {
+    if (!isNewApiRecordNotFoundError(error)) {
+      throw error;
+    }
+
+    const repairedTokenId = await repairAiKeyNewApiTokenId({
+      ...key,
+      newApiTokenId: null,
+    });
+    if (!repairedTokenId) {
+      throw error;
+    }
+
+    key.newApiTokenId = repairedTokenId;
+    await updateNewApiToken(repairedTokenId, params);
+  }
+}
+
 export async function ensureCopilotPoolKeyLease(keyId: string) {
   const key = await db.aIKey.findUnique({
     where: { id: keyId },
@@ -23,6 +53,7 @@ export async function ensureCopilotPoolKeyLease(keyId: string) {
       status: true,
       copilotAccountId: true,
       newApiTokenId: true,
+      newApiTokenName: true,
       monthUsed: true,
       monthlyLimit: true,
       tier: {
@@ -78,7 +109,7 @@ export async function ensureCopilotPoolKeyLease(keyId: string) {
 
       if (key.newApiTokenId) {
         try {
-          await updateNewApiToken(key.newApiTokenId, {
+          await syncKeyTokenState(key, {
             status: availableUsd > 0 ? 1 : 2,
             remainQuota: Math.round(availableUsd * 500000),
             group: tokenGroup,
@@ -160,7 +191,7 @@ export async function ensureCopilotPoolKeyLease(keyId: string) {
 
     if (key.newApiTokenId) {
       try {
-        await updateNewApiToken(key.newApiTokenId, {
+        await syncKeyTokenState(key, {
           status: availableUsd > 0 ? 1 : 2,
           remainQuota: Math.round(availableUsd * 500000),
           group: tokenGroup,
