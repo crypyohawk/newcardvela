@@ -4,32 +4,77 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../../src/lib/auth';
 import { getAvailableTokenUsd } from '../../../../../../src/lib/aiKeyQuota';
-import { findNewApiTokenIdByName, updateNewApiToken, deleteNewApiToken, usdToQuota } from '../../../../../../src/lib/newapi';
+import { deleteNewApiToken, isNewApiRecordNotFoundError, repairAiKeyNewApiTokenId, updateNewApiToken, usdToQuota } from '../../../../../../src/lib/newapi';
 
 async function ensureNewApiTokenId(aiKey: {
   id: string;
   newApiTokenId: number | null;
   newApiTokenName: string | null;
 }) {
-  if (aiKey.newApiTokenId) {
-    return aiKey.newApiTokenId;
+  return repairAiKeyNewApiTokenId(aiKey, { forceValidate: true });
+}
+
+async function updateNewApiTokenWithRepair(aiKey: {
+  id: string;
+  newApiTokenId: number | null;
+  newApiTokenName: string | null;
+}, params: Parameters<typeof updateNewApiToken>[1]) {
+  const tokenId = await ensureNewApiTokenId(aiKey);
+  if (!tokenId) {
+    throw new Error('该 Key 未关联到 new-api token，无法同步到网关');
   }
 
-  if (!aiKey.newApiTokenName) {
-    return null;
+  try {
+    await updateNewApiToken(tokenId, params);
+    aiKey.newApiTokenId = tokenId;
+    return tokenId;
+  } catch (error: any) {
+    if (!isNewApiRecordNotFoundError(error)) {
+      throw error;
+    }
+
+    const repairedTokenId = await repairAiKeyNewApiTokenId({
+      ...aiKey,
+      newApiTokenId: null,
+    });
+    if (!repairedTokenId) {
+      throw error;
+    }
+
+    await updateNewApiToken(repairedTokenId, params);
+    aiKey.newApiTokenId = repairedTokenId;
+    return repairedTokenId;
+  }
+}
+
+async function disableAndDeleteNewApiTokenWithRepair(aiKey: {
+  id: string;
+  newApiTokenId: number | null;
+  newApiTokenName: string | null;
+}) {
+  const tokenId = await ensureNewApiTokenId(aiKey);
+  if (!tokenId) {
+    return;
   }
 
-  const resolvedId = await findNewApiTokenIdByName(aiKey.newApiTokenName);
-  if (!resolvedId) {
-    return null;
+  try {
+    await updateNewApiToken(tokenId, { status: 2 });
+  } catch (error: any) {
+    if (!isNewApiRecordNotFoundError(error)) {
+      throw error;
+    }
+    const repairedTokenId = await repairAiKeyNewApiTokenId({
+      ...aiKey,
+      newApiTokenId: null,
+    });
+    if (!repairedTokenId) {
+      throw error;
+    }
+    aiKey.newApiTokenId = repairedTokenId;
+    await updateNewApiToken(repairedTokenId, { status: 2 });
   }
 
-  await db.aIKey.update({
-    where: { id: aiKey.id },
-    data: { newApiTokenId: resolvedId },
-  });
-
-  return resolvedId;
+  await deleteNewApiToken(aiKey.newApiTokenId!);
 }
 
 // 获取单个 Key 详情
@@ -181,7 +226,7 @@ export async function PUT(
           // 同步启用 new-api token + 刷新配额 + 确保 group 正确
           try {
             const freshQuota = usdToQuota(availableUsd);
-            await updateNewApiToken(newApiTokenId, {
+            await updateNewApiTokenWithRepair(aiKey, {
               status: 1,
               remainQuota: freshQuota,
               group: aiKey.tier.channelGroup || 'default',
@@ -260,7 +305,7 @@ export async function PUT(
           tokenUpdate.status = 1;
         }
 
-        await updateNewApiToken(newApiTokenId, tokenUpdate);
+        await updateNewApiTokenWithRepair(aiKey, tokenUpdate);
       } catch (e: any) {
         console.error('同步 new-api 状态失败:', e.message);
         return NextResponse.json({
@@ -315,19 +360,12 @@ export async function DELETE(
     if (!aiKey) return NextResponse.json({ error: 'Key 不存在' }, { status: 404 });
 
     // 先禁用再删除 new-api 侧 token，确保 key 立即失效
-    if (aiKey.newApiTokenId) {
+    if (aiKey.newApiTokenId || aiKey.newApiTokenName) {
       try {
         // 先禁用（立即生效，防止在删除过程中仍可调用）
-        await updateNewApiToken(aiKey.newApiTokenId, { status: 2 });
+        await disableAndDeleteNewApiTokenWithRepair(aiKey);
       } catch (e: any) {
         console.error('禁用 new-api token 失败:', e.message);
-      }
-      try {
-        // 再删除（彻底移除）
-        await deleteNewApiToken(aiKey.newApiTokenId);
-      } catch (e: any) {
-        console.error('删除 new-api token 失败:', e.message);
-        // 即使删除失败，token 已被禁用，继续软删除本地记录
       }
     }
 

@@ -6,7 +6,7 @@ import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
 import { getAvailableTokenUsd, isAiKeyQuotaExhausted } from '../../../../../src/lib/aiKeyQuota';
 import { ensureCopilotPoolKeyLease } from '../../../../../src/lib/copilotPool';
-import { createNewApiToken, deleteNewApiToken, findNewApiTokenIdByName, getNewApiTokenPlaintextKeyByName, getNewApiTokenUsage, mapWithConcurrencyLimit, quotaToUSD, updateNewApiToken, usdToQuota } from '../../../../../src/lib/newapi';
+import { createNewApiToken, deleteNewApiToken, findNewApiTokenIdByName, getNewApiTokenPlaintextKeyByName, getNewApiTokenUsage, isNewApiRecordNotFoundError, mapWithConcurrencyLimit, quotaToUSD, repairAiKeyNewApiTokenId, updateNewApiToken, usdToQuota } from '../../../../../src/lib/newapi';
 
 /** 生成混淆名称，防止上游识别客户身份 */
 function obfuscateKeyName(userId: string, keyName: string): string {
@@ -41,6 +41,65 @@ async function repairMissingNewApiTokenIdsForUser(userId: string) {
   });
 }
 
+async function getNewApiTokenUsageWithRepair(key: {
+  id: string;
+  newApiTokenId: number | null;
+  newApiTokenName?: string | null;
+}) {
+  if (!key.newApiTokenId) {
+    return null;
+  }
+
+  try {
+    return await getNewApiTokenUsage(key.newApiTokenId);
+  } catch (error: any) {
+    if (!isNewApiRecordNotFoundError(error)) {
+      throw error;
+    }
+
+    const repairedTokenId = await repairAiKeyNewApiTokenId({
+      id: key.id,
+      newApiTokenId: null,
+      newApiTokenName: key.newApiTokenName,
+    });
+    if (!repairedTokenId) {
+      throw error;
+    }
+
+    key.newApiTokenId = repairedTokenId;
+    return await getNewApiTokenUsage(repairedTokenId);
+  }
+}
+
+async function updateNewApiTokenWithRepair(
+  key: { id: string; newApiTokenId: number | null; newApiTokenName?: string | null },
+  params: Parameters<typeof updateNewApiToken>[1]
+) {
+  if (!key.newApiTokenId) {
+    return;
+  }
+
+  try {
+    await updateNewApiToken(key.newApiTokenId, params);
+  } catch (error: any) {
+    if (!isNewApiRecordNotFoundError(error)) {
+      throw error;
+    }
+
+    const repairedTokenId = await repairAiKeyNewApiTokenId({
+      id: key.id,
+      newApiTokenId: null,
+      newApiTokenName: key.newApiTokenName,
+    });
+    if (!repairedTokenId) {
+      throw error;
+    }
+
+    key.newApiTokenId = repairedTokenId;
+    await updateNewApiToken(repairedTokenId, params);
+  }
+}
+
 async function syncCurrentUserKeyUsage(userId: string) {
   const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
   const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
@@ -69,7 +128,8 @@ async function syncCurrentUserKeyUsage(userId: string) {
 
   await mapWithConcurrencyLimit(keys, 4, async (key) => {
     try {
-      const usage = await getNewApiTokenUsage(key.newApiTokenId!);
+      const usage = await getNewApiTokenUsageWithRepair(key);
+      if (!usage) return;
       const usedUSD = Math.round(quotaToUSD(usage.usedQuota) * 10000) / 10000;
 
       const txResult = await db.$transaction(async (tx) => {
@@ -211,7 +271,7 @@ async function syncCurrentUserKeyUsage(userId: string) {
         // 始终带上 status，避免并行更新把已禁用的 token 改回启用
         const tokenStatus = (keyIsActive && newQuota > 0) ? 1 : 2;
         try {
-          await updateNewApiToken(key.newApiTokenId, {
+          await updateNewApiTokenWithRepair(key, {
             status: tokenStatus,
             remainQuota: newQuota,
             name: !usage.tokenName && key.newApiTokenName ? key.newApiTokenName : undefined,
@@ -251,7 +311,7 @@ async function syncCurrentUserKeyUsage(userId: string) {
             }
             if (activeKey.newApiTokenId) {
               try {
-                await updateNewApiToken(activeKey.newApiTokenId, {
+                await updateNewApiTokenWithRepair(activeKey, {
                   status: 2,
                   group: activeKey.tier.channelGroup || 'default',
                 });
@@ -278,7 +338,7 @@ async function syncCurrentUserKeyUsage(userId: string) {
         }
         if (key.newApiTokenId) {
           try {
-            await updateNewApiToken(key.newApiTokenId, {
+            await updateNewApiTokenWithRepair(key, {
               status: 2,
               group: key.tier.channelGroup || 'default',
             });

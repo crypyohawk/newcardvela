@@ -3,6 +3,8 @@
  * 负责与 new-api 管理 API 通信：创建/管理 token、查询用量、管理渠道
  */
 
+import { db } from './db';
+
 const NEW_API_BASE = process.env.NEW_API_BASE_URL || 'http://127.0.0.1:3001';
 const NEW_API_TOKEN = process.env.NEW_API_ADMIN_TOKEN || '';
 const NEW_API_COOKIE = process.env.NEW_API_ADMIN_COOKIE || '';
@@ -305,6 +307,52 @@ export async function findNewApiTokenIdByName(name: string): Promise<number | nu
   // 最后回退到远程数据库，不再走 SQLite。
   const fromDb = await readTokenFromDb(name);
   return fromDb ? fromDb.id : null;
+}
+
+export function isNewApiRecordNotFoundError(error: any) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return message.includes('record not found');
+}
+
+export async function repairAiKeyNewApiTokenId(aiKey: {
+  id: string;
+  newApiTokenId: number | null;
+  newApiTokenName?: string | null;
+}, options?: {
+  forceValidate?: boolean;
+}) {
+  if (aiKey.newApiTokenId && !options?.forceValidate) {
+    return aiKey.newApiTokenId;
+  }
+
+  if (aiKey.newApiTokenId && options?.forceValidate) {
+    try {
+      await getNewApiTokenDetail(aiKey.newApiTokenId);
+      return aiKey.newApiTokenId;
+    } catch (error: any) {
+      if (!isNewApiRecordNotFoundError(error) || !aiKey.newApiTokenName) {
+        throw error;
+      }
+    }
+  }
+
+  if (!aiKey.newApiTokenName) {
+    return null;
+  }
+
+  const resolvedId = await findNewApiTokenIdByName(aiKey.newApiTokenName);
+  if (!resolvedId) {
+    return null;
+  }
+
+  if (resolvedId !== aiKey.newApiTokenId) {
+    await db.aIKey.update({
+      where: { id: aiKey.id },
+      data: { newApiTokenId: resolvedId },
+    });
+  }
+
+  return resolvedId;
 }
 
 /**

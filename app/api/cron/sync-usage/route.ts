@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAvailableTokenUsd, isAiKeyQuotaExhausted } from '../../../../src/lib/aiKeyQuota';
-import { findNewApiTokenIdByName, getAllNewApiLogs, getNewApiTokenUsage, updateNewApiToken, quotaToUSD, usdToQuota } from '../../../../src/lib/newapi';
+import { findNewApiTokenIdByName, getAllNewApiLogs, getNewApiTokenUsage, isNewApiRecordNotFoundError, repairAiKeyNewApiTokenId, updateNewApiToken, quotaToUSD, usdToQuota } from '../../../../src/lib/newapi';
 import { db } from '../../../../src/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -307,9 +307,78 @@ async function syncKeyUsages() {
     reason: string;
   }> = [];
 
+  async function getNewApiTokenUsageWithRepair(key: {
+    id: string;
+    newApiTokenId: number | null;
+    newApiTokenName?: string | null;
+  }) {
+    if (!key.newApiTokenId) {
+      return null;
+    }
+
+    try {
+      return await getNewApiTokenUsage(key.newApiTokenId);
+    } catch (error: any) {
+      if (!isNewApiRecordNotFoundError(error)) {
+        throw error;
+      }
+
+      const repairedTokenId = await repairAiKeyNewApiTokenId({
+        id: key.id,
+        newApiTokenId: null,
+        newApiTokenName: key.newApiTokenName,
+      });
+      if (!repairedTokenId) {
+        throw error;
+      }
+
+      key.newApiTokenId = repairedTokenId;
+      return await getNewApiTokenUsage(repairedTokenId);
+    }
+  }
+
+  async function updateNewApiTokenWithRepair(
+    key: { id: string; newApiTokenId: number | null; newApiTokenName?: string | null },
+    params: Parameters<typeof updateNewApiToken>[1]
+  ) {
+    if (!key.newApiTokenId) {
+      return;
+    }
+
+    try {
+      await updateNewApiToken(key.newApiTokenId, params);
+    } catch (error: any) {
+      if (!isNewApiRecordNotFoundError(error)) {
+        throw error;
+      }
+
+      const repairedTokenId = await repairAiKeyNewApiTokenId({
+        id: key.id,
+        newApiTokenId: null,
+        newApiTokenName: key.newApiTokenName,
+      });
+      if (!repairedTokenId) {
+        throw error;
+      }
+
+      key.newApiTokenId = repairedTokenId;
+      await updateNewApiToken(repairedTokenId, params);
+    }
+  }
+
   for (const key of keys) {
     try {
-      const usage = await getNewApiTokenUsage(key.newApiTokenId!);
+      const usage = await getNewApiTokenUsageWithRepair(key);
+      if (!usage) {
+        diagnostics.push({
+          keyId: key.id,
+          tokenId: key.newApiTokenId,
+          tokenName: key.newApiTokenName,
+          remoteTokenName: '',
+          reason: 'missing-token-id',
+        });
+        continue;
+      }
       const usedUSD = Math.round(quotaToUSD(usage.usedQuota) * 10000) / 10000;
       let localTotalUsedBefore = key.totalUsed;
 
@@ -449,7 +518,7 @@ async function syncKeyUsages() {
         // 始终带上 status，避免 new-api 的 PUT 覆盖已禁用状态
         const tokenStatus = (keyIsActive && newQuota > 0) ? 1 : 2;
         try {
-          await updateNewApiToken(key.newApiTokenId, {
+          await updateNewApiTokenWithRepair(key, {
             status: tokenStatus,
             remainQuota: newQuota,
             name: !usage.tokenName && key.newApiTokenName ? key.newApiTokenName : undefined,
@@ -540,7 +609,7 @@ async function syncKeyUsages() {
           }
           if (activeKey.newApiTokenId) {
             try {
-              await updateNewApiToken(activeKey.newApiTokenId, {
+              await updateNewApiTokenWithRepair(activeKey, {
                 status: 2,
                 group: activeKey.tier.channelGroup || 'default',
               });
