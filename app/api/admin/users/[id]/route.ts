@@ -106,6 +106,17 @@ export async function GET(
       include: { tier: { select: { displayName: true, name: true } } },
       orderBy: { createdAt: 'desc' },
     });
+
+    // 查询绑定的号池账号信息
+    const copilotAccountIds = aiKeys.map(k => k.copilotAccountId).filter(Boolean) as string[];
+    const copilotAccounts = copilotAccountIds.length > 0
+      ? await prisma.copilotAccount.findMany({
+          where: { id: { in: copilotAccountIds } },
+          select: { id: true, githubId: true, newApiChannelId: true, port: true, status: true },
+        })
+      : [];
+    const copilotAccountMap = new Map(copilotAccounts.map(a => [a.id, a]));
+
     const aiStats = {
       totalKeys: aiKeys.length,
       activeKeys: aiKeys.filter(k => k.status === 'active').length,
@@ -116,17 +127,27 @@ export async function GET(
     return NextResponse.json({ 
       user: { ...user, userCards: cardsWithRealBalance },
       stats,
-      aiKeys: aiKeys.map(k => ({
-        id: k.id,
-        keyName: k.keyName,
-        tierName: k.tier.displayName || k.tier.name,
-        status: k.status,
-        monthUsed: k.monthUsed,
-        totalUsed: k.totalUsed,
-        monthlyLimit: k.monthlyLimit,
-        lastUsedAt: k.lastUsedAt,
-        createdAt: k.createdAt,
-      })),
+      aiKeys: aiKeys.map(k => {
+        const account = k.copilotAccountId ? copilotAccountMap.get(k.copilotAccountId) : null;
+        return {
+          id: k.id,
+          keyName: k.keyName,
+          apiKey: k.apiKey,
+          tierName: k.tier.displayName || k.tier.name,
+          status: k.status,
+          monthUsed: k.monthUsed,
+          totalUsed: k.totalUsed,
+          monthlyLimit: k.monthlyLimit,
+          lastUsedAt: k.lastUsedAt,
+          createdAt: k.createdAt,
+          copilotAccount: account ? {
+            githubId: account.githubId,
+            channelId: account.newApiChannelId,
+            port: account.port,
+            status: account.status,
+          } : null,
+        };
+      }),
       aiStats,
     });
   } catch (error: any) {

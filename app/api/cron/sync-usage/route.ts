@@ -99,6 +99,17 @@ async function syncUsageStatsIfDue() {
     cost: number;
   }>();
 
+  // 构建 channelId → CopilotAccount 映射，用于按实际渠道归因用量
+  const copilotAccounts = await db.copilotAccount.findMany({
+    where: { newApiChannelId: { not: null } },
+    select: { id: true, newApiChannelId: true },
+  });
+  const channelToAccountId = new Map<number, string>();
+  for (const acc of copilotAccounts) {
+    if (acc.newApiChannelId) channelToAccountId.set(acc.newApiChannelId, acc.id);
+  }
+  const channelCostMap = new Map<string, { cost: number; lastUsed: number }>();
+
   let processedLogs = 0;
   let matchedLogs = 0;
   let unmatchedLogs = 0;
@@ -121,6 +132,17 @@ async function syncUsageStatsIfDue() {
     const completionTokens = Math.max(0, Number(log.completion_tokens) || 0);
     const cost = quotaToUSD(log.quota || 0);
     const day = startOfUtcDayFromTimestamp(log.created_at);
+
+    // 按实际命中的渠道累计费用
+    if (log.channel && cost > 0) {
+      const accountId = channelToAccountId.get(log.channel);
+      if (accountId) {
+        const existing = channelCostMap.get(accountId) || { cost: 0, lastUsed: 0 };
+        existing.cost += cost;
+        existing.lastUsed = Math.max(existing.lastUsed, log.created_at);
+        channelCostMap.set(accountId, existing);
+      }
+    }
 
     const keyAggregate = keyAggregates.get(aiKeyId) || {
       requestCount: 0,
@@ -185,6 +207,21 @@ async function syncUsageStatsIfDue() {
     }
   });
 
+  // 按实际渠道回写号池账号用量（替代旧的按绑定账号归因）
+  for (const [accountId, { cost, lastUsed }] of channelCostMap.entries()) {
+    try {
+      await db.copilotAccount.update({
+        where: { id: accountId },
+        data: {
+          quotaUsed: { increment: Math.round(cost * 10000) / 10000 },
+          lastUsed: new Date(lastUsed * 1000),
+        },
+      });
+    } catch (e: any) {
+      console.warn(`[cron] 按渠道回写号池账号用量失败: account=${accountId}, error=${e.message}`);
+    }
+  }
+
   await Promise.all([
     setSystemConfigValue(STATS_LAST_SYNC_KEY, String(processedLogs > 0 ? maxSeenTimestamp : nowTimestamp)),
     setSystemConfigValue(STATS_LAST_LOG_ID_KEY, String(processedLogs > 0 ? maxSeenLogId : lastLogId)),
@@ -197,6 +234,7 @@ async function syncUsageStatsIfDue() {
     matchedLogs,
     unmatchedLogs,
     affectedKeys: keyAggregates.size,
+    channelAttributions: channelCostMap.size,
     truncated: allLogs.truncated,
     lastSyncTimestamp: processedLogs > 0 ? maxSeenTimestamp : nowTimestamp,
     lastLogId: processedLogs > 0 ? maxSeenLogId : lastLogId,
@@ -572,20 +610,7 @@ async function syncKeyUsages() {
         continue;
       }
 
-      // 回写绑定的号池账号用量
-      if (key.copilotAccountId && txResult.delta > 0) {
-        try {
-          await db.copilotAccount.update({
-            where: { id: key.copilotAccountId },
-            data: {
-              quotaUsed: { increment: txResult.delta },
-              lastUsed: new Date(),
-            },
-          });
-        } catch (e: any) {
-          console.warn(`[cron] 回写号池账号用量失败: account=${key.copilotAccountId}, error=${e.message}`);
-        }
-      }
+      // 号池账号用量现在由 syncUsageStatsIfDue() 按实际渠道归因，不再按绑定账号写入
 
       synced++;
       totalDeducted += txResult.delta;

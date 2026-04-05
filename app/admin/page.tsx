@@ -2950,12 +2950,13 @@ export default function AdminPage() {
                             <thead>
                               <tr className="text-gray-400 border-b border-slate-700">
                                 <th className="pb-3 text-left">Key 名称</th>
+                                <th className="pb-3 text-left">Key 值</th>
                                 <th className="pb-3 text-left">套餐</th>
                                 <th className="pb-3 text-center">模型</th>
+                                <th className="pb-3 text-left">绑定账号/渠道</th>
                                 <th className="pb-3 text-center">本月</th>
                                 <th className="pb-3 text-center">累计</th>
                                 <th className="pb-3 text-center">状态</th>
-                                <th className="pb-3 text-center">最后使用</th>
                                 <th className="pb-3 text-center">操作</th>
                               </tr>
                             </thead>
@@ -2969,11 +2970,28 @@ export default function AdminPage() {
                                       <div className="font-medium">{key.keyName}</div>
                                       <div className="text-xs text-gray-500 mt-1">创建于 {formatDateTime(key.createdAt)}</div>
                                     </td>
+                                    <td className="py-3">
+                                      <code className="text-xs text-cyan-300 bg-slate-900/60 px-1.5 py-0.5 rounded break-all">
+                                        {key.apiKey ? (key.apiKey.length > 20
+                                          ? key.apiKey.slice(0, 12) + '...' + key.apiKey.slice(-6)
+                                          : key.apiKey) : '-'}
+                                      </code>
+                                    </td>
                                     <td className="py-3 text-gray-300">{key.tierName}</td>
                                     <td className="py-3 text-center">
                                       <span className={`text-xs px-1.5 py-0.5 rounded ${modelMeta.className}`}>
                                         {modelMeta.label}
                                       </span>
+                                    </td>
+                                    <td className="py-3">
+                                      {key.copilotAccount ? (
+                                        <div>
+                                          <div className="text-xs text-yellow-300">{key.copilotAccount.githubId}</div>
+                                          <div className="text-xs text-gray-500 mt-0.5">渠道 {key.copilotAccount.channelId} · 端口 {key.copilotAccount.port}</div>
+                                        </div>
+                                      ) : (
+                                        <span className="text-xs text-gray-600">未绑定</span>
+                                      )}
                                     </td>
                                     <td className="py-3 text-center text-purple-300">${Number(key.monthUsed || 0).toFixed(4)}</td>
                                     <td className="py-3 text-center text-orange-300">${Number(key.totalUsed || 0).toFixed(4)}</td>
@@ -2984,7 +3002,6 @@ export default function AdminPage() {
                                         {key.status === 'active' ? '正常' : '已停用'}
                                       </span>
                                     </td>
-                                    <td className="py-3 text-center text-xs text-gray-400">{formatDateTime(key.lastUsedAt)}</td>
                                     <td className="py-3 text-center whitespace-nowrap">
                                       <button
                                         onClick={() => handleToggleAIKey(key.id, key.status)}
@@ -3004,7 +3021,7 @@ export default function AdminPage() {
                               })}
                               {(!selectedAIUserDetail.aiKeys || selectedAIUserDetail.aiKeys.length === 0) && (
                                 <tr>
-                                  <td colSpan={8} className="py-8 text-center text-gray-500">当前账户没有 AI Key</td>
+                                  <td colSpan={9} className="py-8 text-center text-gray-500">当前账户没有 AI Key</td>
                                 </tr>
                               )}
                             </tbody>
