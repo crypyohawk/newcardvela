@@ -19,13 +19,17 @@ async function updateNewApiTokenWithRepair(aiKey: {
   newApiTokenId: number | null;
   newApiTokenName: string | null;
 }, params: Parameters<typeof updateNewApiToken>[1]) {
+  const syncedParams = {
+    ...params,
+    name: params.name ?? aiKey.newApiTokenName ?? undefined,
+  };
   const tokenId = await ensureNewApiTokenId(aiKey);
   if (!tokenId) {
     throw new Error('该 Key 未关联到 new-api token，无法同步到网关');
   }
 
   try {
-    await updateNewApiToken(tokenId, params);
+    await updateNewApiToken(tokenId, syncedParams);
     aiKey.newApiTokenId = tokenId;
     return tokenId;
   } catch (error: any) {
@@ -41,7 +45,7 @@ async function updateNewApiTokenWithRepair(aiKey: {
       throw error;
     }
 
-    await updateNewApiToken(repairedTokenId, params);
+    await updateNewApiToken(repairedTokenId, syncedParams);
     aiKey.newApiTokenId = repairedTokenId;
     return repairedTokenId;
   }
@@ -59,7 +63,10 @@ async function disableAndDeleteNewApiTokenWithRepair(aiKey: {
 
   let resolvedTokenId = tokenId;
   try {
-    await updateNewApiToken(resolvedTokenId, { status: 2 });
+    await updateNewApiToken(resolvedTokenId, {
+      status: 2,
+      name: aiKey.newApiTokenName ?? undefined,
+    });
   } catch (error: any) {
     if (!isNewApiRecordNotFoundError(error)) {
       throw error;
@@ -72,7 +79,10 @@ async function disableAndDeleteNewApiTokenWithRepair(aiKey: {
       throw error;
     }
     resolvedTokenId = repairedTokenId;
-    await updateNewApiToken(resolvedTokenId, { status: 2 });
+    await updateNewApiToken(resolvedTokenId, {
+      status: 2,
+      name: aiKey.newApiTokenName ?? undefined,
+    });
   }
 
   await deleteNewApiToken(resolvedTokenId);

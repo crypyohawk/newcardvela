@@ -19,13 +19,17 @@ async function syncKeyTokenState(key: {
   newApiTokenId: number | null;
   newApiTokenName?: string | null;
 }, params: Parameters<typeof updateNewApiToken>[1]) {
+  const syncedParams = {
+    ...params,
+    name: params.name ?? key.newApiTokenName ?? undefined,
+  };
   const tokenId = await repairAiKeyNewApiTokenId(key, { forceValidate: true });
   if (!tokenId) {
     throw new Error('missing-new-api-token-id');
   }
 
   try {
-    await updateNewApiToken(tokenId, params);
+    await updateNewApiToken(tokenId, syncedParams);
   } catch (error: any) {
     if (!isNewApiRecordNotFoundError(error)) {
       throw error;
@@ -40,7 +44,7 @@ async function syncKeyTokenState(key: {
     }
 
     key.newApiTokenId = repairedTokenId;
-    await updateNewApiToken(repairedTokenId, params);
+    await updateNewApiToken(repairedTokenId, syncedParams);
   }
 }
 

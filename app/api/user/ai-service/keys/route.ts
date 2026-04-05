@@ -75,12 +75,16 @@ async function updateNewApiTokenWithRepair(
   key: { id: string; newApiTokenId: number | null; newApiTokenName?: string | null },
   params: Parameters<typeof updateNewApiToken>[1]
 ) {
+  const syncedParams = {
+    ...params,
+    name: params.name ?? key.newApiTokenName ?? undefined,
+  };
   if (!key.newApiTokenId) {
     return;
   }
 
   try {
-    await updateNewApiToken(key.newApiTokenId, params);
+    await updateNewApiToken(key.newApiTokenId, syncedParams);
   } catch (error: any) {
     if (!isNewApiRecordNotFoundError(error)) {
       throw error;
@@ -96,7 +100,7 @@ async function updateNewApiTokenWithRepair(
     }
 
     key.newApiTokenId = repairedTokenId;
-    await updateNewApiToken(repairedTokenId, params);
+    await updateNewApiToken(repairedTokenId, syncedParams);
   }
 }
 
@@ -360,7 +364,6 @@ export async function GET(request: NextRequest) {
     if (!payload) return NextResponse.json({ error: '无效的令牌' }, { status: 401 });
 
     await repairMissingNewApiTokenIdsForUser(payload.userId);
-    await syncCurrentUserKeyUsage(payload.userId);
 
     let keys = await db.aIKey.findMany({
       where: { userId: payload.userId, status: { not: 'revoked' } },

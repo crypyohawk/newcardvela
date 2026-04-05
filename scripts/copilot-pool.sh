@@ -73,16 +73,38 @@ start_all() {
   local accounts=$(node -e "
     const { PrismaClient } = require('@prisma/client');
     const p = new PrismaClient();
-    p.copilotAccount.findMany({ where: { status: 'active' }, orderBy: { createdAt: 'asc' } })
+    p.copilotAccount.findMany({
+      where: { status: { in: ['active', 'bound'] } },
+      orderBy: [
+        { port: 'asc' },
+        { createdAt: 'asc' },
+      ],
+    })
       .then(accs => { console.log(JSON.stringify(accs)); p.\$disconnect(); })
       .catch(e => { console.error(e); process.exit(1); });
   ")
 
-  local port=$COPILOT_PORT_BASE
   echo "$accounts" | node -e "
     const accs = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+    const basePort = ${COPILOT_PORT_BASE};
+    const usedPorts = new Set(
+      accs
+        .map(a => a.port)
+        .filter(port => Number.isInteger(port) && port >= basePort)
+    );
+    let nextPort = basePort;
+
+    const allocatePort = () => {
+      while (usedPorts.has(nextPort)) nextPort++;
+      const port = nextPort;
+      usedPorts.add(port);
+      nextPort++;
+      return port;
+    };
+
     accs.forEach((a, i) => {
-      console.log(a.githubId + '|' + a.token + '|' + (${COPILOT_PORT_BASE} + i));
+      const port = Number.isInteger(a.port) && a.port >= basePort ? a.port : allocatePort();
+      console.log(a.githubId + '|' + a.token + '|' + port);
     });
   " | while IFS='|' read -r name token port; do
     start_instance "$name" "$token" "$port"

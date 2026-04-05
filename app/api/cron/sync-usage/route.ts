@@ -358,12 +358,16 @@ async function syncKeyUsages() {
     key: { id: string; newApiTokenId: number | null; newApiTokenName?: string | null },
     params: Parameters<typeof updateNewApiToken>[1]
   ) {
+    const syncedParams = {
+      ...params,
+      name: params.name ?? key.newApiTokenName ?? undefined,
+    };
     if (!key.newApiTokenId) {
       return;
     }
 
     try {
-      await updateNewApiToken(key.newApiTokenId, params);
+      await updateNewApiToken(key.newApiTokenId, syncedParams);
     } catch (error: any) {
       if (!isNewApiRecordNotFoundError(error)) {
         throw error;
@@ -379,7 +383,7 @@ async function syncKeyUsages() {
       }
 
       key.newApiTokenId = repairedTokenId;
-      await updateNewApiToken(repairedTokenId, params);
+      await updateNewApiToken(repairedTokenId, syncedParams);
     }
   }
 
@@ -660,6 +664,7 @@ async function syncKeyUsages() {
           try {
             await updateNewApiToken(key.newApiTokenId, {
               status: 2,
+              name: key.newApiTokenName ?? undefined,
               group: key.tier.channelGroup || 'default',
             });
           } catch (_) {}
@@ -719,6 +724,7 @@ async function autoUnbindIdleAccounts() {
         lastUsedAt: true,
         status: true,
         newApiTokenId: true,
+        newApiTokenName: true,
         tier: { select: { channelGroup: true } },
       },
     });
@@ -736,6 +742,7 @@ async function autoUnbindIdleAccounts() {
           try {
             await updateNewApiToken(key.newApiTokenId, {
               status: 2,
+              name: key.newApiTokenName ?? undefined,
               group: key.tier?.channelGroup || 'default',
             });
           } catch (error: any) {

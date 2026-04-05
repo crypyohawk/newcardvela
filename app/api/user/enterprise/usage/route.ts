@@ -3,10 +3,10 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
-import { getNewApiTokenUsage, mapWithConcurrencyLimit, quotaToUSD } from '../../../../../src/lib/newapi';
+import { mapWithConcurrencyLimit } from '../../../../../src/lib/newapi';
 
 // 获取企业所有 Key 的用量汇总（按员工 Key 分组）
-// 数据来源：new-api token 用量 + 日志（new-api 自带计费规则）
+// 汇总口径统一以平台数据库中的聚合字段为准，避免与 new-api 当前 token 生命周期统计混用。
 export async function GET(request: NextRequest) {
   try {
     const token = getTokenFromRequest(request);
@@ -31,12 +31,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // 本月起始时间戳
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthTimestamp = Math.floor(monthStart.getTime() / 1000);
-
-    // 并行拉取每个 Key 的 token 累计用量 + 本月日志
+    // 并行聚合每个 Key 的本地累计字段
     let totalMonthCost = 0;
     let totalMonthRequests = 0;
     let totalMonthTokens = 0;
@@ -44,22 +39,11 @@ export async function GET(request: NextRequest) {
     let totalAllTimeRequests = 0;
 
     const perKey = await mapWithConcurrencyLimit(keys, 4, async (key) => {
-      let allTimeCost = 0, allTimeRequests = 0;
+      const allTimeCost = key.totalUsed || 0;
+      const allTimeRequests = key.totalRequestCount || 0;
       const monthCost = key.monthUsed || 0;
       const monthRequests = key.monthRequestCount || 0;
       const monthTokens = (key.monthPromptTokens || 0) + (key.monthCompletionTokens || 0);
-
-      if (key.newApiTokenId) {
-        try {
-          const usage = await getNewApiTokenUsage(key.newApiTokenId);
-          allTimeCost = quotaToUSD(usage.usedQuota);
-        } catch (_) {}
-      }
-      allTimeRequests = key.totalRequestCount || 0;
-
-      if (allTimeCost <= 0 && key.totalUsed > 0) {
-        allTimeCost = key.totalUsed;
-      }
 
       totalMonthCost += monthCost;
       totalMonthRequests += monthRequests;
