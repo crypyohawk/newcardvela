@@ -401,6 +401,12 @@ async function getNewApiTokenRecord(tokenId: number): Promise<{
 
 /**
  * 更新 new-api token 状态
+ *
+ * 关键发现：new-api 的 PUT /api/token/（普通端点）无法更新 status 字段，
+ * 只有 PUT /api/token/?status_only=true 专用端点才能改变 status。
+ * 因此当需要同时更新 status 和其他字段时，分两次请求：
+ *   1. ?status_only=true 更新 status
+ *   2. 普通 PUT 更新 quota / name / group / expiredTime
  */
 export async function updateNewApiToken(tokenId: number, params: {
   status?: number;        // 1=启用, 2=禁用
@@ -409,26 +415,33 @@ export async function updateNewApiToken(tokenId: number, params: {
   group?: string;
   expiredTime?: number;   // -1=永不过期
 }): Promise<void> {
+  // Step 1: 通过专用端点更新 status（普通 PUT 无法修改此字段）
+  if (params.status !== undefined) {
+    const statusBody = { id: tokenId, status: params.status };
+    console.log(`[newapi] PUT /api/token/?status_only=true:`, JSON.stringify(statusBody));
+    await newApiRequest('/api/token/?status_only=true', {
+      method: 'PUT',
+      body: JSON.stringify(statusBody),
+    });
+  }
+
+  // Step 2: 通过普通 PUT 更新其他字段
   const body: any = { id: tokenId };
-  if (params.status !== undefined) body.status = params.status;
-  if (params.remainQuota !== undefined) body.remain_quota = params.remainQuota;
-  if (params.name !== undefined) body.name = params.name;
-  if (params.group !== undefined) body.group = params.group;
-  if (params.expiredTime !== undefined) body.expired_time = params.expiredTime;
+  let hasFields = false;
+  if (params.remainQuota !== undefined) { body.remain_quota = params.remainQuota; hasFields = true; }
+  if (params.name !== undefined) { body.name = params.name; hasFields = true; }
+  if (params.group !== undefined) { body.group = params.group; hasFields = true; }
+  if (params.expiredTime !== undefined) { body.expired_time = params.expiredTime; hasFields = true; }
 
-  const statusOnly = params.status !== undefined
-    && params.remainQuota === undefined
-    && params.name === undefined
-    && params.group === undefined
-    && params.expiredTime === undefined;
-  const endpoint = statusOnly ? '/api/token/?status_only=true' : '/api/token/';
+  if (hasFields) {
+    console.log(`[newapi] PUT /api/token/ request:`, JSON.stringify(body));
+    await newApiRequest('/api/token/', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  }
 
-  console.log(`[newapi] PUT ${endpoint} request:`, JSON.stringify(body));
-  await newApiRequest(endpoint, {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  });
-
+  // 验证更新是否生效
   const after = await getNewApiTokenRecord(tokenId);
   const mismatch = [
     params.status !== undefined && after.status !== params.status,
@@ -438,46 +451,12 @@ export async function updateNewApiToken(tokenId: number, params: {
     params.expiredTime !== undefined && after.expiredTime !== params.expiredTime,
   ].some(Boolean);
 
-  if (!mismatch) {
-    console.log(`[newapi] PUT /api/token/ verified: id=${tokenId} status=${after.status} remainQuota=${after.remainQuota} group=${after.group}`);
-    return;
+  if (mismatch) {
+    console.warn(`[newapi] token update mismatch: id=${tokenId} got status=${after.status} remainQuota=${after.remainQuota} group=${after.group}`);
+    throw new Error(`new-api token 更新未生效: id=${tokenId}, status=${after.status}, remainQuota=${after.remainQuota}, group=${after.group}`);
   }
 
-  console.warn(`[newapi] partial token update mismatch, retry full payload: id=${tokenId} status=${after.status} remainQuota=${after.remainQuota} group=${after.group}`);
-  const fullBody: any = {
-    id: tokenId,
-    name: params.name !== undefined ? params.name : after.name,
-    status: params.status !== undefined ? params.status : after.status,
-    remain_quota: params.remainQuota !== undefined ? params.remainQuota : after.remainQuota,
-    expired_time: params.expiredTime !== undefined ? params.expiredTime : after.expiredTime,
-    unlimited_quota: after.unlimitedQuota,
-    model_limits_enabled: after.modelLimitsEnabled,
-    model_limits: after.modelLimits,
-    allow_ips: after.allowIps || '',
-    group: params.group !== undefined ? params.group : after.group,
-    cross_group_retry: after.crossGroupRetry,
-  };
-
-  console.log('[newapi] PUT /api/token/ retry-full request:', JSON.stringify(fullBody));
-  await newApiRequest('/api/token/', {
-    method: 'PUT',
-    body: JSON.stringify(fullBody),
-  });
-
-  const verified = await getNewApiTokenRecord(tokenId);
-  const verifiedMismatch = [
-    params.status !== undefined && verified.status !== params.status,
-    params.remainQuota !== undefined && verified.remainQuota !== params.remainQuota,
-    params.name !== undefined && verified.name !== params.name,
-    params.group !== undefined && verified.group !== params.group,
-    params.expiredTime !== undefined && verified.expiredTime !== params.expiredTime,
-  ].some(Boolean);
-
-  if (verifiedMismatch) {
-    throw new Error(`new-api token 更新未生效: id=${tokenId}, status=${verified.status}, remainQuota=${verified.remainQuota}, group=${verified.group}`);
-  }
-
-  console.log(`[newapi] PUT /api/token/ retry-full verified: id=${tokenId} status=${verified.status} remainQuota=${verified.remainQuota} group=${verified.group}`);
+  console.log(`[newapi] PUT /api/token/ verified: id=${tokenId} status=${after.status} remainQuota=${after.remainQuota} group=${after.group}`);
 }
 
 /**
