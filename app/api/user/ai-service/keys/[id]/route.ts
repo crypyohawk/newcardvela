@@ -57,8 +57,9 @@ async function disableAndDeleteNewApiTokenWithRepair(aiKey: {
     return;
   }
 
+  let resolvedTokenId = tokenId;
   try {
-    await updateNewApiToken(tokenId, { status: 2 });
+    await updateNewApiToken(resolvedTokenId, { status: 2 });
   } catch (error: any) {
     if (!isNewApiRecordNotFoundError(error)) {
       throw error;
@@ -70,11 +71,11 @@ async function disableAndDeleteNewApiTokenWithRepair(aiKey: {
     if (!repairedTokenId) {
       throw error;
     }
-    aiKey.newApiTokenId = repairedTokenId;
-    await updateNewApiToken(repairedTokenId, { status: 2 });
+    resolvedTokenId = repairedTokenId;
+    await updateNewApiToken(resolvedTokenId, { status: 2 });
   }
 
-  await deleteNewApiToken(aiKey.newApiTokenId!);
+  await deleteNewApiToken(resolvedTokenId);
 }
 
 // 获取单个 Key 详情
