@@ -292,6 +292,23 @@ async function syncKeyUsages() {
     },
   });
 
+  // 检测并记录重复 tokenId（数据完整性检查）
+  // 如果多个 Key 指向同一 new-api token，则只允许 active 状态的 Key 计费，避免双重扣费
+  const tokenIdToKeys = new Map<number, typeof keys>();
+  for (const key of keys) {
+    if (!key.newApiTokenId) continue;
+    const group = tokenIdToKeys.get(key.newApiTokenId) || [];
+    group.push(key);
+    tokenIdToKeys.set(key.newApiTokenId, group);
+  }
+  const duplicateTokenIdSet = new Set<number>();
+  for (const [tokenId, group] of tokenIdToKeys.entries()) {
+    if (group.length > 1) {
+      console.warn(`[cron] ⚠️ 重复 tokenId 检测: tokenId=${tokenId} 被 ${group.length} 个 Key 共享: ${group.map(k => `${k.id}(${k.status})`).join(', ')}`);
+      duplicateTokenIdSet.add(tokenId);
+    }
+  }
+
   let synced = 0;
   let totalDeducted = 0;
   const errors: string[] = [];
@@ -368,6 +385,12 @@ async function syncKeyUsages() {
 
   for (const key of keys) {
     try {
+      // 若多个 Key 共享同一 tokenId，只由 active Key 计费（disabled 的跳过，避免双重扣费）
+      if (key.newApiTokenId && duplicateTokenIdSet.has(key.newApiTokenId) && key.status !== 'active') {
+        console.warn(`[cron] 跳过 disabled key ${key.id}（共享 tokenId=${key.newApiTokenId}，由 active key 计费）`);
+        continue;
+      }
+
       const usage = await getNewApiTokenUsageWithRepair(key);
       if (!usage) {
         diagnostics.push({
