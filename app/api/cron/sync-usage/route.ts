@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAvailableTokenUsd, isAiKeyQuotaExhausted } from '../../../../src/lib/aiKeyQuota';
-import { getAllNewApiLogs, getNewApiTokenUsage, updateNewApiToken, quotaToUSD, usdToQuota } from '../../../../src/lib/newapi';
+import { findNewApiTokenIdByName, getAllNewApiLogs, getNewApiTokenUsage, updateNewApiToken, quotaToUSD, usdToQuota } from '../../../../src/lib/newapi';
 import { db } from '../../../../src/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -246,6 +246,30 @@ export async function GET(request: NextRequest) {
 async function syncKeyUsages() {
   const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
   const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
+
+  const missingTokenKeys = await db.aIKey.findMany({
+    where: {
+      newApiTokenId: null,
+      newApiTokenName: { not: null },
+      status: { in: ['active', 'disabled'] },
+    },
+    select: { id: true, newApiTokenName: true },
+  });
+
+  for (const key of missingTokenKeys) {
+    if (!key.newApiTokenName) continue;
+    try {
+      const tokenId = await findNewApiTokenIdByName(key.newApiTokenName);
+      if (tokenId) {
+        await db.aIKey.update({
+          where: { id: key.id },
+          data: { newApiTokenId: tokenId },
+        });
+      }
+    } catch (error: any) {
+      console.warn(`[cron] restore token id failed for ${key.id}:`, error.message);
+    }
+  }
 
   const keys = await db.aIKey.findMany({
     where: {

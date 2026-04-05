@@ -4,7 +4,33 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../../src/lib/auth';
 import { getAvailableTokenUsd } from '../../../../../../src/lib/aiKeyQuota';
-import { updateNewApiToken, deleteNewApiToken, usdToQuota } from '../../../../../../src/lib/newapi';
+import { findNewApiTokenIdByName, updateNewApiToken, deleteNewApiToken, usdToQuota } from '../../../../../../src/lib/newapi';
+
+async function ensureNewApiTokenId(aiKey: {
+  id: string;
+  newApiTokenId: number | null;
+  newApiTokenName: string | null;
+}) {
+  if (aiKey.newApiTokenId) {
+    return aiKey.newApiTokenId;
+  }
+
+  if (!aiKey.newApiTokenName) {
+    return null;
+  }
+
+  const resolvedId = await findNewApiTokenIdByName(aiKey.newApiTokenName);
+  if (!resolvedId) {
+    return null;
+  }
+
+  await db.aIKey.update({
+    where: { id: aiKey.id },
+    data: { newApiTokenId: resolvedId },
+  });
+
+  return resolvedId;
+}
 
 // 获取单个 Key 详情
 export async function GET(
@@ -65,6 +91,11 @@ export async function PUT(
       }
     }
     if (body.status !== undefined && ['active', 'disabled'].includes(body.status)) {
+      const newApiTokenId = await ensureNewApiTokenId(aiKey);
+      if (!newApiTokenId) {
+        return NextResponse.json({ error: '该 Key 未关联到 new-api token，无法同步启用/禁用，请先修复 token 绑定' }, { status: 409 });
+      }
+
       const isCopilotPool = aiKey.tier.channelGroup === 'copilot' || aiKey.tier.provider?.type === 'copilot-pool';
 
       // === 启用号池 Key：自动绑定空闲号池账号 ===
@@ -148,32 +179,30 @@ export async function PUT(
           });
 
           // 同步启用 new-api token + 刷新配额 + 确保 group 正确
-          if (aiKey.newApiTokenId) {
-            try {
-              const freshQuota = usdToQuota(availableUsd);
-              await updateNewApiToken(aiKey.newApiTokenId, {
-                status: 1,
-                remainQuota: freshQuota,
-                group: aiKey.tier.channelGroup || 'default',
-                expiredTime: -1,
-              });
-            } catch (e: any) {
-              console.error('同步 new-api 启用失败:', e.message);
-              await db.$transaction([
-                db.aIKey.update({
-                  where: { id: params.id },
-                  data: { status: 'disabled', copilotAccountId: null },
-                }),
-                db.copilotAccount.update({
-                  where: { id: idleAccount.id },
-                  data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
-                }),
-              ]);
-              return NextResponse.json({
-                error: '同步网关状态失败，请检查 new-api 管理认证配置',
-                details: e.message,
-              }, { status: 502 });
-            }
+          try {
+            const freshQuota = usdToQuota(availableUsd);
+            await updateNewApiToken(newApiTokenId, {
+              status: 1,
+              remainQuota: freshQuota,
+              group: aiKey.tier.channelGroup || 'default',
+              expiredTime: -1,
+            });
+          } catch (e: any) {
+            console.error('同步 new-api 启用失败:', e.message);
+            await db.$transaction([
+              db.aIKey.update({
+                where: { id: params.id },
+                data: { status: 'disabled', copilotAccountId: null },
+              }),
+              db.copilotAccount.update({
+                where: { id: idleAccount.id },
+                data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
+              }),
+            ]);
+            return NextResponse.json({
+              error: '同步网关状态失败，请检查 new-api 管理认证配置',
+              details: e.message,
+            }, { status: 502 });
           }
 
           console.log(`[pool-rebind] Key ${params.id} 重新绑定号池账号 ${idleAccount.githubId}`);
@@ -208,38 +237,36 @@ export async function PUT(
       updateData.status = body.status;
 
       // 同步到 new-api（启用时同时刷新额度，避免 quota=0 导致 new-api 仍显示耗尽）
-      if (aiKey.newApiTokenId) {
-        try {
-          const tokenUpdate: any = {
-            status: body.status === 'active' ? 1 : 2,
-            group: aiKey.tier.channelGroup || 'default',
-          };
+      try {
+        const tokenUpdate: any = {
+          status: body.status === 'active' ? 1 : 2,
+          group: aiKey.tier.channelGroup || 'default',
+        };
 
-          if (body.status === 'active') {
-            const user = await db.user.findUnique({ where: { id: payload.userId }, select: { aiBalance: true } });
-            const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
-            const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
-            const freshQuota = usdToQuota(getAvailableTokenUsd({
-              aiBalance: user?.aiBalance || 0,
-              creditLimit,
-              monthUsed: aiKey.monthUsed,
-              monthlyLimit: aiKey.monthlyLimit,
-            }));
-            if (freshQuota <= 0) {
-              return NextResponse.json({ error: '当前 Key 无可用额度，可能月度限额已耗尽，请充值或调整月限额后再启用' }, { status: 400 });
-            }
-            tokenUpdate.remainQuota = freshQuota;
-            tokenUpdate.status = 1;
+        if (body.status === 'active') {
+          const user = await db.user.findUnique({ where: { id: payload.userId }, select: { aiBalance: true } });
+          const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
+          const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
+          const freshQuota = usdToQuota(getAvailableTokenUsd({
+            aiBalance: user?.aiBalance || 0,
+            creditLimit,
+            monthUsed: aiKey.monthUsed,
+            monthlyLimit: aiKey.monthlyLimit,
+          }));
+          if (freshQuota <= 0) {
+            return NextResponse.json({ error: '当前 Key 无可用额度，可能月度限额已耗尽，请充值或调整月限额后再启用' }, { status: 400 });
           }
-
-          await updateNewApiToken(aiKey.newApiTokenId, tokenUpdate);
-        } catch (e: any) {
-          console.error('同步 new-api 状态失败:', e.message);
-          return NextResponse.json({
-            error: '同步网关状态失败，请检查 new-api 管理认证配置',
-            details: e.message,
-          }, { status: 502 });
+          tokenUpdate.remainQuota = freshQuota;
+          tokenUpdate.status = 1;
         }
+
+        await updateNewApiToken(newApiTokenId, tokenUpdate);
+      } catch (e: any) {
+        console.error('同步 new-api 状态失败:', e.message);
+        return NextResponse.json({
+          error: '同步网关状态失败，请检查 new-api 管理认证配置',
+          details: e.message,
+        }, { status: 502 });
       }
     }
 

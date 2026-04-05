@@ -6,12 +6,39 @@ import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
 import { getAvailableTokenUsd, isAiKeyQuotaExhausted } from '../../../../../src/lib/aiKeyQuota';
 import { ensureCopilotPoolKeyLease } from '../../../../../src/lib/copilotPool';
-import { createNewApiToken, deleteNewApiToken, getNewApiTokenPlaintextKeyByName, getNewApiTokenUsage, mapWithConcurrencyLimit, quotaToUSD, updateNewApiToken, usdToQuota } from '../../../../../src/lib/newapi';
+import { createNewApiToken, deleteNewApiToken, findNewApiTokenIdByName, getNewApiTokenPlaintextKeyByName, getNewApiTokenUsage, mapWithConcurrencyLimit, quotaToUSD, updateNewApiToken, usdToQuota } from '../../../../../src/lib/newapi';
 
 /** 生成混淆名称，防止上游识别客户身份 */
 function obfuscateKeyName(userId: string, keyName: string): string {
   const hash = crypto.createHash('sha256').update(`${userId}-${keyName}-${Date.now()}`).digest('hex').slice(0, 8);
   return `proj-${hash}`;
+}
+
+async function repairMissingNewApiTokenIdsForUser(userId: string) {
+  const missingKeys = await db.aIKey.findMany({
+    where: {
+      userId,
+      newApiTokenId: null,
+      newApiTokenName: { not: null },
+      status: { in: ['active', 'disabled'] },
+    },
+    select: { id: true, newApiTokenName: true },
+  });
+
+  await mapWithConcurrencyLimit(missingKeys, 4, async (key) => {
+    if (!key.newApiTokenName) return;
+    try {
+      const tokenId = await findNewApiTokenIdByName(key.newApiTokenName);
+      if (tokenId) {
+        await db.aIKey.update({
+          where: { id: key.id },
+          data: { newApiTokenId: tokenId },
+        });
+      }
+    } catch (error: any) {
+      console.warn(`[key-repair] restore token id failed for ${key.id}:`, error.message);
+    }
+  });
 }
 
 async function syncCurrentUserKeyUsage(userId: string) {
@@ -272,6 +299,7 @@ export async function GET(request: NextRequest) {
     const payload = verifyToken(token);
     if (!payload) return NextResponse.json({ error: '无效的令牌' }, { status: 401 });
 
+    await repairMissingNewApiTokenIdsForUser(payload.userId);
     await syncCurrentUserKeyUsage(payload.userId);
 
     let keys = await db.aIKey.findMany({
