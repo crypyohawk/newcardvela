@@ -103,26 +103,54 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { action, userId, amount } = body;
+    const { action, userId, amount, aiAmount } = body;
 
     if (action === 'adjustBalance') {
-      if (!userId || amount === undefined) {
+      if (!userId || (amount === undefined && aiAmount === undefined)) {
         return NextResponse.json({ error: '参数不完整' }, { status: 400 });
       }
 
-      const user = await prisma.user.update({
-        where: { id: userId },
-        data: { balance: { increment: amount } },
-      });
+      const balanceDelta = Number(amount || 0);
+      const aiBalanceDelta = Number(aiAmount || 0);
+      if (Number.isNaN(balanceDelta) || Number.isNaN(aiBalanceDelta)) {
+        return NextResponse.json({ error: '金额必须是数字' }, { status: 400 });
+      }
+      if (balanceDelta === 0 && aiBalanceDelta === 0) {
+        return NextResponse.json({ error: '请输入至少一个非 0 调整金额' }, { status: 400 });
+      }
 
-      // 记录交易
-      await prisma.transaction.create({
-        data: {
-          userId,
-          type: amount > 0 ? 'deposit' : 'withdraw',
-          amount,
-          status: 'completed',
-        },
+      const user = await prisma.$transaction(async (tx) => {
+        const updatedUser = await tx.user.update({
+          where: { id: userId },
+          data: {
+            ...(balanceDelta !== 0 ? { balance: { increment: balanceDelta } } : {}),
+            ...(aiBalanceDelta !== 0 ? { aiBalance: { increment: aiBalanceDelta } } : {}),
+          },
+        });
+
+        if (balanceDelta !== 0) {
+          await tx.transaction.create({
+            data: {
+              userId,
+              type: balanceDelta > 0 ? 'deposit' : 'withdraw',
+              amount: balanceDelta,
+              status: 'completed',
+            },
+          });
+        }
+
+        if (aiBalanceDelta !== 0) {
+          await tx.transaction.create({
+            data: {
+              userId,
+              type: 'ai_admin_adjust',
+              amount: aiBalanceDelta,
+              status: 'completed',
+            },
+          });
+        }
+
+        return updatedUser;
       });
 
       return NextResponse.json({ success: true, user });

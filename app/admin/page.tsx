@@ -32,6 +32,7 @@ interface User {
   username: string;
   email: string;
   balance: number;
+  aiBalance: number;
   role: string;
   createdAt: string;
   _count?: {
@@ -891,13 +892,21 @@ export default function AdminPage() {
   };
 
   const handleAdjustBalance = async () => {
-    if (!adjustBalanceUser || !adjustAmount) {
-      setMessage({ type: 'error', text: '请输入调整金额' });
+    if (!adjustBalanceUser) {
+      setMessage({ type: 'error', text: '未选择用户' });
       return;
     }
 
-    const amount = parseFloat(adjustAmount);
-    if (isNaN(amount)) {
+    const hasBalanceAmount = adjustAmount.trim() !== '';
+    const hasAiBalanceAmount = adjustAiAmount.trim() !== '';
+    if (!hasBalanceAmount && !hasAiBalanceAmount) {
+      setMessage({ type: 'error', text: '请输入至少一个调整金额' });
+      return;
+    }
+
+    const amount = hasBalanceAmount ? parseFloat(adjustAmount) : 0;
+    const aiAmount = hasAiBalanceAmount ? parseFloat(adjustAiAmount) : 0;
+    if ((hasBalanceAmount && isNaN(amount)) || (hasAiBalanceAmount && isNaN(aiAmount))) {
       setMessage({ type: 'error', text: '金额必须是数字' });
       return;
     }
@@ -912,7 +921,8 @@ export default function AdminPage() {
         body: JSON.stringify({
           action: 'adjustBalance',
           userId: adjustBalanceUser.id,
-          amount: amount,
+          amount,
+          aiAmount,
         }),
       });
 
@@ -921,10 +931,14 @@ export default function AdminPage() {
 
       setMessage({ 
         type: 'success', 
-        text: `余额调整成功！${amount > 0 ? '增加' : '扣除'} $${Math.abs(amount).toFixed(2)}` 
+        text: `余额调整成功！${[
+          hasBalanceAmount ? `账户${amount > 0 ? '增加' : '扣除'} $${Math.abs(amount).toFixed(2)}` : null,
+          hasAiBalanceAmount ? `AI钱包${aiAmount > 0 ? '增加' : '扣除'} $${Math.abs(aiAmount).toFixed(2)}` : null,
+        ].filter(Boolean).join('，')}` 
       });
       setAdjustBalanceUser(null);
       setAdjustAmount('');
+      setAdjustAiAmount('');
       fetchUsers();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
@@ -933,6 +947,7 @@ export default function AdminPage() {
 
   const [adjustBalanceUser, setAdjustBalanceUser] = useState<User | null>(null);
   const [adjustAmount, setAdjustAmount] = useState('');
+  const [adjustAiAmount, setAdjustAiAmount] = useState('');
 
   if (loading) {
     return (
@@ -3014,12 +3029,20 @@ export default function AdminPage() {
 
         {/* 调整余额弹窗 */}
         {adjustBalanceUser && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setAdjustBalanceUser(null)}>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => {
+            setAdjustBalanceUser(null);
+            setAdjustAmount('');
+            setAdjustAiAmount('');
+          }}>
             <div className="bg-slate-800 p-6 rounded-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold">调整用户余额</h3>
                 <button
-                  onClick={() => setAdjustBalanceUser(null)}
+                  onClick={() => {
+                    setAdjustBalanceUser(null);
+                    setAdjustAmount('');
+                    setAdjustAiAmount('');
+                  }}
                   className="text-gray-400 hover:text-white text-2xl leading-none"
                 >
                   ✕
@@ -3035,11 +3058,14 @@ export default function AdminPage() {
                     <div className="text-sm text-gray-400 mt-1">
                       当前余额: <span className="text-green-400 font-bold">${adjustBalanceUser.balance.toFixed(2)}</span>
                     </div>
+                    <div className="text-sm text-gray-400 mt-1">
+                      AI钱包: <span className="text-blue-400 font-bold">${(adjustBalanceUser.aiBalance ?? 0).toFixed(2)}</span>
+                    </div>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-400 mb-2">调整金额 (USD)</label>
+                  <label className="block text-sm text-gray-400 mb-2">账户余额调整 (USD)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -3058,6 +3084,26 @@ export default function AdminPage() {
                   </p>
                 </div>
 
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">AI 钱包余额调整 (USD)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="正数=增加 负数=扣除"
+                    value={adjustAiAmount}
+                    onChange={(e) => setAdjustAiAmount(e.target.value)}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500"
+                    onKeyDown={(e) => e.key === 'Enter' && handleAdjustBalance()}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {adjustAiAmount ? (
+                      parseFloat(adjustAiAmount) > 0
+                        ? `✓ 增加 $${Math.abs(parseFloat(adjustAiAmount)).toFixed(2)}，新AI钱包: $${((adjustBalanceUser.aiBalance ?? 0) + parseFloat(adjustAiAmount)).toFixed(2)}`
+                        : `✓ 扣除 $${Math.abs(parseFloat(adjustAiAmount)).toFixed(2)}，新AI钱包: $${((adjustBalanceUser.aiBalance ?? 0) + parseFloat(adjustAiAmount)).toFixed(2)}`
+                    ) : '例如: -8.5 可直接把 AI 钱包扣到接近 0 便于测试'}
+                  </p>
+                </div>
+
                 <div className="flex gap-2 pt-4">
                   <button
                     onClick={handleAdjustBalance}
@@ -3066,7 +3112,11 @@ export default function AdminPage() {
                     确认调整
                   </button>
                   <button
-                    onClick={() => setAdjustBalanceUser(null)}
+                    onClick={() => {
+                      setAdjustBalanceUser(null);
+                      setAdjustAmount('');
+                      setAdjustAiAmount('');
+                    }}
                     className="flex-1 bg-slate-600 py-2 rounded-lg hover:bg-slate-500"
                   >
                     取消
