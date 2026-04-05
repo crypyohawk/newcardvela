@@ -168,6 +168,12 @@ async function syncCurrentUserKeyUsage(userId: string) {
 
       const user = await db.user.findUnique({ where: { id: userId }, select: { aiBalance: true } });
       if (user && key.newApiTokenId) {
+        // 重新读取 key 最新状态，防止并行处理时另一个 handler 已经禁用了这个 key
+        const freshKey = await db.aIKey.findUnique({
+          where: { id: key.id },
+          select: { status: true },
+        });
+        const keyIsActive = freshKey?.status === 'active';
         const availableUsd = getAvailableTokenUsd({
           aiBalance: user.aiBalance,
           creditLimit,
@@ -175,8 +181,11 @@ async function syncCurrentUserKeyUsage(userId: string) {
           monthlyLimit: txResult.monthlyLimit,
         });
         const newQuota = usdToQuota(availableUsd);
+        // 始终带上 status，避免并行更新把已禁用的 token 改回启用
+        const tokenStatus = (keyIsActive && newQuota > 0) ? 1 : 2;
         try {
           await updateNewApiToken(key.newApiTokenId, {
+            status: tokenStatus,
             remainQuota: newQuota,
             name: !usage.tokenName && key.newApiTokenName ? key.newApiTokenName : undefined,
             group: key.tier.channelGroup || 'default',

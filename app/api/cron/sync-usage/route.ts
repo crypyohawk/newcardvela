@@ -408,6 +408,11 @@ async function syncKeyUsages() {
       });
 
       if (user && key.newApiTokenId) {
+        const freshKey = await db.aIKey.findUnique({
+          where: { id: key.id },
+          select: { status: true },
+        });
+        const keyIsActive = freshKey?.status === 'active';
         const monthUsed = txResult.monthUsed ?? key.monthUsed;
         const monthlyLimit = txResult.monthlyLimit ?? key.monthlyLimit;
         const availableUsd = getAvailableTokenUsd({
@@ -417,8 +422,11 @@ async function syncKeyUsages() {
           monthlyLimit,
         });
         const newQuota = usdToQuota(availableUsd);
+        // 始终带上 status，避免 new-api 的 PUT 覆盖已禁用状态
+        const tokenStatus = (keyIsActive && newQuota > 0) ? 1 : 2;
         try {
           await updateNewApiToken(key.newApiTokenId, {
+            status: tokenStatus,
             remainQuota: newQuota,
             name: !usage.tokenName && key.newApiTokenName ? key.newApiTokenName : undefined,
             group: key.tier.channelGroup || 'default',
