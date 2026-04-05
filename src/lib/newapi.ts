@@ -50,6 +50,7 @@ async function newApiRequest(path: string, options: RequestInit = {}): Promise<a
   try {
   const res = await fetch(url, {
     ...options,
+    cache: 'no-store',
     signal: controller.signal,
     headers: {
       'Content-Type': 'application/json',
