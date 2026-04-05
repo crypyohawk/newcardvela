@@ -425,21 +425,21 @@ export async function updateNewApiToken(tokenId: number, params: {
     });
   }
 
-  // Step 2: 通过普通 PUT 更新其他字段
-  const body: any = { id: tokenId };
-  let hasFields = false;
-  if (params.remainQuota !== undefined) { body.remain_quota = params.remainQuota; hasFields = true; }
-  if (params.name !== undefined) { body.name = params.name; hasFields = true; }
-  if (params.group !== undefined) { body.group = params.group; hasFields = true; }
-  if (params.expiredTime !== undefined) { body.expired_time = params.expiredTime; hasFields = true; }
+  // Step 2: 通过普通 PUT 更新其他字段。
+  // 关键：new-api 在 payload 缺少 expired_time 时会将其重置为 0（Go 零值 = 1970 年 = 已过期），
+  // 因此必须在每次普通 PUT 中都显式带上 expired_time，默认 -1（永不过期）。
+  const intentedExpiredTime = params.expiredTime ?? -1;
+  const body: any = { id: tokenId, expired_time: intentedExpiredTime };
+  let hasFields = true; // expired_time 始终需要发送
+  if (params.remainQuota !== undefined) body.remain_quota = params.remainQuota;
+  if (params.name !== undefined) body.name = params.name;
+  if (params.group !== undefined) body.group = params.group;
 
-  if (hasFields) {
-    console.log(`[newapi] PUT /api/token/ request:`, JSON.stringify(body));
-    await newApiRequest('/api/token/', {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    });
-  }
+  console.log(`[newapi] PUT /api/token/ request:`, JSON.stringify(body));
+  await newApiRequest('/api/token/', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
 
   // 验证更新是否生效
   const after = await getNewApiTokenRecord(tokenId);
@@ -448,15 +448,15 @@ export async function updateNewApiToken(tokenId: number, params: {
     params.remainQuota !== undefined && after.remainQuota !== params.remainQuota,
     params.name !== undefined && after.name !== params.name,
     params.group !== undefined && after.group !== params.group,
-    params.expiredTime !== undefined && after.expiredTime !== params.expiredTime,
+    after.expiredTime !== intentedExpiredTime,
   ].some(Boolean);
 
   if (mismatch) {
-    console.warn(`[newapi] token update mismatch: id=${tokenId} got status=${after.status} remainQuota=${after.remainQuota} group=${after.group}`);
-    throw new Error(`new-api token 更新未生效: id=${tokenId}, status=${after.status}, remainQuota=${after.remainQuota}, group=${after.group}`);
+    console.warn(`[newapi] token update mismatch: id=${tokenId} got status=${after.status} remainQuota=${after.remainQuota} expiredTime=${after.expiredTime} group=${after.group}`);
+    throw new Error(`new-api token 更新未生效: id=${tokenId}, status=${after.status}, remainQuota=${after.remainQuota}, expiredTime=${after.expiredTime}, group=${after.group}`);
   }
 
-  console.log(`[newapi] PUT /api/token/ verified: id=${tokenId} status=${after.status} remainQuota=${after.remainQuota} group=${after.group}`);
+  console.log(`[newapi] PUT /api/token/ verified: id=${tokenId} status=${after.status} remainQuota=${after.remainQuota} expiredTime=${after.expiredTime} group=${after.group}`);
 }
 
 /**
