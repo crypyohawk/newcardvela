@@ -814,13 +814,9 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-gray-300 text-sm">欢迎, {user.username}</span>
             <div className="flex items-center gap-2">
-              <div className="bg-green-600 px-3 py-1.5 rounded-l-lg">
+              <div className="bg-green-600 px-3 py-1.5 rounded-lg">
                 <span className="text-xs text-green-200">账户</span>
                 <span className="font-bold text-sm ml-1">${user.balance.toFixed(2)}</span>
-              </div>
-              <div className="bg-blue-600 px-3 py-1.5">
-                <span className="text-xs text-blue-200">AI</span>
-                <span className="font-bold text-sm ml-1">${(user.aiBalance ?? 0).toFixed(2)}</span>
               </div>
               <button
                 onClick={() => {
