@@ -484,10 +484,28 @@ async function syncKeyUsages() {
       })) {
         const activeKeys = await db.aIKey.findMany({
           where: { userId: key.userId, status: 'active' },
-          select: { id: true, newApiTokenId: true, tier: { select: { channelGroup: true } } },
+          select: {
+            id: true,
+            newApiTokenId: true,
+            copilotAccountId: true,
+            tier: { select: { channelGroup: true } },
+          },
         });
         for (const activeKey of activeKeys) {
-          await db.aIKey.update({ where: { id: activeKey.id }, data: { status: 'disabled' } });
+          if (activeKey.copilotAccountId) {
+            await db.$transaction([
+              db.aIKey.update({
+                where: { id: activeKey.id },
+                data: { status: 'disabled', copilotAccountId: null },
+              }),
+              db.copilotAccount.update({
+                where: { id: activeKey.copilotAccountId },
+                data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
+              }),
+            ]);
+          } else {
+            await db.aIKey.update({ where: { id: activeKey.id }, data: { status: 'disabled' } });
+          }
           if (activeKey.newApiTokenId) {
             try {
               await updateNewApiToken(activeKey.newApiTokenId, {
@@ -500,7 +518,20 @@ async function syncKeyUsages() {
       }
 
       if (txResult.monthlyLimit && txResult.monthUsed >= txResult.monthlyLimit && key.status === 'active') {
-        await db.aIKey.update({ where: { id: key.id }, data: { status: 'disabled' } });
+        if (key.copilotAccountId) {
+          await db.$transaction([
+            db.aIKey.update({
+              where: { id: key.id },
+              data: { status: 'disabled', copilotAccountId: null },
+            }),
+            db.copilotAccount.update({
+              where: { id: key.copilotAccountId },
+              data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
+            }),
+          ]);
+        } else {
+          await db.aIKey.update({ where: { id: key.id }, data: { status: 'disabled' } });
+        }
         if (key.newApiTokenId) {
           try {
             await updateNewApiToken(key.newApiTokenId, {

@@ -86,6 +86,28 @@ export async function PUT(
           return NextResponse.json({ error: '当前 Key 无可用额度，可能月度限额已耗尽，请充值或调整月限额后再启用' }, { status: 400 });
         }
 
+        // 清理旧版本遗留的禁用 key 绑定，避免账号看似被占用却无法重绑
+        const staleBoundAccount = await db.copilotAccount.findFirst({
+          where: {
+            OR: [
+              { id: aiKey.copilotAccountId || undefined },
+              { boundAiKeyId: params.id },
+            ],
+          },
+        });
+        if (staleBoundAccount) {
+          await db.$transaction([
+            db.aIKey.update({
+              where: { id: params.id },
+              data: { copilotAccountId: null },
+            }),
+            db.copilotAccount.update({
+              where: { id: staleBoundAccount.id },
+              data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
+            }),
+          ]);
+        }
+
         // 查找空闲号池账号（用量最低优先）
         const idleAccount = await db.copilotAccount.findFirst({
           where: { status: 'active', boundAiKeyId: null },
@@ -136,6 +158,20 @@ export async function PUT(
               });
             } catch (e: any) {
               console.error('同步 new-api 启用失败:', e.message);
+              await db.$transaction([
+                db.aIKey.update({
+                  where: { id: params.id },
+                  data: { status: 'disabled', copilotAccountId: null },
+                }),
+                db.copilotAccount.update({
+                  where: { id: idleAccount.id },
+                  data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
+                }),
+              ]);
+              return NextResponse.json({
+                error: '同步网关状态失败，请检查 new-api 管理认证配置',
+                details: e.message,
+              }, { status: 502 });
             }
           }
 

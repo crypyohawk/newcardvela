@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 
     // 查询反向：有 Key 指向这些账号但账号可能未标记绑定
     const allBoundKeys = await prisma.aIKey.findMany({
-      where: { copilotAccountId: { in: rawAccounts.map(a => a.id) }, status: { not: 'revoked' } },
+      where: { copilotAccountId: { in: rawAccounts.map(a => a.id) }, status: 'active' },
       select: { id: true, copilotAccountId: true, keyName: true, lastUsedAt: true, status: true, userId: true, createdAt: true },
     });
     const keyByAccountId = Object.fromEntries(allBoundKeys.map(k => [k.copilotAccountId!, k]));
@@ -39,8 +39,8 @@ export async function GET(request: NextRequest) {
     for (const account of rawAccounts) {
       if (account.boundAiKeyId) {
         const boundKey = keyMap[account.boundAiKeyId];
-        // 账号标记绑定，但 Key 已不存在或已吊销 → 释放
-        if (!boundKey || boundKey.status === 'revoked') {
+        // 账号标记绑定，但 Key 已不存在/已禁用/已吊销 → 释放
+        if (!boundKey || boundKey.status !== 'active') {
           repairOps.push(
             prisma.copilotAccount.update({
               where: { id: account.id },
