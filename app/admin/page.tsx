@@ -66,6 +66,13 @@ interface Notice {
   isActive: boolean;
 }
 
+interface AdminAIUserDetail {
+  user: any;
+  stats: any;
+  aiKeys: any[];
+  aiStats: any;
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds' | 'referral' | 'monthlyFee' | 'ai' | 'enterprise' | 'copilot'>('cards');
@@ -155,6 +162,9 @@ export default function AdminPage() {
   const [aiUsageStats, setAiUsageStats] = useState<any>(null);
   const [aiKeys, setAiKeys] = useState<any[]>([]);
   const [aiKeySearch, setAiKeySearch] = useState('');
+  const [selectedAIUserId, setSelectedAIUserId] = useState<string | null>(null);
+  const [selectedAIUserDetail, setSelectedAIUserDetail] = useState<AdminAIUserDetail | null>(null);
+  const [aiUserDetailLoading, setAiUserDetailLoading] = useState(false);
   const [showAddTier, setShowAddTier] = useState(false);
   const [editingTier, setEditingTier] = useState<any>(null);
   const [tierForm, setTierForm] = useState({ displayName: '', description: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0' });
@@ -174,6 +184,117 @@ export default function AdminPage() {
 
   const getToken = () => localStorage.getItem('token');
 
+  const getAIModelMeta = (modelGroup?: string | null) => {
+    if (modelGroup === 'gpt') return { label: 'GPT', className: 'bg-emerald-500/20 text-emerald-400' };
+    if (modelGroup === 'mixed') return { label: '混合', className: 'bg-purple-500/20 text-purple-400' };
+    return { label: 'Claude', className: 'bg-amber-500/20 text-amber-400' };
+  };
+
+  const getUserRoleMeta = (role?: string | null) => {
+    if (role === 'admin') return { label: '管理员', className: 'bg-purple-500/20 text-purple-300' };
+    if (role === 'agent') return { label: '代理', className: 'bg-orange-500/20 text-orange-300' };
+    if (role === 'enterprise') return { label: '企业', className: 'bg-cyan-500/20 text-cyan-300' };
+    return { label: '普通用户', className: 'bg-slate-600/60 text-slate-200' };
+  };
+
+  const getTransactionTypeLabel = (type: string) => {
+    const map: Record<string, string> = {
+      recharge: '充值',
+      withdraw: '提现',
+      card_recharge: '卡充值',
+      card_withdraw: '卡提现',
+      open_card: '开卡',
+      refund: '退款',
+      referral_bonus: '推荐奖励',
+      first_recharge_bonus: '首充奖励',
+      ai_usage: 'AI消费',
+      ai_transfer: 'AI钱包转账',
+      deposit: '入账',
+    };
+    return map[type] || type;
+  };
+
+  const getTransactionStatusMeta = (status: string) => {
+    const map: Record<string, { text: string; className: string }> = {
+      pending: { text: '待支付', className: 'bg-yellow-500/20 text-yellow-300' },
+      processing: { text: '处理中', className: 'bg-blue-500/20 text-blue-300' },
+      completed: { text: '已完成', className: 'bg-green-500/20 text-green-300' },
+      failed: { text: '已拒绝', className: 'bg-red-500/20 text-red-300' },
+    };
+    return map[status] || { text: status, className: 'bg-slate-600/60 text-slate-200' };
+  };
+
+  const getCardStatusMeta = (status: string) => {
+    const map: Record<string, { text: string; className: string }> = {
+      active: { text: '正常', className: 'bg-green-500/20 text-green-300' },
+      inactive: { text: '未激活', className: 'bg-slate-600/60 text-slate-200' },
+      frozen: { text: '冻结', className: 'bg-blue-500/20 text-blue-300' },
+      cancelled: { text: '已注销', className: 'bg-red-500/20 text-red-300' },
+      pending: { text: '处理中', className: 'bg-yellow-500/20 text-yellow-300' },
+    };
+    return map[status] || { text: status, className: 'bg-slate-600/60 text-slate-200' };
+  };
+
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return '从未使用';
+    return new Date(value).toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const filteredAIKeys = aiKeys.filter((key: any) => {
+    if (!aiKeySearch) return true;
+    const searchValue = aiKeySearch.toLowerCase();
+    return [
+      key.user?.username,
+      key.user?.email,
+      key.keyName,
+      key.tier?.displayName,
+      key.tier?.name,
+    ].some((item) => String(item || '').toLowerCase().includes(searchValue));
+  });
+
+  const aiAccountMap = new Map<string, any>();
+  filteredAIKeys.forEach((key: any) => {
+    const userId = key.user?.id;
+    if (!userId) return;
+
+    if (!aiAccountMap.has(userId)) {
+      aiAccountMap.set(userId, {
+        userId,
+        username: key.user?.username || '未命名用户',
+        email: key.user?.email || '-',
+        balance: Number(key.user?.balance || 0),
+        aiBalance: Number(key.user?.aiBalance || 0),
+        role: key.user?.role || 'user',
+        keyCount: 0,
+        activeKeyCount: 0,
+        monthUsed: 0,
+        totalUsed: 0,
+        lastUsedAt: null,
+      });
+    }
+
+    const summary = aiAccountMap.get(userId);
+    summary.keyCount += 1;
+    summary.activeKeyCount += key.status === 'active' ? 1 : 0;
+    summary.monthUsed += Number(key.monthUsed || 0);
+    summary.totalUsed += Number(key.totalUsed || 0);
+    if (key.lastUsedAt && (!summary.lastUsedAt || new Date(key.lastUsedAt).getTime() > new Date(summary.lastUsedAt).getTime())) {
+      summary.lastUsedAt = key.lastUsedAt;
+    }
+  });
+
+  const aiAccountSummaries = Array.from(aiAccountMap.values()).sort((a, b) => {
+    if (b.monthUsed !== a.monthUsed) return b.monthUsed - a.monthUsed;
+    if (b.activeKeyCount !== a.activeKeyCount) return b.activeKeyCount - a.activeKeyCount;
+    return a.email.localeCompare(b.email);
+  });
+
   useEffect(() => {
     const token = getToken();
     if (!token) {
@@ -190,6 +311,20 @@ export default function AdminPage() {
       fetchTabData(activeTab, false);
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'ai') return;
+
+    if (aiAccountSummaries.length === 0) {
+      setSelectedAIUserId(null);
+      setSelectedAIUserDetail(null);
+      return;
+    }
+
+    if (!selectedAIUserId || !aiAccountSummaries.some((account) => account.userId === selectedAIUserId)) {
+      void fetchAIUserDetail(aiAccountSummaries[0].userId);
+    }
+  }, [activeTab, selectedAIUserId, aiKeys, aiKeySearch]);
 
   const fetchTabData = async (tab: string, isInitial: boolean) => {
     if (isInitial) {
@@ -529,6 +664,29 @@ export default function AdminPage() {
     }
   };
 
+  const fetchAIUserDetail = async (userId: string, options?: { silent?: boolean }) => {
+    try {
+      setSelectedAIUserId(userId);
+      if (!options?.silent) {
+        setAiUserDetailLoading(true);
+      }
+
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || '获取账户详情失败');
+      }
+
+      setSelectedAIUserDetail(data);
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || '获取账户详情失败' });
+    } finally {
+      setAiUserDetailLoading(false);
+    }
+  };
+
   const handleSaveTier = async () => {
     if (!tierForm.displayName.trim()) {
       setMessage({ type: 'error', text: '请填写套餐名称' });
@@ -592,7 +750,10 @@ export default function AdminPage() {
         body: JSON.stringify({ keyId, status: currentStatus === 'active' ? 'disabled' : 'active' }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-      fetchAIManagement();
+      await fetchAIManagement();
+      if (selectedAIUserId) {
+        await fetchAIUserDetail(selectedAIUserId, { silent: true });
+      }
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
     }
@@ -607,7 +768,10 @@ export default function AdminPage() {
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
       setMessage({ type: 'success', text: 'Key 已删除' });
-      fetchAIManagement();
+      await fetchAIManagement();
+      if (selectedAIUserId) {
+        await fetchAIUserDetail(selectedAIUserId, { silent: true });
+      }
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
     }
@@ -2628,77 +2792,314 @@ export default function AdminPage() {
                   className="w-full bg-slate-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-gray-400 border-b border-slate-700">
-                      <th className="pb-3 text-left">用户</th>
-                      <th className="pb-3 text-left">Key 名称</th>
-                      <th className="pb-3">套餐</th>
-                      <th className="pb-3">模型</th>
-                      <th className="pb-3">模式</th>
-                      <th className="pb-3">本月用量</th>
-                      <th className="pb-3">状态</th>
-                      <th className="pb-3">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {aiKeys
-                      .filter((k: any) => {
-                        if (!aiKeySearch) return true;
-                        const s = aiKeySearch.toLowerCase();
-                        return k.user?.username?.toLowerCase().includes(s) || k.user?.email?.toLowerCase().includes(s);
-                      })
-                      .map((key: any) => (
-                      <tr key={key.id} className="border-b border-slate-700/50">
-                        <td className="py-2">{key.user?.email || '-'}</td>
-                        <td className="py-2">{key.keyName}</td>
-                        <td className="py-2 text-center">{key.tier?.displayName || '-'}</td>
-                        <td className="py-2 text-center">
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${
-                            key.tier?.modelGroup === 'gpt' ? 'bg-emerald-500/20 text-emerald-400' :
-                            key.tier?.modelGroup === 'mixed' ? 'bg-purple-500/20 text-purple-400' :
-                            'bg-amber-500/20 text-amber-400'
-                          }`}>
-                            {key.tier?.modelGroup === 'gpt' ? 'GPT' : key.tier?.modelGroup === 'mixed' ? '混合' : 'Claude'}
-                          </span>
-                        </td>
-                        <td className="py-2 text-center">
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">
-                            代理
-                          </span>
-                        </td>
-                        <td className="py-2 text-center">${key.monthUsed?.toFixed(4) || '0'}</td>
-                        <td className="py-2 text-center">
-                          <span className={`text-xs px-2 py-0.5 rounded ${
-                            key.status === 'active' ? 'bg-green-500/20 text-green-400' :
-                            key.status === 'disabled' ? 'bg-yellow-500/20 text-yellow-400' :
-                            'bg-red-500/20 text-red-400'
-                          }`}>
-                            {key.status === 'active' ? '正常' : key.status === 'disabled' ? '已停用' : '已暂停'}
-                          </span>
-                        </td>
-                        <td className="py-2 text-center">
-                          <button
-                            onClick={() => handleToggleAIKey(key.id, key.status)}
-                            className={`text-xs ${key.status === 'active' ? 'text-yellow-400' : 'text-green-400'}`}
-                          >
-                            {key.status === 'active' ? '停用' : '启用'}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteAIKey(key.id, key.keyName)}
-                            className="text-xs text-red-400 ml-2"
-                          >
-                            删除
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {aiKeys.length === 0 && (
-                      <tr><td colSpan={8} className="py-4 text-center text-gray-500">暂无 Key</td></tr>
+              <div className="grid grid-cols-1 xl:grid-cols-[360px,1fr] gap-4">
+                <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <div className="text-sm font-semibold">账户视图</div>
+                      <div className="text-xs text-gray-400 mt-1">按账户聚合查看 Key、余额和用量</div>
+                    </div>
+                    <div className="text-xs text-gray-400">{aiAccountSummaries.length} 个账户</div>
+                  </div>
+
+                  <div className="space-y-3 max-h-[920px] overflow-y-auto pr-1">
+                    {aiAccountSummaries.map((account) => {
+                      const roleMeta = getUserRoleMeta(account.role);
+                      const isSelected = account.userId === selectedAIUserId;
+
+                      return (
+                        <button
+                          key={account.userId}
+                          type="button"
+                          onClick={() => fetchAIUserDetail(account.userId)}
+                          className={`w-full text-left rounded-xl border px-4 py-4 transition ${
+                            isSelected
+                              ? 'border-blue-500 bg-blue-500/10 shadow-[0_0_0_1px_rgba(59,130,246,0.35)]'
+                              : 'border-slate-700 bg-slate-800/80 hover:border-slate-500 hover:bg-slate-800'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-semibold truncate">{account.username}</div>
+                              <div className="text-sm text-gray-400 truncate mt-1">{account.email}</div>
+                            </div>
+                            <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${roleMeta.className}`}>
+                              {roleMeta.label}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
+                            <div className="rounded-lg bg-slate-900/70 px-3 py-2">
+                              <div className="text-gray-400 text-xs">Key</div>
+                              <div className="font-semibold mt-1">{account.activeKeyCount}/{account.keyCount}</div>
+                            </div>
+                            <div className="rounded-lg bg-slate-900/70 px-3 py-2">
+                              <div className="text-gray-400 text-xs">本月消费</div>
+                              <div className="font-semibold text-purple-300 mt-1">${account.monthUsed.toFixed(4)}</div>
+                            </div>
+                            <div className="rounded-lg bg-slate-900/70 px-3 py-2">
+                              <div className="text-gray-400 text-xs">主余额</div>
+                              <div className="font-semibold text-green-300 mt-1">${account.balance.toFixed(2)}</div>
+                            </div>
+                            <div className="rounded-lg bg-slate-900/70 px-3 py-2">
+                              <div className="text-gray-400 text-xs">AI 钱包</div>
+                              <div className="font-semibold text-cyan-300 mt-1">${account.aiBalance.toFixed(2)}</div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between mt-4 text-xs text-gray-400">
+                            <span>累计 ${account.totalUsed.toFixed(4)}</span>
+                            <span>{account.lastUsedAt ? formatDateTime(account.lastUsedAt) : '从未使用'}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+
+                    {aiAccountSummaries.length === 0 && (
+                      <div className="text-center text-gray-500 py-10 border border-dashed border-slate-700 rounded-xl">
+                        没有匹配到账户或 Key
+                      </div>
                     )}
-                  </tbody>
-                </table>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-4 lg:p-5">
+                  {!selectedAIUserId && (
+                    <div className="h-full min-h-[320px] flex items-center justify-center text-gray-500">
+                      选择左侧账户后查看完整详情
+                    </div>
+                  )}
+
+                  {selectedAIUserId && aiUserDetailLoading && !selectedAIUserDetail && (
+                    <div className="h-full min-h-[320px] flex items-center justify-center text-gray-400">
+                      正在加载账户详情...
+                    </div>
+                  )}
+
+                  {selectedAIUserDetail && (
+                    <div className="space-y-5">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-xl font-bold">{selectedAIUserDetail.user?.username || '未命名用户'}</h4>
+                            <span className={`text-xs px-2 py-1 rounded-full ${getUserRoleMeta(selectedAIUserDetail.user?.role).className}`}>
+                              {getUserRoleMeta(selectedAIUserDetail.user?.role).label}
+                            </span>
+                            {aiUserDetailLoading && <span className="text-xs text-blue-300">刷新中...</span>}
+                          </div>
+                          <div className="text-sm text-gray-400 mt-1">{selectedAIUserDetail.user?.email || '-'}</div>
+                          <div className="text-xs text-gray-500 mt-2">用户 ID: {selectedAIUserDetail.user?.id}</div>
+                        </div>
+
+                        <div className="flex gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => fetchAIUserDetail(selectedAIUserId)}
+                            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm"
+                          >
+                            刷新详情
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/admin/users/${selectedAIUserId}`)}
+                            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium"
+                          >
+                            进入完整用户页
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 2xl:grid-cols-6 gap-3">
+                        <div className="rounded-xl bg-slate-800/90 p-4">
+                          <div className="text-xs text-gray-400">主余额</div>
+                          <div className="text-lg font-bold text-green-300 mt-2">${Number(selectedAIUserDetail.user?.balance || 0).toFixed(2)}</div>
+                        </div>
+                        <div className="rounded-xl bg-slate-800/90 p-4">
+                          <div className="text-xs text-gray-400">AI 钱包</div>
+                          <div className="text-lg font-bold text-cyan-300 mt-2">${Number(selectedAIUserDetail.user?.aiBalance || 0).toFixed(2)}</div>
+                        </div>
+                        <div className="rounded-xl bg-slate-800/90 p-4">
+                          <div className="text-xs text-gray-400">活跃 Key</div>
+                          <div className="text-lg font-bold text-blue-300 mt-2">{selectedAIUserDetail.aiStats?.activeKeys || 0}/{selectedAIUserDetail.aiStats?.totalKeys || 0}</div>
+                        </div>
+                        <div className="rounded-xl bg-slate-800/90 p-4">
+                          <div className="text-xs text-gray-400">本月 AI 消费</div>
+                          <div className="text-lg font-bold text-purple-300 mt-2">${Number(selectedAIUserDetail.aiStats?.monthAiCost || 0).toFixed(4)}</div>
+                        </div>
+                        <div className="rounded-xl bg-slate-800/90 p-4">
+                          <div className="text-xs text-gray-400">累计 AI 消费</div>
+                          <div className="text-lg font-bold text-orange-300 mt-2">${Number(selectedAIUserDetail.aiStats?.totalAiCost || 0).toFixed(4)}</div>
+                        </div>
+                        <div className="rounded-xl bg-slate-800/90 p-4">
+                          <div className="text-xs text-gray-400">卡片 / 交易</div>
+                          <div className="text-lg font-bold text-slate-100 mt-2">{selectedAIUserDetail.stats?.totalCards || 0} / {selectedAIUserDetail.stats?.totalTransactions || 0}</div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 2xl:grid-cols-[1.4fr,0.9fr] gap-4">
+                        <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4 overflow-x-auto">
+                          <div className="flex items-center justify-between mb-4">
+                            <div>
+                              <div className="font-semibold">AI Key 明细</div>
+                              <div className="text-xs text-gray-400 mt-1">这里直接处理当前账户下的 Key 状态和删除操作</div>
+                            </div>
+                            <div className="text-xs text-gray-400">{selectedAIUserDetail.aiKeys?.length || 0} 个 Key</div>
+                          </div>
+
+                          <table className="w-full text-sm min-w-[760px]">
+                            <thead>
+                              <tr className="text-gray-400 border-b border-slate-700">
+                                <th className="pb-3 text-left">Key 名称</th>
+                                <th className="pb-3 text-left">套餐</th>
+                                <th className="pb-3 text-center">模型</th>
+                                <th className="pb-3 text-center">本月</th>
+                                <th className="pb-3 text-center">累计</th>
+                                <th className="pb-3 text-center">状态</th>
+                                <th className="pb-3 text-center">最后使用</th>
+                                <th className="pb-3 text-center">操作</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedAIUserDetail.aiKeys?.map((key: any) => {
+                                const sourceKey = aiKeys.find((item: any) => item.id === key.id);
+                                const modelMeta = getAIModelMeta(sourceKey?.tier?.modelGroup);
+                                return (
+                                  <tr key={key.id} className="border-b border-slate-700/50 align-top">
+                                    <td className="py-3">
+                                      <div className="font-medium">{key.keyName}</div>
+                                      <div className="text-xs text-gray-500 mt-1">创建于 {formatDateTime(key.createdAt)}</div>
+                                    </td>
+                                    <td className="py-3 text-gray-300">{key.tierName}</td>
+                                    <td className="py-3 text-center">
+                                      <span className={`text-xs px-1.5 py-0.5 rounded ${modelMeta.className}`}>
+                                        {modelMeta.label}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 text-center text-purple-300">${Number(key.monthUsed || 0).toFixed(4)}</td>
+                                    <td className="py-3 text-center text-orange-300">${Number(key.totalUsed || 0).toFixed(4)}</td>
+                                    <td className="py-3 text-center">
+                                      <span className={`text-xs px-2 py-0.5 rounded ${
+                                        key.status === 'active' ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'
+                                      }`}>
+                                        {key.status === 'active' ? '正常' : '已停用'}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 text-center text-xs text-gray-400">{formatDateTime(key.lastUsedAt)}</td>
+                                    <td className="py-3 text-center whitespace-nowrap">
+                                      <button
+                                        onClick={() => handleToggleAIKey(key.id, key.status)}
+                                        className={`text-xs ${key.status === 'active' ? 'text-yellow-400' : 'text-green-400'}`}
+                                      >
+                                        {key.status === 'active' ? '停用' : '启用'}
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteAIKey(key.id, key.keyName)}
+                                        className="text-xs text-red-400 ml-3"
+                                      >
+                                        删除
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              {(!selectedAIUserDetail.aiKeys || selectedAIUserDetail.aiKeys.length === 0) && (
+                                <tr>
+                                  <td colSpan={8} className="py-8 text-center text-gray-500">当前账户没有 AI Key</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+                            <div className="font-semibold mb-4">账户概览</div>
+                            <div className="space-y-3 text-sm">
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-gray-400">注册时间</span>
+                                <span>{formatDateTime(selectedAIUserDetail.user?.createdAt)}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-gray-400">累计充值</span>
+                                <span className="text-green-300">${Number(selectedAIUserDetail.stats?.totalRecharge || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-gray-400">累计提现</span>
+                                <span className="text-red-300">${Number(selectedAIUserDetail.stats?.totalWithdraw || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-gray-400">最近 50 条交易</span>
+                                <span>{selectedAIUserDetail.user?.transactions?.length || 0}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-gray-400">卡片数量</span>
+                                <span>{selectedAIUserDetail.user?.userCards?.length || 0}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+                            <div className="font-semibold mb-4">最近交易</div>
+                            <div className="space-y-3">
+                              {(selectedAIUserDetail.user?.transactions || []).slice(0, 6).map((tx: any) => {
+                                const statusMeta = getTransactionStatusMeta(tx.status);
+                                return (
+                                  <div key={tx.id} className="rounded-lg bg-slate-900/70 px-3 py-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <div className="font-medium">{getTransactionTypeLabel(tx.type)}</div>
+                                        <div className="text-xs text-gray-500 mt-1">{formatDateTime(tx.createdAt)}</div>
+                                      </div>
+                                      <div className="text-right">
+                                        <div className={`font-semibold ${Number(tx.amount) >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+                                          {Number(tx.amount) >= 0 ? '+' : ''}{Number(tx.amount).toFixed(2)}
+                                        </div>
+                                        <span className={`inline-flex mt-1 text-xs px-2 py-0.5 rounded ${statusMeta.className}`}>
+                                          {statusMeta.text}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              {(selectedAIUserDetail.user?.transactions || []).length === 0 && (
+                                <div className="text-sm text-gray-500">暂无交易记录</div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+                            <div className="font-semibold mb-4">卡片情况</div>
+                            <div className="space-y-3">
+                              {(selectedAIUserDetail.user?.userCards || []).slice(0, 6).map((card: any) => {
+                                const statusMeta = getCardStatusMeta(card.status);
+                                return (
+                                  <div key={card.id} className="rounded-lg bg-slate-900/70 px-3 py-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <div className="font-medium">{card.cardType?.name || '未命名卡种'}</div>
+                                        <div className="text-xs text-gray-500 mt-1">**** **** **** {card.cardNoLast4 || '----'}</div>
+                                      </div>
+                                      <div className="text-right">
+                                        <div className="text-green-300 font-semibold">${Number(card.balance || 0).toFixed(2)}</div>
+                                        <span className={`inline-flex mt-1 text-xs px-2 py-0.5 rounded ${statusMeta.className}`}>
+                                          {statusMeta.text}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              {(selectedAIUserDetail.user?.userCards || []).length === 0 && (
+                                <div className="text-sm text-gray-500">暂无卡片</div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
