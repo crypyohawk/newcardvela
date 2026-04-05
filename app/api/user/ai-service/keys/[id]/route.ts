@@ -153,12 +153,29 @@ export async function PUT(
       }
       updateData.status = body.status;
 
-      // 同步到 new-api
+      // 同步到 new-api（启用时同时刷新额度，避免 quota=0 导致 new-api 仍显示耗尽）
       if (aiKey.newApiTokenId) {
         try {
-          await updateNewApiToken(aiKey.newApiTokenId, {
+          const tokenUpdate: any = {
             status: body.status === 'active' ? 1 : 2,
-          });
+            group: aiKey.tier.channelGroup || 'default',
+          };
+
+          if (body.status === 'active') {
+            const user = await db.user.findUnique({ where: { id: payload.userId }, select: { aiBalance: true } });
+            const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
+            const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
+            const freshQuota = usdToQuota(getAvailableTokenUsd({
+              aiBalance: user?.aiBalance || 0,
+              creditLimit,
+              monthUsed: aiKey.monthUsed,
+              monthlyLimit: aiKey.monthlyLimit,
+            }));
+            tokenUpdate.remainQuota = freshQuota;
+            tokenUpdate.status = freshQuota > 0 ? 1 : 2;
+          }
+
+          await updateNewApiToken(aiKey.newApiTokenId, tokenUpdate);
         } catch (e: any) {
           console.error('同步 new-api 状态失败:', e.message);
           return NextResponse.json({
