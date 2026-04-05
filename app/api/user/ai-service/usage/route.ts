@@ -3,9 +3,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
-import { quotaToUSD } from '../../../../../src/lib/newapi';
 
-// 获取用量数据 — 直接从 new-api 日志拉取（new-api 自带完整计费规则）
+// 获取用量数据 — 从实际扣费记录 + 按天统计聚合
 export async function GET(request: NextRequest) {
   try {
     const token = getTokenFromRequest(request);
@@ -27,7 +26,7 @@ export async function GET(request: NextRequest) {
     } else {
       startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     }
-    // 查出用户的所有 Key ID（用于匹配本地按天聚合）
+
     const keyWhere: any = { userId: payload.userId, status: { not: 'revoked' } };
     if (keyId) keyWhere.id = keyId;
     const keys = await db.aIKey.findMany({
@@ -46,6 +45,25 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // 从实际扣费记录（transaction）聚合每日费用 — 保证与用户余额变动一致
+    const transactions = await db.transaction.findMany({
+      where: {
+        userId: payload.userId,
+        type: 'ai_usage',
+        status: 'completed',
+        createdAt: { gte: startDate },
+      },
+      select: { amount: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const txDailyMap = new Map<string, number>();
+    for (const tx of transactions) {
+      const day = tx.createdAt.toISOString().slice(0, 10);
+      txDailyMap.set(day, (txDailyMap.get(day) || 0) + Math.abs(tx.amount));
+    }
+
+    // 从 AIKeyDailyStat 取请求次数和 token 数（这些统计是准确的）
     const dailyStats = await db.aIKeyDailyStat.findMany({
       where: {
         aiKeyId: { in: keys.map((key) => key.id) },
@@ -54,28 +72,31 @@ export async function GET(request: NextRequest) {
       orderBy: { date: 'asc' },
     });
 
-    let totalCost = 0;
     let totalTokens = 0;
-    const dailyMap = new Map<string, { cost: number; inputTokens: number; outputTokens: number; count: number }>();
-
+    const statDailyMap = new Map<string, { inputTokens: number; outputTokens: number; count: number }>();
     for (const stat of dailyStats) {
-      const cost = stat.cost || 0;
       const input = stat.promptTokens || 0;
       const output = stat.completionTokens || 0;
-      totalCost += cost;
       totalTokens += input + output;
 
       const day = stat.date.toISOString().slice(0, 10);
-      const existing = dailyMap.get(day) || { cost: 0, inputTokens: 0, outputTokens: 0, count: 0 };
-      existing.cost += cost;
+      const existing = statDailyMap.get(day) || { inputTokens: 0, outputTokens: 0, count: 0 };
       existing.inputTokens += input;
       existing.outputTokens += output;
       existing.count += stat.requestCount || 0;
-      dailyMap.set(day, existing);
+      statDailyMap.set(day, existing);
     }
 
-    const daily = Array.from(dailyMap.entries())
-      .map(([date, data]) => ({ date, ...data }))
+    // 合并：费用用 transaction，请求/tokens 用 dailyStat
+    const allDays = new Set([...txDailyMap.keys(), ...statDailyMap.keys()]);
+    let totalCost = 0;
+    const daily = Array.from(allDays)
+      .map((date) => {
+        const cost = txDailyMap.get(date) || 0;
+        const stats = statDailyMap.get(date) || { inputTokens: 0, outputTokens: 0, count: 0 };
+        totalCost += cost;
+        return { date, cost: Math.round(cost * 10000) / 10000, ...stats };
+      })
       .sort((a, b) => a.date.localeCompare(b.date));
 
     return NextResponse.json({
