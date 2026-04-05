@@ -74,6 +74,18 @@ export async function PUT(
           return NextResponse.json({ error: 'AI 余额不足，无法启用 Key，请先从账户余额转入 AI 钱包' }, { status: 400 });
         }
 
+        const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
+        const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
+        const availableUsd = getAvailableTokenUsd({
+          aiBalance: user.aiBalance,
+          creditLimit,
+          monthUsed: aiKey.monthUsed,
+          monthlyLimit: aiKey.monthlyLimit,
+        });
+        if (availableUsd <= 0) {
+          return NextResponse.json({ error: '当前 Key 无可用额度，可能月度限额已耗尽，请充值或调整月限额后再启用' }, { status: 400 });
+        }
+
         // 查找空闲号池账号（用量最低优先）
         const idleAccount = await db.copilotAccount.findFirst({
           where: { status: 'active', boundAiKeyId: null },
@@ -115,16 +127,9 @@ export async function PUT(
           // 同步启用 new-api token + 刷新配额 + 确保 group 正确
           if (aiKey.newApiTokenId) {
             try {
-              const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
-              const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
-              const freshQuota = usdToQuota(getAvailableTokenUsd({
-                aiBalance: user.aiBalance,
-                creditLimit,
-                monthUsed: aiKey.monthUsed,
-                monthlyLimit: aiKey.monthlyLimit,
-              }));
+              const freshQuota = usdToQuota(availableUsd);
               await updateNewApiToken(aiKey.newApiTokenId, {
-                status: freshQuota > 0 ? 1 : 2,
+                status: 1,
                 remainQuota: freshQuota,
                 group: aiKey.tier.channelGroup || 'default',
                 expiredTime: -1,
@@ -150,6 +155,18 @@ export async function PUT(
         if (!user || user.aiBalance <= 0) {
           return NextResponse.json({ error: 'AI 余额不足，无法启用 Key，请先从账户余额转入 AI 钱包' }, { status: 400 });
         }
+
+        const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
+        const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
+        const availableUsd = getAvailableTokenUsd({
+          aiBalance: user.aiBalance,
+          creditLimit,
+          monthUsed: aiKey.monthUsed,
+          monthlyLimit: aiKey.monthlyLimit,
+        });
+        if (availableUsd <= 0) {
+          return NextResponse.json({ error: '当前 Key 无可用额度，可能月度限额已耗尽，请充值或调整月限额后再启用' }, { status: 400 });
+        }
       }
       updateData.status = body.status;
 
@@ -171,8 +188,11 @@ export async function PUT(
               monthUsed: aiKey.monthUsed,
               monthlyLimit: aiKey.monthlyLimit,
             }));
+            if (freshQuota <= 0) {
+              return NextResponse.json({ error: '当前 Key 无可用额度，可能月度限额已耗尽，请充值或调整月限额后再启用' }, { status: 400 });
+            }
             tokenUpdate.remainQuota = freshQuota;
-            tokenUpdate.status = freshQuota > 0 ? 1 : 2;
+            tokenUpdate.status = 1;
           }
 
           await updateNewApiToken(aiKey.newApiTokenId, tokenUpdate);
