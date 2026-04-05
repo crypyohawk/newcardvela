@@ -87,24 +87,25 @@ export async function PUT(
         }
 
         // 清理旧版本遗留的禁用 key 绑定，避免账号看似被占用却无法重绑
-        const staleBoundAccount = await db.copilotAccount.findFirst({
-          where: {
-            OR: [
-              { id: aiKey.copilotAccountId || undefined },
-              { boundAiKeyId: params.id },
-            ],
-          },
+        const staleConditions: any[] = [];
+        if (aiKey.copilotAccountId) staleConditions.push({ id: aiKey.copilotAccountId });
+        staleConditions.push({ boundAiKeyId: params.id });
+
+        const staleBoundAccounts = await db.copilotAccount.findMany({
+          where: { OR: staleConditions },
         });
-        if (staleBoundAccount) {
+        if (staleBoundAccounts.length > 0) {
           await db.$transaction([
             db.aIKey.update({
               where: { id: params.id },
               data: { copilotAccountId: null },
             }),
-            db.copilotAccount.update({
-              where: { id: staleBoundAccount.id },
-              data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
-            }),
+            ...staleBoundAccounts.map((acc) =>
+              db.copilotAccount.update({
+                where: { id: acc.id },
+                data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
+              })
+            ),
           ]);
         }
 
