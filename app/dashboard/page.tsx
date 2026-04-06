@@ -4,6 +4,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { getMinimumInitialAmountForCardBin, getOpenCardPricing } from '../../src/lib/cardOpening';
 
 interface CardType {
   id: string;
@@ -53,6 +54,15 @@ interface WithdrawConfig {
   accountFeeMin: number;
   cardFeePercent: number;
   cardFeeMin: number;
+}
+
+function getCardPricing(cardType: CardType) {
+  return getOpenCardPricing({
+    cardBin: cardType.cardBin,
+    openFee: cardType.openFee,
+    requestedInitialAmount: 0,
+    rechargeFeePercent: cardType.rechargeFeePercent,
+  });
 }
 
 export default function DashboardPage() {
@@ -424,8 +434,10 @@ export default function DashboardPage() {
   const handleOpenCard = async (cardType: CardType) => {
     if (!user) return;
 
-    if (user.balance < cardType.openFee) {
-      setMessage({ type: 'error', text: `余额不足，开卡需要 $${cardType.openFee}，请先充值` });
+    const pricing = getCardPricing(cardType);
+
+    if (user.balance < pricing.totalCost) {
+      setMessage({ type: 'error', text: `余额不足，开卡需要 $${pricing.totalCost.toFixed(2)}，请先充值` });
       return;
     }
 
@@ -437,6 +449,13 @@ export default function DashboardPage() {
   // 确认开卡
   const confirmOpenCard = async () => {
     if (!selectedCardType || !user) return;
+
+    const pricing = getCardPricing(selectedCardType);
+    if (user.balance < pricing.totalCost) {
+      setMessage({ type: 'error', text: `余额不足，开卡需要 $${pricing.totalCost.toFixed(2)}，请先充值` });
+      setShowOpenCardConfirm(false);
+      return;
+    }
 
     setShowOpenCardConfirm(false);
     setOpeningCard(selectedCardType.id);
@@ -452,11 +471,17 @@ export default function DashboardPage() {
         },
         body: JSON.stringify({
           cardTypeId: selectedCardType.id,
-          initialAmount: 0,
+          initialAmount: pricing.initialAmount,
         }),
       });
 
-      const data = await res.json();
+      const raw = await res.text();
+      let data: any = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        throw new Error('开卡服务暂时不可用，请稍后重试');
+      }
 
       if (!res.ok) {
         throw new Error(data.error || '开卡失败');
@@ -1345,6 +1370,22 @@ export default function DashboardPage() {
                         <span className="opacity-70">开卡费:</span>
                         <span className="font-medium">${card.displayOpenFee ?? card.openFee}</span>
                       </div>
+                            {getMinimumInitialAmountForCardBin(card.cardBin) > 0 && (
+                              <>
+                                <div className="flex justify-between">
+                                  <span className="opacity-70">预充值:</span>
+                                  <span>${getCardPricing(card).initialAmount.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="opacity-70">手续费:</span>
+                                  <span>${getCardPricing(card).rechargeFee.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between col-span-2 border-t border-white/15 pt-1 mt-1">
+                                  <span className="opacity-70">开卡合计:</span>
+                                  <span className="font-semibold">${getCardPricing(card).totalCost.toFixed(2)}</span>
+                                </div>
+                              </>
+                            )}
                       {(card.displayMonthlyFee !== null && card.displayMonthlyFee !== undefined) && (
                         <div className="flex justify-between">
                           <span className="opacity-70">月费:</span>
@@ -2912,21 +2953,47 @@ export default function DashboardPage() {
             <p className="text-gray-300 mb-4">
               确认开通 <span className="text-blue-400 font-semibold">{selectedCardType.name}</span> ？
             </p>
-            
-            <div className="bg-slate-700 rounded-lg p-4 mb-4 space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-400">开卡费</span>
-                <span className="font-bold">${selectedCardType.openFee}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">当前余额</span>
-                <span className="text-green-400">${user?.balance.toFixed(2)}</span>
-              </div>
-              <div className="border-t border-slate-600 pt-2 flex justify-between">
-                <span className="text-gray-400">开卡后余额</span>
-                <span className="text-yellow-400">${(user!.balance - selectedCardType.openFee).toFixed(2)}</span>
-              </div>
-            </div>
+
+            {(() => {
+              const pricing = getCardPricing(selectedCardType);
+              const minimumInitialAmount = getMinimumInitialAmountForCardBin(selectedCardType.cardBin);
+
+              return (
+                <div className="bg-slate-700 rounded-lg p-4 mb-4 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">开卡费</span>
+                    <span className="font-bold">${selectedCardType.openFee.toFixed(2)}</span>
+                  </div>
+                  {minimumInitialAmount > 0 && (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">预充值</span>
+                        <span>${pricing.initialAmount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">手续费</span>
+                        <span>${pricing.rechargeFee.toFixed(2)}</span>
+                      </div>
+                      <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded px-3 py-2">
+                        当前卡段 {selectedCardType.cardBin} 开卡时要求预充值金额大于 $0。
+                      </div>
+                    </>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">当前余额</span>
+                    <span className="text-green-400">${user?.balance.toFixed(2)}</span>
+                  </div>
+                  <div className="border-t border-slate-600 pt-2 flex justify-between">
+                    <span className="text-gray-400">开卡合计</span>
+                    <span className="font-bold text-white">${pricing.totalCost.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">开卡后余额</span>
+                    <span className="text-yellow-400">${(user!.balance - pricing.totalCost).toFixed(2)}</span>
+                  </div>
+                </div>
+              );
+            })()}
       
             <div className="flex gap-3">
               <button

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getCards, quickApplyCard } from '../../../../src/lib/gsalary';
 import { verifyToken, getTokenFromRequest } from '../../../../src/lib/auth';
+import { getNormalizedInitialAmount } from '../../../../src/lib/cardOpening';
 import { db } from '../../../../src/lib/db';
 
 async function requireAdmin(request: NextRequest) {
@@ -50,11 +51,12 @@ export async function POST(request: NextRequest) {
 
     const results = [];
     const count = quantity || 1;
+    const normalizedAmount = getNormalizedInitialAmount(product_code, Number(amount) || 0);
 
     for (let i = 0; i < count; i++) {
       const result = await quickApplyCard({
         product_code,
-        init_balance: Math.round(amount * 100),
+        init_balance: Math.round(normalizedAmount * 100),
       });
       results.push(result);
     }

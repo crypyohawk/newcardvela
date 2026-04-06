@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../src/lib/auth';
 import { quickApplyCard, getCards, getCardDetail } from '../../../../src/lib/gsalary';
+import { getOpenCardPricing } from '../../../../src/lib/cardOpening';
 import { prisma } from '../../../../src/lib/prisma';
 
 // 获取用户的卡片列表
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { cardTypeId, initialAmount = 0 } = body;
+    const { cardTypeId, initialAmount: rawInitialAmount = 0 } = body;
 
     const user = await db.user.findUnique({ where: { id: payload.userId } });
     if (!user) {
@@ -111,13 +112,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '卡片类型不可用' }, { status: 400 });
     }
 
-    // 计算费用
-    const rechargeFee = initialAmount * (cardType.rechargeFeePercent / 100);
-    const totalCost = cardType.openFee + initialAmount + rechargeFee;
+    const { initialAmount, rechargeFee, totalCost } = getOpenCardPricing({
+      cardBin: cardType.cardBin,
+      openFee: cardType.openFee,
+      requestedInitialAmount: Number(rawInitialAmount) || 0,
+      rechargeFeePercent: cardType.rechargeFeePercent,
+    });
 
     if (user.balance < totalCost) {
       return NextResponse.json({
-        error: `余额不足，需要 $${totalCost.toFixed(2)}，当前余额 $${user.balance.toFixed(2)}`
+        error: `余额不足，需要 $${totalCost.toFixed(2)}，当前余额 $${user.balance.toFixed(2)}`,
+        pricing: {
+          openFee: cardType.openFee,
+          initialAmount,
+          rechargeFee,
+          totalCost,
+        },
       }, { status: 400 });
     }
 
