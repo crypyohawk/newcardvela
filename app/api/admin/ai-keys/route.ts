@@ -74,7 +74,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: '参数无效' }, { status: 400 });
     }
 
-    // 查询 Key 获取 newApiTokenId 和 copilotAccountId 用于同步
+    // 查询 Key 获取 newApiTokenId 用于同步
     const existingKey = await db.aIKey.findUnique({
       where: { id: keyId },
       include: {

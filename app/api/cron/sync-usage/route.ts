@@ -328,7 +328,6 @@ async function syncKeyUsages() {
       totalUsed: true,
       monthUsed: true,
       lastRemoteUsedUsd: true,
-      copilotAccountId: true,
       tier: { select: { channelGroup: true } },
     },
   });

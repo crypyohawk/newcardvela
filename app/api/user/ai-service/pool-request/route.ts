@@ -59,7 +59,11 @@ export async function POST(request: NextRequest) {
     const maxKeys = aiTierLimits[currentTier] || 3;
 
     const poolKeyCount = await db.aIKey.count({
-      where: { userId: payload.userId, copilotAccountId: { not: null }, status: 'active' },
+      where: {
+        userId: payload.userId,
+        status: 'active',
+        tier: { OR: [{ channelGroup: 'copilot' }, { provider: { type: 'copilot-pool' } }] },
+      },
     });
 
     const request_ = await db.poolExpansionRequest.create({

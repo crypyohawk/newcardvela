@@ -29,9 +29,13 @@ export async function GET(request: NextRequest) {
     const currentTier = user.aiTier || 'basic';
     const currentConfig = AI_TIER_CONFIG[currentTier] || AI_TIER_CONFIG.basic;
 
-    // 号池 Key 数量
+    // 号池 Key 数量（共享池模型，按套餐类型统计）
     const poolKeyCount = await db.aIKey.count({
-      where: { userId: payload.userId, copilotAccountId: { not: null }, status: 'active' },
+      where: {
+        userId: payload.userId,
+        status: 'active',
+        tier: { OR: [{ channelGroup: 'copilot' }, { provider: { type: 'copilot-pool' } }] },
+      },
     });
 
     // 可升级的等级列表
