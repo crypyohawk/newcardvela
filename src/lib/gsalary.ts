@@ -172,7 +172,7 @@ export async function applyCard(data: {
   product_code: string;
   currency: string;
   card_holder_id: string;
-  init_balance: number;
+  init_balance: number; // 单位：元（USD），不是分
   limit_per_day?: number;
   limit_per_month?: number;
   limit_per_transaction?: number;
@@ -188,7 +188,7 @@ export async function getCardApplyResult(requestId: string) {
 // 便捷开卡方法（自动选择可用持卡人，失败时自动重试）
 export async function quickApplyCard(data: {
   product_code: string;
-  init_balance: number;
+  init_balance: number; // 单位：元（USD），不是分
   card_holder_id?: string;
 }) {
   const maxRetries = 3;

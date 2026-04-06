@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
     try {
       applyResult = await quickApplyCard({
         product_code: cardType.cardBin,
-        init_balance: Math.round(initialAmount * 100),
+        init_balance: initialAmount,
       });
     } catch (err: any) {
       console.error('开卡调用失败:', err);

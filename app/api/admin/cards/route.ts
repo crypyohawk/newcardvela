@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < count; i++) {
       const result = await quickApplyCard({
         product_code,
-        init_balance: Math.round(normalizedAmount * 100),
+        init_balance: normalizedAmount,
       });
       results.push(result);
     }
