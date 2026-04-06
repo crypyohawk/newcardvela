@@ -165,6 +165,9 @@ function RegisterContent() {
             {/* Password */}
             <div>
               <label className="block text-sm text-gray-400 mb-1.5">密码</label>
+              <div className="mb-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <p className="text-xs text-amber-400">⚠️ 密码丢失等于账号丢失，注册前请务必备份保存密码</p>
+              </div>
               <input
                 type="password"
                 placeholder="8-10位，含大写、小写字母和特殊字符"

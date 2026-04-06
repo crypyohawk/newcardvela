@@ -100,25 +100,7 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // 禁用 Key 时解绑号池账号，合并事务防止数据不一致
-    const isCopilotPool = existingKey.tier.channelGroup === 'copilot' || existingKey.tier.provider?.type === 'copilot-pool';
-    if (status === 'active' && isCopilotPool && existingKey.status === 'disabled') {
-      return NextResponse.json({ error: '号池 Key 禁用后不可重新启用，请直接为用户创建新的 Key' }, { status: 400 });
-    }
-
-    if (status === 'disabled' && existingKey.copilotAccountId) {
-      const [updated] = await db.$transaction([
-        db.aIKey.update({
-          where: { id: keyId },
-          data: { status, copilotAccountId: null },
-        }),
-        db.copilotAccount.update({
-          where: { id: existingKey.copilotAccountId },
-          data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
-        }),
-      ]);
-      return NextResponse.json({ success: true, key: updated });
-    }
+    // 号池 Key 现在可以自由启用/禁用（共享池模型，无需绑定账号）
 
     const updated = await db.aIKey.update({
       where: { id: keyId },
@@ -199,7 +181,7 @@ export async function DELETE(request: NextRequest) {
 
     const aiKey = await db.aIKey.findUnique({
       where: { id: keyId },
-      select: { id: true, newApiTokenId: true, keyName: true, copilotAccountId: true },
+      select: { id: true, newApiTokenId: true, keyName: true },
     });
     if (!aiKey) {
       return NextResponse.json({ error: 'Key 不存在' }, { status: 404 });
@@ -219,18 +201,10 @@ export async function DELETE(request: NextRequest) {
       }
     }
 
-    // 软删除：标记为 revoked + 解绑号池账号
-    await db.$transaction(async (tx) => {
-      await tx.aIKey.update({
-        where: { id: keyId },
-        data: { status: 'revoked', copilotAccountId: null },
-      });
-      if (aiKey.copilotAccountId) {
-        await tx.copilotAccount.update({
-          where: { id: aiKey.copilotAccountId },
-          data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
-        });
-      }
+    // 软删除：标记为 revoked
+    await db.aIKey.update({
+      where: { id: keyId },
+      data: { status: 'revoked' },
     });
 
     return NextResponse.json({ success: true });

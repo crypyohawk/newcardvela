@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../../src/lib/auth';
 import { getAvailableTokenUsd } from '../../../../../../src/lib/aiKeyQuota';
+import { getCopilotPoolCapacity } from '../../../../../../src/lib/copilotPool';
 import { deleteNewApiToken, isNewApiRecordNotFoundError, repairAiKeyNewApiTokenId, updateNewApiToken, usdToQuota } from '../../../../../../src/lib/newapi';
 
 async function ensureNewApiTokenId(aiKey: {
@@ -154,7 +155,7 @@ export async function PUT(
 
       const isCopilotPool = aiKey.tier.channelGroup === 'copilot' || aiKey.tier.provider?.type === 'copilot-pool';
 
-      // === 启用号池 Key：自动绑定空闲号池账号 ===
+      // === 启用号池 Key：检查容量 ===
       if (body.status === 'active' && isCopilotPool && aiKey.status === 'disabled') {
         const user = await db.user.findUnique({ where: { id: payload.userId }, select: { aiBalance: true } });
         if (!user || user.aiBalance <= 0) {
@@ -173,102 +174,35 @@ export async function PUT(
           return NextResponse.json({ error: '当前 Key 无可用额度，可能月度限额已耗尽，请充值或调整月限额后再启用' }, { status: 400 });
         }
 
-        // 清理旧版本遗留的禁用 key 绑定，避免账号看似被占用却无法重绑
-        const staleConditions: any[] = [];
-        if (aiKey.copilotAccountId) staleConditions.push({ id: aiKey.copilotAccountId });
-        staleConditions.push({ boundAiKeyId: params.id });
-
-        const staleBoundAccounts = await db.copilotAccount.findMany({
-          where: { OR: staleConditions },
-        });
-        if (staleBoundAccounts.length > 0) {
-          await db.$transaction([
-            db.aIKey.update({
-              where: { id: params.id },
-              data: { copilotAccountId: null },
-            }),
-            ...staleBoundAccounts.map((acc) =>
-              db.copilotAccount.update({
-                where: { id: acc.id },
-                data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
-              })
-            ),
-          ]);
+        // 检查号池总容量
+        const capacity = await getCopilotPoolCapacity();
+        if (!capacity.available) {
+          return NextResponse.json({ error: `号池容量已满（${capacity.activeKeys}/${capacity.maxKeys} 个 Key），请稍后再试` }, { status: 400 });
         }
 
-        // 查找空闲号池账号（用量最低优先）
-        const idleAccount = await db.copilotAccount.findFirst({
-          where: { status: 'active', boundAiKeyId: null },
-          orderBy: { quotaUsed: 'asc' },
-        });
-        if (!idleAccount) {
-          return NextResponse.json({ error: '号池暂无空闲账号，请稍后再试或联系管理员' }, { status: 400 });
-        }
-
-        // 事务绑定（防并发竞争）
+        // 启用 Key + 同步 new-api token
         try {
-          const txResult = await db.$transaction(async (tx) => {
-            const account = await tx.copilotAccount.findUnique({
-              where: { id: idleAccount.id },
-            });
-            if (!account || account.boundAiKeyId) {
-              throw new Error('POOL_RACE_CONDITION');
-            }
-
-            const updatedKey = await tx.aIKey.update({
-              where: { id: params.id },
-              data: { status: 'active', copilotAccountId: idleAccount.id },
-              include: { tier: { select: { name: true, displayName: true } } },
-            });
-
-            await tx.copilotAccount.update({
-              where: { id: idleAccount.id },
-              data: {
-                status: 'bound',
-                boundAiKeyId: params.id,
-                boundUserId: payload.userId,
-                boundAt: new Date(),
-              },
-            });
-
-            return updatedKey;
+          const freshQuota = usdToQuota(availableUsd);
+          await updateNewApiTokenWithRepair(aiKey, {
+            status: 1,
+            remainQuota: freshQuota,
+            group: aiKey.tier.channelGroup || 'default',
+            expiredTime: -1,
           });
-
-          // 同步启用 new-api token + 刷新配额 + 确保 group 正确
-          try {
-            const freshQuota = usdToQuota(availableUsd);
-            await updateNewApiTokenWithRepair(aiKey, {
-              status: 1,
-              remainQuota: freshQuota,
-              group: aiKey.tier.channelGroup || 'default',
-              expiredTime: -1,
-            });
-          } catch (e: any) {
-            console.error('同步 new-api 启用失败:', e.message);
-            await db.$transaction([
-              db.aIKey.update({
-                where: { id: params.id },
-                data: { status: 'disabled', copilotAccountId: null },
-              }),
-              db.copilotAccount.update({
-                where: { id: idleAccount.id },
-                data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
-              }),
-            ]);
-            return NextResponse.json({
-              error: '同步网关状态失败，请检查 new-api 管理认证配置',
-              details: e.message,
-            }, { status: 502 });
-          }
-
-          console.log(`[pool-rebind] Key ${params.id} 重新绑定号池账号 ${idleAccount.githubId}`);
-          return NextResponse.json({ success: true, key: txResult });
         } catch (e: any) {
-          if (e.message === 'POOL_RACE_CONDITION') {
-            return NextResponse.json({ error: '号池账号已被其他请求抢占，请重试' }, { status: 409 });
-          }
-          throw e;
+          console.error('同步 new-api 启用失败:', e.message);
+          return NextResponse.json({
+            error: '同步网关状态失败，请检查 new-api 管理认证配置',
+            details: e.message,
+          }, { status: 502 });
         }
+
+        const updated = await db.aIKey.update({
+          where: { id: params.id },
+          data: { status: 'active' },
+          include: { tier: { select: { name: true, displayName: true } } },
+        });
+        return NextResponse.json({ success: true, key: updated });
       }
 
       // === 启用非号池 Key：普通余额检查 ===
@@ -326,19 +260,13 @@ export async function PUT(
       }
     }
 
-    // 禁用 Key 时解绑号池账号，合并事务防止数据不一致
-    if (body.status === 'disabled' && aiKey.copilotAccountId) {
-      const [updated] = await db.$transaction([
-        db.aIKey.update({
-          where: { id: params.id },
-          data: { ...updateData, copilotAccountId: null },
-          include: { tier: { select: { name: true, displayName: true } } },
-        }),
-        db.copilotAccount.update({
-          where: { id: aiKey.copilotAccountId },
-          data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
-        }),
-      ]);
+    // 禁用/启用 Key
+    if (body.status === 'disabled' || body.status === 'active') {
+      const updated = await db.aIKey.update({
+        where: { id: params.id },
+        data: updateData,
+        include: { tier: { select: { name: true, displayName: true } } },
+      });
       return NextResponse.json({ success: true, key: updated });
     }
 
@@ -381,18 +309,9 @@ export async function DELETE(
     }
 
     // 软删除：标记为 revoked，保留记录用于审计
-    // 如果有绑定号池账号，解绑释放
-    await db.$transaction(async (tx) => {
-      await tx.aIKey.update({
-        where: { id: params.id },
-        data: { status: 'revoked', copilotAccountId: null },
-      });
-      if (aiKey.copilotAccountId) {
-        await tx.copilotAccount.update({
-          where: { id: aiKey.copilotAccountId },
-          data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
-        });
-      }
+    await db.aIKey.update({
+      where: { id: params.id },
+      data: { status: 'revoked' },
     });
 
     return NextResponse.json({ success: true });

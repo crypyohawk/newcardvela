@@ -1,135 +1,210 @@
-========================================
-  服务器更新命令 - 手动绑定卡片功能
-  2026-04-02
-========================================
+﻿============================================================
+明天工作安排 - 2026年4月4日
+============================================================
 
-# 1. 进入项目目录拉取最新代码
-cd /opt/cardvela
-git pull origin main
+当前状态
+1. 用户侧调用已经成功，说明主调用链路已通：用户 Key -> api.cardvela.com -> new-api -> copilot 渠道 -> copilot-api -> 上游模型。
+2. 当前主要缺口不是调用能力，而是计费与统计链路没有闭环。
+3. 现象如下：
+	- 管理端 Key 管理中，已使用过的 Key 没有显示调用次数、消耗量、费用等记录。
+	- 用户端 API Key 下方的本月费用、累计费用、月限额等统计没有随调用变化。
+	- 企业用量总览中的本月总消费、本月总请求、本月 Tokens、员工 Key 数等统计没有变化。
+	- 虽然调用成功，但前后端都缺少可见的费用记录、消耗量记录、调用统计回显。
 
-# 2. 重新构建前端（因为改了页面组件）
-npx next build
+============================================================
+明天的主要目标
+============================================================
 
-# 3. 重启应用让后端 API 生效
-pm2 restart cardvela --update-env
+目标一：打通基于 new-api 的计费同步链路
+目标二：让用户端看到自己的费用、调用量、Key 级别统计
+目标三：让管理端看到 Key 使用记录、费用、消耗量和企业汇总数据
+目标四：确认“调用成功 -> new-api 用量增加 -> 平台同步扣费 -> 前端统计更新”这条链路完整可验证
 
-# 4. 检查是否启动成功
-pm2 logs cardvela --nostream --lines 20
+============================================================
+问题判断
+============================================================
 
-# 如果 build 报错，先装一下依赖再 build：
-# npm install
-# npx next build
+从当前现象看，最可能的问题不在调用链，而在“同步与展示链”：
 
+1. new-api 已经记录了 token 的 used_quota，但我们没有成功把差值同步回 CardVela 数据库。
+2. /api/cron/sync-usage 可能没有执行、执行失败、环境变量不对，或执行后没有正确写回用户余额与统计字段。
+3. 前端页面展示的数据源可能仍然依赖旧逻辑，例如历史 AIUsageLog、旧消费表、旧统计字段，而不是现在 new-api quota 同步后的字段。
+4. 管理端和用户端可能只是展示了数据库中的静态字段，但这些字段从未被 cron 或接口更新。
+5. 企业统计卡片可能没有真实接后端聚合接口，或者聚合逻辑仍然基于旧表，所以始终显示 0。
 
-========================================
-  new-api 域名排查与修复命令
-  2026-04-02
-========================================
+============================================================
+明天任务拆分
+============================================================
 
-# 当前已确认：
-# - http://127.0.0.1:3001/ 正常
-# - http://127.0.0.1:3001/console 正常
-# - http://127.0.0.1:3001/console/channel 正常
-# - 说明 new-api 本体没问题
-# - 问题大概率在 nginx 的公网域名转发，尤其是 https / 443
+一、先确认 new-api 是否真的记录了调用用量
 
-# 1. 继续确认本机 nginx 对 api.cardvela.com 的 HTTP 转发是否正确
-curl -I -H "Host: api.cardvela.com" http://127.0.0.1/console
-curl -I -H "Host: api.cardvela.com" http://127.0.0.1/console/channel
+检查项：
+1. 在 new-api 后台查看对应 token 的 used_quota、remain_quota 是否变化。
+2. 直接调用 new-api token 接口确认测试 Key 对应的 token 数据是否有增长。
+3. 核对测试时使用的 Key 是否就是平台页面显示的那个 sk Key，避免测的是别的 token。
 
-# 2. 直接检查公网 HTTP / HTTPS
-curl -I http://api.cardvela.com/console
-curl -I https://api.cardvela.com/console
+目标结果：
+如果 new-api 的 token 用量都没变，说明问题还在 new-api 或调用命中层。
+如果 new-api 的 token 用量已变，而平台前后端没变化，说明问题就在同步链和展示链。
 
-# 3. 正确查看 nginx 当前生效配置
-nginx -T | grep -nE "api.cardvela.com|cardvela.com|proxy_pass|server_name|listen 443"
+二、重点排查 /api/cron/sync-usage
 
-# 4. 如果 http 正常但 https 404，就给 api.cardvela.com 单独补 nginx 反代
-cat > /etc/nginx/conf.d/cardvela.conf <<'EOF'
-server {
-  listen 80;
-  server_name cardvela.com www.cardvela.com;
+检查项：
+1. 确认服务器 .env 里的 CRON_SECRET 存在且当前服务已加载。
+2. 手工调用一次 /api/cron/sync-usage，查看返回 JSON。
+3. 查看 cardvela 服务日志，确认 sync-usage 执行时有没有报错。
+4. 确认该接口是否成功读取到 active/enabled 的 AI Key。
+5. 确认接口是否成功读取 new-api token 的 used_quota。
+6. 确认差值计算后是否真的执行了用户余额扣减、Key 统计更新、数据库写入。
+7. 确认接口是否因为 tokenName、group、状态、绑定关系等条件过滤过严，导致没有任何 Key 被同步。
 
-  location / {
-    proxy_pass http://127.0.0.1:3000;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection 'upgrade';
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_cache_bypass $http_upgrade;
-  }
-}
+目标结果：
+必须拿到一次手动同步成功的明确证据，例如：
+checked > 0
+synced > 0
+totalDeducted > 0
+或者至少日志里能看到具体每个 Key 的处理过程。
 
-server {
-  listen 80;
-  server_name api.cardvela.com;
+三、核对数据库里哪些字段在承接“统计结果”
 
-  location / {
-    proxy_pass http://127.0.0.1:3001;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection 'upgrade';
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_cache_bypass $http_upgrade;
-  }
-}
+检查项：
+1. User 表中当前用于显示 AI 费用、累计消费、企业统计的数据字段有哪些。
+2. AI Key 表中当前用于显示本月用量、累计用量、状态、余额、限额的数据字段有哪些。
+3. 是否还有旧的 AIUsageLog 或其他日志表，但当前逻辑已不再写入。
+4. 管理端 Key 管理页面读的是哪些字段。
+5. 用户端 API Key 页面和企业统计页面分别读的是哪些接口、哪些字段。
 
-server {
-  listen 443 ssl http2;
-  server_name cardvela.com www.cardvela.com;
+目标结果：
+明确“后端写哪几个字段，前端读哪几个字段”，把映射关系理清。
 
-  ssl_certificate /etc/letsencrypt/live/cardvela.com/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/cardvela.com/privkey.pem;
+四、修复“同步了但前端没展示”的问题
 
-  location / {
-    proxy_pass http://127.0.0.1:3000;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection 'upgrade';
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_cache_bypass $http_upgrade;
-  }
-}
+检查项：
+1. 用户端页面的数据接口是否拿到了最新字段。
+2. 管理端 Key 管理接口是否返回了用量、费用、累计调用次数等信息。
+3. 企业统计接口是否真的做了聚合，还是写死/默认值。
+4. 页面是否只在初次加载时取一次数据，调用后没有刷新。
+5. 页面显示单位是否与 new-api quota 单位不一致，导致看起来像 0。
 
-server {
-  listen 443 ssl http2;
-  server_name api.cardvela.com;
+目标结果：
+至少做到：
+1. 用户端能看到本月费用变化。
+2. 管理端能看到 Key 用量或消费变化。
+3. 企业统计卡片能看到至少一个非零数据。
 
-  ssl_certificate /etc/letsencrypt/live/cardvela.com/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/cardvela.com/privkey.pem;
+五、补一条完整验收链路
 
-  location / {
-    proxy_pass http://127.0.0.1:3001;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection 'upgrade';
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_cache_bypass $http_upgrade;
-  }
-}
-EOF
+明天修完后必须做完整验收：
+1. 新建或选定一个测试 Key。
+2. 用该 Key 发起一次真实模型调用。
+3. 在 new-api 后台确认 used_quota 增加。
+4. 手工触发一次 /api/cron/sync-usage。
+5. 确认平台数据库中的用户余额/统计字段发生变化。
+6. 刷新用户前端页面，确认本月费用和 Key 数据变化。
+7. 刷新管理端页面，确认 Key 管理和企业统计变化。
 
-# 5. 测试并重载 nginx
-nginx -t
-systemctl reload nginx
+============================================================
+明天优先级排序
+============================================================
 
-# 6. 重新验证
-curl -I http://api.cardvela.com/console
-curl -I https://api.cardvela.com/console
+P0
+1. 找出为什么 /api/cron/sync-usage 没把 new-api 用量同步回平台。
+2. 让数据库里至少出现一条真实的费用/统计变化。
 
-# 7. 如果浏览器仍然不对，再去 Cloudflare 面板确认：
-# - api.cardvela.com 是否解析到 23.106.142.166
-# - 是否开了橙云代理
-# - 如有缓存问题，可先临时切灰云再测试
+P1
+1. 管理端 Key 管理页面显示真实用量、费用、调用结果。
+2. 用户端 API Key 卡片和统计摘要显示真实变化。
+3. 企业统计卡片显示真实汇总数据。
+
+P2
+1. 如果当前没有消费明细表，补一个最轻量的“用量同步记录”或“消费流水”方案。
+2. 增加调试日志，便于之后快速定位某个 Key 为什么没有被同步。
+
+============================================================
+明天建议执行顺序
+============================================================
+
+1. 先查 new-api token 实际 used_quota 是否已增长。
+2. 再手工调用一次 /api/cron/sync-usage 看返回值。
+3. 再看 cardvela 日志和代码，确认同步逻辑到底有没有写库。
+4. 再查前端接口和页面，确认是不是字段没接对。
+5. 最后做一次端到端验收，形成固定排查流程。
+
+============================================================
+明天需要重点查看的代码位置
+============================================================
+
+1. app/api/cron/sync-usage/route.ts
+	核心同步逻辑，优先看是否读取到 token 用量、是否正确计算差值、是否落库。
+
+2. app/api/user/ai-service 相关接口
+	看用户端 API Key 列表、统计信息到底从哪些字段返回。
+
+3. 管理端 AI 管理 / Key 管理相关接口
+	看管理端列表页显示的数据是不是仍来自旧逻辑。
+
+4. src/lib/newapi.ts
+	看获取 token 用量的调用是否稳定，是否有单位换算问题。
+
+5. 前端页面
+	用户端 dashboard / API Key 页面
+	管理端 AI 管理页面
+	企业统计页面
+
+============================================================
+明天的验收标准
+============================================================
+
+满足以下 5 条才算完成：
+
+1. 一次真实模型调用后，new-api token 的 used_quota 明确增长。
+2. 手工触发 sync-usage 后，数据库中对应用户或 Key 的统计字段明确变化。
+3. 用户端页面能看到费用、调用量或 Key 统计变化。
+4. 管理端 Key 管理能看到该 Key 的真实使用结果。
+5. 企业统计卡片出现非零数据，且与测试调用结果方向一致。
+
+============================================================
+明天可能需要补的能力
+============================================================
+
+如果确认当前架构只有“余额扣减”但没有“展示明细”，则明天可能要补以下其一：
+
+方案 A：继续沿用轻量方案
+只维护 User 和 AI Key 上的聚合字段，例如：
+- 本月费用
+- 累计费用
+- 本月 tokens
+- 调用次数
+
+方案 B：补一个轻量消费流水表
+每次 sync-usage 记录：
+- userId
+- aiKeyId
+- tokenName
+- quotaDiff
+- deductedAmount
+- syncedAt
+
+优先建议：先做方案 A，把前后端统计打通；如果明细需求明显，再加方案 B。
+
+============================================================
+手工排查命令
+============================================================
+
+# 1. 看 new-api token 列表与用量
+curl -s "http://127.0.0.1:3001/api/token/" -H "Authorization: Bearer n5VL1gVWWWvfRt3sp8yxvIleKroi"
+
+# 2. 手工触发一次同步
+curl -s "http://127.0.0.1:3000/api/cron/sync-usage?secret=YOUR_SECRET"
+
+# 3. 查看 cardvela 服务日志
+pm2 logs cardvela --lines 100
+
+# 4. 查看 new-api 日志
+curl -s "http://127.0.0.1:3001/api/log/?p=0&per_page=20" -H "Authorization: Bearer n5VL1gVWWWvfRt3sp8yxvIleKroi"
+
+============================================================
+一句话总结
+============================================================
+
+明天的核心不是“继续打调用”，而是把“new-api 用量 -> 平台扣费 -> 数据库存储 -> 用户端/管理端统计展示”这条链路彻底打通。

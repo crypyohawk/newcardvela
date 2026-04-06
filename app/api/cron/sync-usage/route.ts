@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAvailableTokenUsd, isAiKeyQuotaExhausted } from '../../../../src/lib/aiKeyQuota';
-import { findNewApiTokenIdByName, getAllNewApiLogs, getNewApiTokenUsage, isNewApiRecordNotFoundError, repairAiKeyNewApiTokenId, updateNewApiToken, quotaToUSD, usdToQuota } from '../../../../src/lib/newapi';
+import { findNewApiTokenIdByName, getAllNewApiLogs, getNewApiChannels, getNewApiTokenUsage, isNewApiRecordNotFoundError, repairAiKeyNewApiTokenId, updateNewApiToken, quotaToUSD, usdToQuota } from '../../../../src/lib/newapi';
 import { db } from '../../../../src/lib/db';
+import { isCopilotPoolTier } from '../../../../src/lib/copilotPool';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -263,17 +264,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '未授权' }, { status: 401 });
     }
 
-    console.log('[cron] 开始同步 Key 用量与号池解绑检查...');
+    console.log('[cron] 开始同步 Key 用量与号池状态检查...');
     const syncResult = await syncKeyUsages();
     const statsSyncResult = await syncUsageStatsIfDue();
-    const autoUnbindResult = await autoUnbindIdleAccounts();
+    const autoDisableResult = await autoDisableIdleCopilotKeys();
+    const healthResult = await checkCopilotChannelHealth();
     console.log(`[cron] 完成: checked=${syncResult.checked}, synced=${syncResult.synced}, deducted=$${syncResult.totalDeducted}`);
 
     return NextResponse.json({
       success: true,
       ...syncResult,
       statsSync: statsSyncResult,
-      autoUnbind: autoUnbindResult,
+      autoDisable: autoDisableResult,
+      channelHealth: healthResult,
     });
   } catch (error: any) {
     console.error('[cron] 失败:', error);
@@ -630,25 +633,11 @@ async function syncKeyUsages() {
           select: {
             id: true,
             newApiTokenId: true,
-            copilotAccountId: true,
             tier: { select: { channelGroup: true } },
           },
         });
         for (const activeKey of activeKeys) {
-          if (activeKey.copilotAccountId) {
-            await db.$transaction([
-              db.aIKey.update({
-                where: { id: activeKey.id },
-                data: { status: 'disabled', copilotAccountId: null },
-              }),
-              db.copilotAccount.update({
-                where: { id: activeKey.copilotAccountId },
-                data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
-              }),
-            ]);
-          } else {
-            await db.aIKey.update({ where: { id: activeKey.id }, data: { status: 'disabled' } });
-          }
+          await db.aIKey.update({ where: { id: activeKey.id }, data: { status: 'disabled' } });
           if (activeKey.newApiTokenId) {
             try {
               await updateNewApiTokenWithRepair(activeKey, {
@@ -661,20 +650,7 @@ async function syncKeyUsages() {
       }
 
       if (txResult.monthlyLimit && txResult.monthUsed >= txResult.monthlyLimit && key.status === 'active') {
-        if (key.copilotAccountId) {
-          await db.$transaction([
-            db.aIKey.update({
-              where: { id: key.id },
-              data: { status: 'disabled', copilotAccountId: null },
-            }),
-            db.copilotAccount.update({
-              where: { id: key.copilotAccountId },
-              data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
-            }),
-          ]);
-        } else {
-          await db.aIKey.update({ where: { id: key.id }, data: { status: 'disabled' } });
-        }
+        await db.aIKey.update({ where: { id: key.id }, data: { status: 'disabled' } });
         if (key.newApiTokenId) {
           try {
             await updateNewApiToken(key.newApiTokenId, {
@@ -708,95 +684,124 @@ async function syncKeyUsages() {
 }
 
 /**
- * 自动解绑空闲超过 2 小时的号池账号
- * 
- * 共享池租约模型：释放号池账号绑定关系前，先禁用对应的 new-api token。
- * 这样可以避免 Key 在本地已释放租约时，仍通过 group 路由继续占用共享池账号。
- * 
- * - 条件1：绑定时间超过 2 小时
- * - 条件2：绑定的 Key 最后使用时间超过 2 小时（或从未使用）
+ * 自动禁用空闲超过 2 小时的号池 Key
+ *
+ * 共享池容量模型：不再 1:1 绑定账号，只控制活跃 Key 总数。
+ * 空闲 Key 禁用后释放容量给其他用户。用户需要时手动重新启用。
  */
-async function autoUnbindIdleAccounts() {
+async function autoDisableIdleCopilotKeys() {
   const IDLE_HOURS = 2;
   const cutoff = new Date(Date.now() - IDLE_HOURS * 60 * 60 * 1000);
 
   try {
-    // 查找所有已绑定且绑定超过 2h 的号池账号
-    const boundAccounts = await db.copilotAccount.findMany({
+    // 查找所有活跃的号池 Key，且最后使用超过 2h（或从未使用且创建超过 2h）
+    const idleKeys = await db.aIKey.findMany({
       where: {
-        boundAiKeyId: { not: null },
-        boundAt: { lt: cutoff },
+        status: 'active',
+        tier: {
+          OR: [
+            { channelGroup: 'copilot' },
+            { provider: { type: 'copilot-pool' } },
+          ],
+        },
+        OR: [
+          { lastUsedAt: null, createdAt: { lt: cutoff } },
+          { lastUsedAt: { lt: cutoff } },
+        ],
       },
-    });
-
-    if (boundAccounts.length === 0) return { checked: 0, unbound: 0 };
-
-    const keyIds = boundAccounts.map(a => a.boundAiKeyId!);
-    const keys = await db.aIKey.findMany({
-      where: { id: { in: keyIds } },
       select: {
         id: true,
-        lastUsedAt: true,
-        status: true,
         newApiTokenId: true,
         newApiTokenName: true,
         tier: { select: { channelGroup: true } },
       },
     });
-    const keyMap = Object.fromEntries(keys.map(k => [k.id, k]));
 
-    let unboundCount = 0;
-    for (const account of boundAccounts) {
-      const key = keyMap[account.boundAiKeyId!];
-      // 解绑条件：Key 不存在/已吊销，或最后使用时间超过阈值
-      const keyIdle = !key || key.status === 'revoked' ||
-        !key.lastUsedAt || key.lastUsedAt < cutoff;
+    if (idleKeys.length === 0) return { checked: 0, disabled: 0 };
 
-      if (keyIdle) {
-        if (key?.newApiTokenId) {
-          try {
-            await updateNewApiToken(key.newApiTokenId, {
-              status: 2,
-              name: key.newApiTokenName ?? undefined,
-              group: key.tier?.channelGroup || 'default',
-            });
-          } catch (error: any) {
-            console.warn(`[auto-unbind] 禁用 key token 失败，跳过释放: key=${key.id}, token=${key.newApiTokenId}, error=${error.message}`);
-            continue;
-          }
+    let disabledCount = 0;
+    for (const key of idleKeys) {
+      // 先禁用 new-api token
+      if (key.newApiTokenId) {
+        try {
+          await updateNewApiToken(key.newApiTokenId, {
+            status: 2,
+            name: key.newApiTokenName ?? undefined,
+            group: key.tier?.channelGroup || 'default',
+          });
+        } catch (error: any) {
+          console.warn(`[auto-disable] 禁用 token 失败，跳过: key=${key.id}, error=${error.message}`);
+          continue;
         }
+      }
 
-        // 释放号池账号绑定，同时禁用 Key，防止 GET /keys 自动重新获取租约
-        await db.$transaction([
-          db.copilotAccount.update({
-            where: { id: account.id },
-            data: {
-              status: 'active',
-              boundAiKeyId: null,
-              boundUserId: null,
-              boundAt: null,
-            },
-          }),
-          ...(key && key.status !== 'revoked' ? [
-            db.aIKey.update({
-              where: { id: account.boundAiKeyId! },
-              data: { copilotAccountId: null, status: 'disabled' },
-            }),
-          ] : []),
-        ]);
+      await db.aIKey.update({
+        where: { id: key.id },
+        data: { status: 'disabled' },
+      });
 
-        console.log(`[auto-unbind] 释放号池: account=${account.githubId}, key=${account.boundAiKeyId} (token+key 已禁用)`);
-        unboundCount++;
+      console.log(`[auto-disable] 号池 Key ${key.id} 空闲超过 ${IDLE_HOURS}h，已自动禁用`);
+      disabledCount++;
+    }
+
+    if (disabledCount > 0) {
+      console.log(`[auto-disable] 共禁用 ${disabledCount} 个空闲号池 Key`);
+    }
+
+    return { checked: idleKeys.length, disabled: disabledCount };
+  } catch (error: any) {
+    console.error('[auto-disable] 自动禁用失败:', error);
+    return { error: error.message };
+  }
+}
+
+/**
+ * 渠道健康检查：检测 copilot 渠道错误率，自动标记异常账号
+ *
+ * 通过 new-api 渠道列表的 status/response_time 判断渠道是否正常。
+ * 异常渠道对应的 CopilotAccount 标记为 'error'，管理员可在后台看到。
+ */
+async function checkCopilotChannelHealth() {
+  try {
+    const channels = await getNewApiChannels();
+    const copilotAccounts = await db.copilotAccount.findMany({
+      where: { newApiChannelId: { not: null } },
+      select: { id: true, githubId: true, newApiChannelId: true, status: true },
+    });
+
+    if (copilotAccounts.length === 0) return { checked: 0, errors: 0, recovered: 0 };
+
+    const channelMap = new Map(channels.map(ch => [ch.id, ch]));
+    let errorCount = 0;
+    let recoveredCount = 0;
+
+    for (const account of copilotAccounts) {
+      const channel = channelMap.get(account.newApiChannelId!);
+
+      // 渠道不存在或 status != 1（被 new-api 自动禁用/手动禁用）
+      const isChannelDown = !channel || channel.status !== 1;
+
+      if (isChannelDown && account.status !== 'error' && account.status !== 'inactive') {
+        await db.copilotAccount.update({
+          where: { id: account.id },
+          data: { status: 'error' },
+        });
+        console.warn(`[health] 号池账号 ${account.githubId} 渠道异常 (channel=${account.newApiChannelId}, status=${channel?.status ?? 'missing'})，标记为 error`);
+        errorCount++;
+      } else if (!isChannelDown && account.status === 'error') {
+        // 渠道恢复了，自动恢复账号状态
+        await db.copilotAccount.update({
+          where: { id: account.id },
+          data: { status: 'active' },
+        });
+        console.log(`[health] 号池账号 ${account.githubId} 渠道恢复正常，状态恢复为 active`);
+        recoveredCount++;
       }
     }
 
-    if (unboundCount > 0) {
-      console.log(`[auto-unbind] 共释放 ${unboundCount} 个空闲号池账号`);
-    }
-
-    return { checked: boundAccounts.length, unbound: unboundCount };
+    return { checked: copilotAccounts.length, errors: errorCount, recovered: recoveredCount };
   } catch (error: any) {
-    console.error('[auto-unbind] 自动解绑失败:', error);
+    console.error('[health] 渠道健康检查失败:', error);
     return { error: error.message };
   }
 }

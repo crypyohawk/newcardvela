@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import { db } from '../../../../../src/lib/db';
 import { verifyToken, getTokenFromRequest } from '../../../../../src/lib/auth';
 import { getAvailableTokenUsd, isAiKeyQuotaExhausted } from '../../../../../src/lib/aiKeyQuota';
-import { ensureCopilotPoolKeyLease } from '../../../../../src/lib/copilotPool';
+import { getCopilotPoolCapacity, isCopilotPoolTier } from '../../../../../src/lib/copilotPool';
 import { createNewApiToken, deleteNewApiToken, findNewApiTokenIdByName, getNewApiTokenPlaintextKeyByName, getNewApiTokenUsage, isNewApiRecordNotFoundError, mapWithConcurrencyLimit, quotaToUSD, repairAiKeyNewApiTokenId, updateNewApiToken, usdToQuota } from '../../../../../src/lib/newapi';
 
 /** 生成混淆名称，防止上游识别客户身份 */
@@ -125,7 +125,6 @@ async function syncCurrentUserKeyUsage(userId: string) {
       lastRemoteUsedUsd: true,
       monthlyLimit: true,
       lastSyncAt: true,
-      copilotAccountId: true,
       tier: { select: { channelGroup: true } },
     },
   });
@@ -244,18 +243,7 @@ async function syncCurrentUserKeyUsage(userId: string) {
         };
       });
 
-      // 回写绑定的号池账号用量
-      if (key.copilotAccountId && !txResult.skipped && txResult.delta > 0) {
-        try {
-          await db.copilotAccount.update({
-            where: { id: key.copilotAccountId },
-            data: {
-              quotaUsed: { increment: txResult.delta },
-              lastUsed: new Date(),
-            },
-          });
-        } catch (_) {}
-      }
+      // 号池账号用量现在由 cron syncUsageStatsIfDue 按实际渠道归因
 
       const user = await db.user.findUnique({ where: { id: userId }, select: { aiBalance: true } });
       if (user && key.newApiTokenId) {
@@ -272,7 +260,6 @@ async function syncCurrentUserKeyUsage(userId: string) {
           monthlyLimit: txResult.monthlyLimit,
         });
         const newQuota = usdToQuota(availableUsd);
-        // 始终带上 status，避免并行更新把已禁用的 token 改回启用
         const tokenStatus = (keyIsActive && newQuota > 0) ? 1 : 2;
         try {
           await updateNewApiTokenWithRepair(key, {
@@ -294,25 +281,11 @@ async function syncCurrentUserKeyUsage(userId: string) {
             select: {
               id: true,
               newApiTokenId: true,
-              copilotAccountId: true,
               tier: { select: { channelGroup: true } },
             },
           });
           for (const activeKey of activeKeys) {
-            if (activeKey.copilotAccountId) {
-              await db.$transaction([
-                db.aIKey.update({
-                  where: { id: activeKey.id },
-                  data: { status: 'disabled', copilotAccountId: null },
-                }),
-                db.copilotAccount.update({
-                  where: { id: activeKey.copilotAccountId },
-                  data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
-                }),
-              ]);
-            } else {
-              await db.aIKey.update({ where: { id: activeKey.id }, data: { status: 'disabled' } });
-            }
+            await db.aIKey.update({ where: { id: activeKey.id }, data: { status: 'disabled' } });
             if (activeKey.newApiTokenId) {
               try {
                 await updateNewApiTokenWithRepair(activeKey, {
@@ -326,20 +299,7 @@ async function syncCurrentUserKeyUsage(userId: string) {
       }
 
       if (!txResult.skipped && txResult.monthlyLimit && txResult.monthUsed >= txResult.monthlyLimit && key.status === 'active') {
-        if (key.copilotAccountId) {
-          await db.$transaction([
-            db.aIKey.update({
-              where: { id: key.id },
-              data: { status: 'disabled', copilotAccountId: null },
-            }),
-            db.copilotAccount.update({
-              where: { id: key.copilotAccountId },
-              data: { status: 'active', boundAiKeyId: null, boundUserId: null, boundAt: null },
-            }),
-          ]);
-        } else {
-          await db.aIKey.update({ where: { id: key.id }, data: { status: 'disabled' } });
-        }
+        await db.aIKey.update({ where: { id: key.id }, data: { status: 'disabled' } });
         if (key.newApiTokenId) {
           try {
             await updateNewApiTokenWithRepair(key, {
@@ -380,37 +340,6 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { createdAt: 'desc' },
     });
-
-    const releasedPoolKeys = keys.filter((key) => {
-      const isCopilotPool = key.tier?.channelGroup === 'copilot' || key.tier?.provider?.type === 'copilot-pool';
-      return key.status === 'active' && isCopilotPool && !key.copilotAccountId;
-    });
-
-    if (releasedPoolKeys.length > 0) {
-      await Promise.all(releasedPoolKeys.map(async (key) => {
-        try {
-          await ensureCopilotPoolKeyLease(key.id);
-        } catch (error: any) {
-          console.warn(`[pool-lease] ensure failed for key ${key.id}:`, error.message);
-        }
-      }));
-
-      keys = await db.aIKey.findMany({
-        where: { userId: payload.userId, status: { not: 'revoked' } },
-        include: {
-          tier: {
-            select: {
-              name: true,
-              displayName: true,
-              modelGroup: true,
-              channelGroup: true,
-              provider: { select: { type: true, displayName: true, baseUrl: true } },
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-    }
 
     const repairedKeys = await Promise.all(keys.map(async (key) => {
       if (!key.apiKey.includes('*') || !key.newApiTokenName) {
@@ -487,7 +416,6 @@ export async function POST(request: NextRequest) {
     }
 
     // === 号池套餐额外校验 ===
-    let boundCopilotAccount: any = null;
     if (isCopilotPool) {
       // 号池套餐必须是企业用户
       const userRole = user.role?.toLowerCase();
@@ -510,22 +438,23 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
 
-      // 检查号池 Key 数量上限
-      const poolKeyCount = await db.aIKey.count({
-        where: { userId: payload.userId, copilotAccountId: { not: null }, status: 'active' },
+      // 检查用户级 Key 数量上限（按 AI 等级）
+      const userPoolKeyCount = await db.aIKey.count({
+        where: {
+          userId: payload.userId,
+          status: 'active',
+          tier: { OR: [{ channelGroup: 'copilot' }, { provider: { type: 'copilot-pool' } }] },
+        },
       });
-      if (poolKeyCount >= tierConfig.maxKeys) {
+      if (userPoolKeyCount >= tierConfig.maxKeys) {
         return NextResponse.json({
-          error: `当前 AI 等级(${user.aiTier || 'basic'})最多创建 ${tierConfig.maxKeys} 个号池 Key，已有 ${poolKeyCount} 个。升级等级可创建更多`,
+          error: `当前 AI 等级(${user.aiTier || 'basic'})最多创建 ${tierConfig.maxKeys} 个号池 Key，已有 ${userPoolKeyCount} 个。升级等级可创建更多`,
         }, { status: 400 });
       }
 
-      // 查找空闲号池账号
-      boundCopilotAccount = await db.copilotAccount.findFirst({
-        where: { status: 'active', boundAiKeyId: null },
-        orderBy: { quotaUsed: 'asc' },
-      });
-      if (!boundCopilotAccount) {
+      // 检查号池总容量（所有用户共享）
+      const capacity = await getCopilotPoolCapacity();
+      if (!capacity.available) {
         // 自动提交扩容申请
         const pendingRequest = await db.poolExpansionRequest.findFirst({
           where: { userId: payload.userId, status: 'pending' },
@@ -535,14 +464,14 @@ export async function POST(request: NextRequest) {
             data: {
               userId: payload.userId,
               currentTier: user.aiTier || 'basic',
-              keyCount: poolKeyCount,
+              keyCount: userPoolKeyCount,
               maxKeys: tierConfig.maxKeys,
-              message: '创建 Key 时号池无空闲账号，自动提交',
+              message: `号池容量已满 (${capacity.activeKeys}/${capacity.maxKeys})，自动提交扩容`,
             },
           });
         }
         return NextResponse.json({
-          error: '号池暂无空闲账号，已为您提交扩容申请，请等待管理员处理',
+          error: `号池容量已满（${capacity.activeKeys}/${capacity.maxKeys} 个 Key），已为您提交扩容申请`,
         }, { status: 400 });
       }
     }
@@ -613,7 +542,7 @@ export async function POST(request: NextRequest) {
       }, { status: 502 });
     }
 
-    // 存入数据库（号池套餐需要在事务内绑定账号）
+    // 存入数据库
     const createData: any = {
       userId: payload.userId,
       tierId,
@@ -624,53 +553,18 @@ export async function POST(request: NextRequest) {
       newApiTokenName: tokenName,
       status: 'active',
       monthlyLimit: monthlyLimit || null,
-      copilotAccountId: boundCopilotAccount?.id || null,
     };
 
     let aiKey: any;
     try {
-      if (boundCopilotAccount) {
-        // 事务：创建 Key + 绑定号池账号（防并发）
-        const txResult = await db.$transaction(async (tx) => {
-          // 二次检查账号仍然空闲（防并发竞争）
-          const account = await tx.copilotAccount.findUnique({
-            where: { id: boundCopilotAccount.id },
-          });
-          if (!account || account.boundAiKeyId) {
-            throw new Error('POOL_RACE_CONDITION');
-          }
-
-          const key = await tx.aIKey.create({
-            data: createData,
-            include: { tier: { select: { name: true, displayName: true } } },
-          });
-
-          await tx.copilotAccount.update({
-            where: { id: boundCopilotAccount.id },
-            data: {
-              status: 'bound',
-              boundAiKeyId: key.id,
-              boundUserId: payload.userId,
-              boundAt: new Date(),
-            },
-          });
-
-          return key;
-        });
-        aiKey = txResult;
-      } else {
-        aiKey = await db.aIKey.create({
-          data: createData,
-          include: { tier: { select: { name: true, displayName: true } } },
-        });
-      }
+      aiKey = await db.aIKey.create({
+        data: createData,
+        include: { tier: { select: { name: true, displayName: true } } },
+      });
     } catch (dbError: any) {
       // DB 失败时清理已创建的 new-api token，防止孤立
       if (newApiTokenId) {
         try { await deleteNewApiToken(newApiTokenId); } catch (_) {}
-      }
-      if (dbError.message === 'POOL_RACE_CONDITION') {
-        return NextResponse.json({ error: '号池账号已被其他请求抢占，请重试' }, { status: 409 });
       }
       throw dbError;
     }
