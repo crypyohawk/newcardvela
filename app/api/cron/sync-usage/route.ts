@@ -766,7 +766,7 @@ async function autoUnbindIdleAccounts() {
           }
         }
 
-        // 释放号池账号绑定，Key 本身保持 active，等待后续重新获取租约
+        // 释放号池账号绑定，同时禁用 Key，防止 GET /keys 自动重新获取租约
         await db.$transaction([
           db.copilotAccount.update({
             where: { id: account.id },
@@ -777,16 +777,15 @@ async function autoUnbindIdleAccounts() {
               boundAt: null,
             },
           }),
-          // 清除 Key 上的 copilotAccountId（不改 status，不动 token）
           ...(key && key.status !== 'revoked' ? [
             db.aIKey.update({
               where: { id: account.boundAiKeyId! },
-              data: { copilotAccountId: null },
+              data: { copilotAccountId: null, status: 'disabled' },
             }),
           ] : []),
         ]);
 
-        console.log(`[auto-unbind] 释放号池: account=${account.githubId}, key=${account.boundAiKeyId} (token 已禁用，等待重新获取租约)`);
+        console.log(`[auto-unbind] 释放号池: account=${account.githubId}, key=${account.boundAiKeyId} (token+key 已禁用)`);
         unboundCount++;
       }
     }
