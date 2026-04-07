@@ -264,6 +264,21 @@ function fixMaxTokens(body) {
   return false;
 }
 
+// ─── reasoning_effort + tools 不兼容修复 (gpt-5.x) ───
+// GitHub Copilot 上游对 gpt-5.x 不允许同时发 tools + reasoning_effort
+function fixReasoningWithTools(body) {
+  if (!body || !body.model) return false;
+  if (!body.reasoning_effort) return false;
+  if (!body.tools || !Array.isArray(body.tools) || body.tools.length === 0) return false;
+
+  const model = body.model.toLowerCase();
+  if (model.includes('gpt-5')) {
+    delete body.reasoning_effort;
+    return true;
+  }
+  return false;
+}
+
 // ─── HTTP 代理 ───
 
 function proxyRequest(clientReq, clientRes, bodyOverride) {
@@ -350,8 +365,10 @@ const server = http.createServer(async (req, res) => {
     const needsMaxTokensFix = !needsResponsesConversion && fixMaxTokens(body);
     // 检测是否需要 content type 规范化 (messages 中的 input_text 等)
     const needsContentTypeNorm = !needsResponsesConversion && normalizeMessagesContentTypes(body);
+    // 检测是否需要移除 reasoning_effort (tools + reasoning_effort 不兼容)
+    const needsReasoningFix = !needsResponsesConversion && fixReasoningWithTools(body);
 
-    if (!needsResponsesConversion && !needsMaxTokensFix && !needsContentTypeNorm) {
+    if (!needsResponsesConversion && !needsMaxTokensFix && !needsContentTypeNorm && !needsReasoningFix) {
       // 标准 Chat Completions 请求且无需任何修复 → 原样透传
       return proxyRequest(req, res, rawBody);
     }
@@ -362,10 +379,18 @@ const server = http.createServer(async (req, res) => {
     if (needsResponsesConversion) {
       // Responses API 格式 → 转换
       const converted = convertResponsesApiBody(body);
-      // 转换后也检查 max_tokens
+      // 转换后也检查 max_tokens 和 reasoning_effort+tools 不兼容
       fixMaxTokens(converted);
+      const removedReasoning = fixReasoningWithTools(converted);
+      if (removedReasoning) {
+        console.log(`[compat] removed reasoning_effort (tools+reasoning conflict) | model=${body.model}`);
+      }
       finalBody = JSON.stringify(converted);
       console.log(`[compat] Responses→Chat | model=${body.model || 'unknown'} | UA=${ua.substring(0, 40)} | input_items=${Array.isArray(body.input) ? body.input.length : 1} → messages=${converted.messages ? converted.messages.length : 0}`);
+    } else if (needsReasoningFix) {
+      // reasoning_effort + tools 不兼容修复
+      finalBody = JSON.stringify(body);
+      console.log(`[compat] removed reasoning_effort (tools conflict) | model=${body.model} | UA=${ua.substring(0, 40)}`);
     } else if (needsContentTypeNorm) {
       // content type 规范化
       finalBody = JSON.stringify(body);
