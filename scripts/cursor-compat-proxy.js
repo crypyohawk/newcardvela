@@ -24,6 +24,35 @@ const LISTEN_PORT = parseInt(process.env.COMPAT_PORT || '3002', 10);
 
 // ─── Responses API → Chat Completions 转换 ───
 
+// 规范化 content parts 的 type 字段
+// Responses API 用 input_text/output_text, Chat Completions 只接受 text/image_url
+function normalizeContentParts(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return content;
+
+  return content.map(part => {
+    if (!part || typeof part !== 'object') return part;
+    // input_text / output_text → text
+    if (part.type === 'input_text' || part.type === 'output_text') {
+      return { type: 'text', text: part.text };
+    }
+    // input_image → image_url
+    if (part.type === 'input_image') {
+      return { type: 'image_url', image_url: { url: part.image_url || part.url } };
+    }
+    // input_audio → 暂不支持, 转为文本描述
+    if (part.type === 'input_audio') {
+      return { type: 'text', text: '[audio content]' };
+    }
+    // refusal → text
+    if (part.type === 'refusal') {
+      return { type: 'text', text: part.refusal || '' };
+    }
+    // 已经是 text/image_url → 原样
+    return part;
+  });
+}
+
 function convertInputToMessages(input, instructions) {
   const messages = [];
 
@@ -46,33 +75,14 @@ function convertInputToMessages(input, instructions) {
 
     // EasyInputMessage 格式: {role, content}
     if (item.role && item.content !== undefined && !item.type) {
-      // content 可能是字符串或数组(多模态)
-      messages.push({ role: item.role, content: item.content });
+      // content 可能是字符串或数组(多模态) — 需要规范化 type
+      messages.push({ role: item.role, content: normalizeContentParts(item.content) });
       continue;
     }
 
     // Responses API item 格式: {type: "message", role, content: [...]}
     if (item.type === 'message' && item.role) {
-      const contentParts = item.content;
-      if (typeof contentParts === 'string') {
-        messages.push({ role: item.role, content: contentParts });
-      } else if (Array.isArray(contentParts)) {
-        // 把 content 数组转为 Chat Completions 兼容格式
-        const converted = contentParts.map(part => {
-          if (part.type === 'output_text' || part.type === 'input_text') {
-            return { type: 'text', text: part.text };
-          }
-          if (part.type === 'input_image') {
-            return {
-              type: 'image_url',
-              image_url: { url: part.image_url || part.url },
-            };
-          }
-          // 其他类型原样传递
-          return part;
-        });
-        messages.push({ role: item.role, content: converted });
-      }
+      messages.push({ role: item.role, content: normalizeContentParts(item.content) });
       continue;
     }
 
@@ -214,6 +224,28 @@ function convertResponsesApiBody(body) {
   return converted;
 }
 
+// ─── 标准 messages 请求的 content type 规范化 ───
+// 有些客户端即使发 messages 格式也带非标准 content type (如 input_text)
+function normalizeMessagesContentTypes(body) {
+  if (!body.messages || !Array.isArray(body.messages)) return false;
+  let changed = false;
+  for (const msg of body.messages) {
+    if (msg.content && Array.isArray(msg.content)) {
+      const normalized = normalizeContentParts(msg.content);
+      if (normalized !== msg.content) {
+        // 检查是否真的变了
+        const origJson = JSON.stringify(msg.content);
+        const newJson = JSON.stringify(normalized);
+        if (origJson !== newJson) {
+          msg.content = normalized;
+          changed = true;
+        }
+      }
+    }
+  }
+  return changed;
+}
+
 // ─── max_tokens → max_completion_tokens 修复 (GPT-5.x 系列) ───
 
 // 匹配需要 max_completion_tokens 的模型
@@ -316,9 +348,11 @@ const server = http.createServer(async (req, res) => {
     const needsResponsesConversion = body.input !== undefined && body.messages === undefined;
     // 检测是否需要 max_tokens → max_completion_tokens 修复
     const needsMaxTokensFix = !needsResponsesConversion && fixMaxTokens(body);
+    // 检测是否需要 content type 规范化 (messages 中的 input_text 等)
+    const needsContentTypeNorm = !needsResponsesConversion && normalizeMessagesContentTypes(body);
 
-    if (!needsResponsesConversion && !needsMaxTokensFix) {
-      // 标准 Chat Completions 请求且无需修复 → 原样透传
+    if (!needsResponsesConversion && !needsMaxTokensFix && !needsContentTypeNorm) {
+      // 标准 Chat Completions 请求且无需任何修复 → 原样透传
       return proxyRequest(req, res, rawBody);
     }
 
@@ -332,6 +366,10 @@ const server = http.createServer(async (req, res) => {
       fixMaxTokens(converted);
       finalBody = JSON.stringify(converted);
       console.log(`[compat] Responses→Chat | model=${body.model || 'unknown'} | UA=${ua.substring(0, 40)} | input_items=${Array.isArray(body.input) ? body.input.length : 1} → messages=${converted.messages ? converted.messages.length : 0}`);
+    } else if (needsContentTypeNorm) {
+      // content type 规范化
+      finalBody = JSON.stringify(body);
+      console.log(`[compat] content-type normalized | model=${body.model} | UA=${ua.substring(0, 40)}`);
     } else {
       // 仅 max_tokens 修复
       finalBody = JSON.stringify(body);
