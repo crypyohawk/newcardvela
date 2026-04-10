@@ -488,13 +488,21 @@ async function syncKeyUsages() {
 
         if (delta <= 0) {
           if (baselineReason) {
-            await tx.aIKey.update({
-              where: { id: currentKey.id },
+            const updated = await tx.aIKey.updateMany({
+              where: {
+                id: currentKey.id,
+                totalUsed: currentKey.totalUsed,
+                lastRemoteUsedUsd: currentKey.lastRemoteUsedUsd,
+              },
               data: {
                 lastRemoteUsedUsd: usedUSD,
                 lastSyncAt: now,
               },
             });
+
+            if (updated.count === 0) {
+              return { delta: 0, skipped: true, reason: 'race' };
+            }
           }
 
           return { delta: 0, skipped: true, reason: baselineReason || 'no-new-usage' };
@@ -512,6 +520,8 @@ async function syncKeyUsages() {
         const updated = await tx.aIKey.updateMany({
           where: {
             id: currentKey.id,
+            totalUsed: currentKey.totalUsed,
+            lastRemoteUsedUsd: currentKey.lastRemoteUsedUsd,
           },
           data: {
             totalUsed: { increment: delta },

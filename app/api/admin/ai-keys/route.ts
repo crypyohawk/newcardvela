@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       db.aIKey.findMany({
         where,
         include: {
-          user: { select: { id: true, username: true, email: true, balance: true, aiBalance: true, role: true } },
+          user: { select: { id: true, username: true, email: true, balance: true, aiBalance: true, role: true, enterpriseApps: { where: { status: 'approved' }, select: { companyName: true }, orderBy: { reviewedAt: 'desc' }, take: 1 } } },
           tier: { select: { name: true, displayName: true, modelGroup: true, provider: { select: { type: true, displayName: true } } } },
         },
         orderBy: { createdAt: 'desc' },

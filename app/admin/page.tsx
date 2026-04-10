@@ -268,6 +268,7 @@ export default function AdminPage() {
         userId,
         username: key.user?.username || '未命名用户',
         email: key.user?.email || '-',
+        companyName: key.user?.enterpriseApps?.[0]?.companyName || '',
         balance: Number(key.user?.balance || 0),
         aiBalance: Number(key.user?.aiBalance || 0),
         role: key.user?.role || 'user',
@@ -2822,6 +2823,9 @@ export default function AdminPage() {
                             <div className="min-w-0">
                               <div className="font-semibold truncate">{account.username}</div>
                               <div className="text-sm text-gray-400 truncate mt-1">{account.email}</div>
+                              {account.companyName && (
+                                <div className="text-xs text-amber-400 truncate mt-1">🏢 {account.companyName}</div>
+                              )}
                             </div>
                             <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${roleMeta.className}`}>
                               {roleMeta.label}
