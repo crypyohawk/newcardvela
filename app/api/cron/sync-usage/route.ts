@@ -3,6 +3,7 @@ import { getAvailableTokenUsd, isAiKeyQuotaExhausted } from '../../../../src/lib
 import { findNewApiTokenIdByName, getAllNewApiLogs, getNewApiChannels, getNewApiTokenUsage, isNewApiRecordNotFoundError, repairAiKeyNewApiTokenId, updateNewApiToken, quotaToUSD, usdToQuota } from '../../../../src/lib/newapi';
 import { db } from '../../../../src/lib/db';
 import { isCopilotPoolTier } from '../../../../src/lib/copilotPool';
+import { sendAdminAlert } from '../../../../src/lib/email';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -269,6 +270,7 @@ export async function GET(request: NextRequest) {
     const statsSyncResult = await syncUsageStatsIfDue();
     const autoDisableResult = await autoDisableIdleCopilotKeys();
     const healthResult = await checkCopilotChannelHealth();
+    const premiumAlertResult = await checkPremiumModelHealth();
     console.log(`[cron] 完成: checked=${syncResult.checked}, synced=${syncResult.synced}, deducted=$${syncResult.totalDeducted}`);
 
     return NextResponse.json({
@@ -277,6 +279,7 @@ export async function GET(request: NextRequest) {
       statsSync: statsSyncResult,
       autoDisable: autoDisableResult,
       channelHealth: healthResult,
+      premiumAlert: premiumAlertResult,
     });
   } catch (error: any) {
     console.error('[cron] 失败:', error);
@@ -811,6 +814,132 @@ async function checkCopilotChannelHealth() {
     return { checked: copilotAccounts.length, errors: errorCount, recovered: recoveredCount };
   } catch (error: any) {
     console.error('[health] 渠道健康检查失败:', error);
+    return { error: error.message };
+  }
+}
+
+// 上次发送报警的时间戳 key
+const PREMIUM_ALERT_LAST_SENT_KEY = 'premium_alert_last_sent_at';
+// 报警冷却时间：2小时内不重复发送
+const PREMIUM_ALERT_COOLDOWN_SECONDS = 2 * 60 * 60;
+
+// 高级模型列表：这些模型失败时需要报警
+const PREMIUM_MODELS = ['claude-opus-4.6', 'claude-sonnet-4.6', 'gpt-5.4'];
+// 测试用的最小请求体
+const TEST_PAYLOAD = JSON.stringify({
+  model: '', // will be replaced per test
+  messages: [{ role: 'user', content: 'ping' }],
+  max_tokens: 1,
+});
+
+/**
+ * 高级模型健康检查：直接对每个 copilot 端口测试高级模型请求
+ * 
+ * 当某个账号的高级模型返回 402/403 时，表示该账号配额耗尽，
+ * 发邮件通知管理员去 Copilot 后台调整额度。
+ * 
+ * 报警有 2 小时冷却期，避免频繁轰炸。
+ */
+async function checkPremiumModelHealth() {
+  try {
+    const copilotAccounts = await db.copilotAccount.findMany({
+      where: {
+        status: { in: ['active', 'bound'] },
+        port: { not: null },
+      },
+      select: { id: true, githubId: true, port: true },
+    });
+
+    if (copilotAccounts.length === 0) return { checked: 0, failures: [] };
+
+    const failures: Array<{ githubId: string; port: number; model: string; status: number }> = [];
+
+    for (const account of copilotAccounts) {
+      if (!account.port) continue;
+
+      // 只测试第一个高级模型：claude-sonnet-4.6（最常用）
+      const testModel = 'claude-sonnet-4.6';
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        const res = await fetch(`http://127.0.0.1:${account.port}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: testModel,
+            messages: [{ role: 'user', content: 'ping' }],
+            max_tokens: 1,
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (res.status === 402 || res.status === 403) {
+          console.warn(`[premium-alert] 账号 ${account.githubId} (port ${account.port}) 模型 ${testModel} 返回 ${res.status} — 配额耗尽`);
+          failures.push({
+            githubId: account.githubId,
+            port: account.port,
+            model: testModel,
+            status: res.status,
+          });
+        } else if (res.status === 200) {
+          // 正常，discarding response body
+          try { await res.text(); } catch {}
+        } else {
+          console.warn(`[premium-alert] 账号 ${account.githubId} (port ${account.port}) 模型 ${testModel} 返回 ${res.status}`);
+        }
+      } catch (err: any) {
+        // 端口不通等网络错误，已由 checkCopilotChannelHealth 处理
+        console.warn(`[premium-alert] 账号 ${account.githubId} 测试失败:`, err.message);
+      }
+    }
+
+    // 有失败才发报警
+    if (failures.length > 0) {
+      // 检查冷却期
+      const lastSent = await db.systemConfig.findUnique({ where: { key: PREMIUM_ALERT_LAST_SENT_KEY } });
+      const lastSentAt = lastSent ? parseInt(lastSent.value) : 0;
+      const now = Math.floor(Date.now() / 1000);
+
+      if (now - lastSentAt > PREMIUM_ALERT_COOLDOWN_SECONDS) {
+        // 发送报警邮件
+        const failureLines = failures.map(f =>
+          `• ${f.githubId} (端口 ${f.port}) — ${f.model} → HTTP ${f.status}`
+        ).join('\n');
+
+        const adminEmail = process.env.ADMIN_ALERT_EMAIL;
+        if (adminEmail) {
+          try {
+            await sendAdminAlert({
+              to: adminEmail,
+              subject: `⚠️ Copilot 高级模型配额耗尽 (${failures.length} 个账号)`,
+              title: 'Copilot 高级模型配额告警',
+              message: `以下 Copilot 账号的高级模型请求返回 402/403（配额耗尽），需要去 GitHub Copilot 后台调整额度：`,
+              details: failureLines,
+              action: '请及时登录对应 GitHub 账号的 Copilot 设置页面，重新分配或购买高级模型额度。',
+            });
+            console.log(`[premium-alert] 报警邮件已发送至 ${adminEmail}`);
+          } catch (emailErr: any) {
+            console.error(`[premium-alert] 发送邮件失败:`, emailErr.message);
+          }
+          await setSystemConfigValue(PREMIUM_ALERT_LAST_SENT_KEY, String(now));
+        } else {
+          console.warn('[premium-alert] ADMIN_ALERT_EMAIL 未配置，跳过邮件发送');
+          console.warn(`[premium-alert] 配额耗尽账号:\n${failureLines}`);
+        }
+      } else {
+        console.log(`[premium-alert] 冷却期内 (上次 ${new Date(lastSentAt * 1000).toISOString()})，跳过发送`);
+      }
+    }
+
+    return {
+      checked: copilotAccounts.length,
+      failures: failures.map(f => ({ githubId: f.githubId, port: f.port, model: f.model, status: f.status })),
+    };
+  } catch (error: any) {
+    console.error('[premium-alert] 高级模型检查失败:', error);
     return { error: error.message };
   }
 }
