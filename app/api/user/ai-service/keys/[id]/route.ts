@@ -199,7 +199,7 @@ export async function PUT(
 
         const updated = await db.aIKey.update({
           where: { id: params.id },
-          data: { status: 'active' },
+          data: { status: 'active', lastUsedAt: new Date() },
           include: { tier: { select: { name: true, displayName: true } } },
         });
         return NextResponse.json({ success: true, key: updated });
@@ -262,6 +262,9 @@ export async function PUT(
 
     // 禁用/启用 Key
     if (body.status === 'disabled' || body.status === 'active') {
+      if (body.status === 'active') {
+        updateData.lastUsedAt = new Date();
+      }
       const updated = await db.aIKey.update({
         where: { id: params.id },
         data: updateData,
