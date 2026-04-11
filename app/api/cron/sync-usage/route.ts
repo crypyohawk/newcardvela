@@ -494,8 +494,7 @@ async function syncKeyUsages() {
             const updated = await tx.aIKey.updateMany({
               where: {
                 id: currentKey.id,
-                totalUsed: currentKey.totalUsed,
-                lastRemoteUsedUsd: currentKey.lastRemoteUsedUsd,
+                lastSyncAt: currentKey.lastSyncAt,
               },
               data: {
                 lastRemoteUsedUsd: usedUSD,
@@ -523,8 +522,7 @@ async function syncKeyUsages() {
         const updated = await tx.aIKey.updateMany({
           where: {
             id: currentKey.id,
-            totalUsed: currentKey.totalUsed,
-            lastRemoteUsedUsd: currentKey.lastRemoteUsedUsd,
+            lastSyncAt: currentKey.lastSyncAt,
           },
           data: {
             totalUsed: { increment: delta },
