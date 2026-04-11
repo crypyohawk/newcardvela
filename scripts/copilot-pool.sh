@@ -9,8 +9,9 @@ COPILOT_DATA_DIR="/home/ubuntu/copilot-pool"
 COPILOT_PORT_BASE=4141  # 实例端口从 4141 开始递增
 PID_DIR="${COPILOT_DATA_DIR}/pids"
 LOG_DIR="${COPILOT_DATA_DIR}/logs"
+DATA_DIR="${COPILOT_DATA_DIR}/data"  # 每个实例的独立数据目录
 
-mkdir -p "$PID_DIR" "$LOG_DIR"
+mkdir -p "$PID_DIR" "$LOG_DIR" "$DATA_DIR"
 
 # 启动单个实例
 start_instance() {
@@ -19,17 +20,34 @@ start_instance() {
   local port="$3"
   local pid_file="${PID_DIR}/${name}.pid"
   local log_file="${LOG_DIR}/${name}.log"
+  local instance_data="${DATA_DIR}/${name}"
 
   if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
     echo "[${name}] 已在运行 (PID: $(cat "$pid_file"), Port: ${port})"
     return 0
   fi
 
+  # 为每个实例创建独立的数据目录，避免 token 缓存互相覆盖
+  mkdir -p "$instance_data"
+
   echo "[${name}] 启动中 → port=${port}"
-  nohup npx copilot-api start --port "$port" --token "$token" > "$log_file" 2>&1 &
+  XDG_DATA_HOME="$instance_data" nohup npx copilot-api start --port "$port" --token "$token" > "$log_file" 2>&1 &
   local pid=$!
   echo "$pid" > "$pid_file"
-  echo "[${name}] 已启动 (PID: ${pid}, Port: ${port})"
+  # 等待 node 子进程实际启动并监听端口
+  local wait=0
+  while ! ss -tlnp 2>/dev/null | grep -q ":${port} " && [ $wait -lt 15 ]; do
+    sleep 1
+    wait=$((wait + 1))
+  done
+  # 更新 PID 为实际监听端口的 node 进程
+  local real_pid=$(ss -tlnp 2>/dev/null | grep ":${port} " | grep -oP 'pid=\K[0-9]+')
+  if [ -n "$real_pid" ]; then
+    echo "$real_pid" > "$pid_file"
+    echo "[${name}] 已启动 (PID: ${real_pid}, Port: ${port})"
+  else
+    echo "[${name}] ⚠ 启动可能失败，请检查日志: ${log_file}"
+  fi
 }
 
 # 停止单个实例
@@ -40,7 +58,9 @@ stop_instance() {
   if [ -f "$pid_file" ]; then
     local pid=$(cat "$pid_file")
     if kill -0 "$pid" 2>/dev/null; then
-      kill "$pid"
+      # 杀掉进程组（npm + node 子进程）
+      pkill -P "$pid" 2>/dev/null
+      kill "$pid" 2>/dev/null
       echo "[${name}] 已停止 (PID: ${pid})"
     fi
     rm -f "$pid_file"
@@ -118,6 +138,28 @@ stop_all() {
     local name=$(basename "$pid_file" .pid)
     stop_instance "$name"
   done
+  # 清理所有残留的 copilot-api 进程（包括 npm 和 node 子进程）
+  if pgrep -f "copilot-api" >/dev/null 2>&1; then
+    echo "清理残留 copilot-api 进程..."
+    pkill -f "copilot-api" 2>/dev/null
+    sleep 2
+    # 强杀所有残留
+    pkill -9 -f "copilot-api" 2>/dev/null
+    sleep 1
+  fi
+  # 确认端口已释放
+  local retries=0
+  while ss -tlnp | grep -qE ':414[0-9]' && [ $retries -lt 10 ]; do
+    echo "等待端口释放..."
+    sleep 1
+    retries=$((retries + 1))
+  done
+  if ss -tlnp | grep -qE ':414[0-9]'; then
+    echo "⚠ 仍有端口被占用，强制杀死占用进程"
+    ss -tlnp | grep -oP ':414[0-9].*pid=\K[0-9]+' | sort -u | xargs -r kill -9 2>/dev/null
+    sleep 1
+  fi
+  echo "所有实例已停止"
 }
 
 # 命令分发
@@ -138,7 +180,6 @@ case "${1:-status}" in
     ;;
   restart)
     stop_all
-    sleep 2
     start_all
     ;;
   status)

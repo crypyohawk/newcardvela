@@ -153,7 +153,7 @@ export async function PUT(
         return NextResponse.json({ error: '该 Key 未关联到 new-api token，无法同步启用/禁用，请先修复 token 绑定' }, { status: 409 });
       }
 
-      const isCopilotPool = aiKey.tier.channelGroup === 'copilot' || aiKey.tier.provider?.type === 'copilot-pool';
+      const isCopilotPool = aiKey.tier.channelGroup === 'cardvela' || aiKey.tier.provider?.type === 'copilot-pool';
 
       // === 启用号池 Key：检查容量 ===
       if (body.status === 'active' && isCopilotPool && aiKey.status === 'disabled') {

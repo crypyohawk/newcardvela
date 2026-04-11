@@ -397,7 +397,7 @@ export async function POST(request: NextRequest) {
     }
 
     const providerType = tier.provider?.type || 'proxy';
-    const isCopilotPool = tier.channelGroup === 'copilot' || providerType === 'copilot-pool';
+    const isCopilotPool = tier.channelGroup === 'cardvela' || providerType === 'copilot-pool';
 
     // 验证用户
     const user = await db.user.findUnique({ where: { id: payload.userId } });
@@ -443,7 +443,7 @@ export async function POST(request: NextRequest) {
         where: {
           userId: payload.userId,
           status: 'active',
-          tier: { OR: [{ channelGroup: 'copilot' }, { provider: { type: 'copilot-pool' } }] },
+          tier: { OR: [{ channelGroup: 'cardvela' }, { provider: { type: 'copilot-pool' } }] },
         },
       });
       if (userPoolKeyCount >= tierConfig.maxKeys) {

@@ -712,7 +712,7 @@ async function autoDisableIdleCopilotKeys() {
         status: 'active',
         tier: {
           OR: [
-            { channelGroup: 'copilot' },
+            { channelGroup: 'cardvela' },
             { provider: { type: 'copilot-pool' } },
           ],
         },

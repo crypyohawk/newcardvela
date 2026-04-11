@@ -30,7 +30,7 @@ export async function getCopilotPoolCapacity(): Promise<{
         status: 'active',
         tier: {
           OR: [
-            { channelGroup: 'copilot' },
+            { channelGroup: 'cardvela' },
             { provider: { type: 'copilot-pool' } },
           ],
         },
@@ -56,5 +56,5 @@ export function isCopilotPoolTier(tier: {
   channelGroup: string | null;
   provider?: { type: string } | null;
 }) {
-  return tier.channelGroup === 'copilot' || tier.provider?.type === 'copilot-pool';
+  return tier.channelGroup === 'cardvela' || tier.provider?.type === 'copilot-pool';
 }

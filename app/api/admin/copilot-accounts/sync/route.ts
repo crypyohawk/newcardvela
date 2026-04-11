@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
         key: 'sk-copilot',
         models: COPILOT_MODELS,
         modelMapping: COPILOT_MODEL_MAPPING,
-        group: 'copilot',
+        group: 'cardvela',
         status: 1,
       });
 
@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
             key: 'sk-copilot',
             models: COPILOT_MODELS,
             modelMapping: COPILOT_MODEL_MAPPING,
-            group: 'copilot',
+            group: 'cardvela',
             status,
           });
 

@@ -1,210 +1,507 @@
-﻿============================================================
-明天工作安排 - 2026年4月4日
-============================================================
+﻿# New API 自建部署清单
 
-当前状态
-1. 用户侧调用已经成功，说明主调用链路已通：用户 Key -> api.cardvela.com -> new-api -> copilot 渠道 -> copilot-api -> 上游模型。
-2. 当前主要缺口不是调用能力，而是计费与统计链路没有闭环。
-3. 现象如下：
-	- 管理端 Key 管理中，已使用过的 Key 没有显示调用次数、消耗量、费用等记录。
-	- 用户端 API Key 下方的本月费用、累计费用、月限额等统计没有随调用变化。
-	- 企业用量总览中的本月总消费、本月总请求、本月 Tokens、员工 Key 数等统计没有变化。
-	- 虽然调用成功，但前后端都缺少可见的费用记录、消耗量记录、调用统计回显。
+更新时间：2026-04-06
 
-============================================================
-明天的主要目标
-============================================================
+目标：把 CardVela 当前依赖的第三方 new-api 网关替换为自建 new-api，且不动现有 CardVela、GSalary、copilot-api 4141-4145 主链路。
 
-目标一：打通基于 new-api 的计费同步链路
-目标二：让用户端看到自己的费用、调用量、Key 级别统计
-目标三：让管理端看到 Key 使用记录、费用、消耗量和企业汇总数据
-目标四：确认“调用成功 -> new-api 用量增加 -> 平台同步扣费 -> 前端统计更新”这条链路完整可验证
+最终链路：
+CardVela -> 自建 new-api -> copilot-api 4141-4145 -> GitHub Copilot
 
-============================================================
-问题判断
-============================================================
+------------------------------------------------------------
+一、执行原则
+------------------------------------------------------------
 
-从当前现象看，最可能的问题不在调用链，而在“同步与展示链”：
+1. 先并行部署，再切换，不直接覆盖现网。
+2. 第一阶段自建 new-api 先跑在 3002，验证完再决定是否迁到 3001。
+3. copilot-api 实例继续沿用现有 4141-4145，不重做。
+4. CardVela 只改 NEW_API_* 环境变量，不改业务代码。
+5. 如果切换失败，随时把 CardVela 环境变量切回旧网关并 pm2 重启即可回滚。
 
-1. new-api 已经记录了 token 的 used_quota，但我们没有成功把差值同步回 CardVela 数据库。
-2. /api/cron/sync-usage 可能没有执行、执行失败、环境变量不对，或执行后没有正确写回用户余额与统计字段。
-3. 前端页面展示的数据源可能仍然依赖旧逻辑，例如历史 AIUsageLog、旧消费表、旧统计字段，而不是现在 new-api quota 同步后的字段。
-4. 管理端和用户端可能只是展示了数据库中的静态字段，但这些字段从未被 cron 或接口更新。
-5. 企业统计卡片可能没有真实接后端聚合接口，或者聚合逻辑仍然基于旧表，所以始终显示 0。
+------------------------------------------------------------
+二、当前约束
+------------------------------------------------------------
 
-============================================================
-明天任务拆分
-============================================================
+1. CardVela 生产目录：/opt/cardvela
+2. CardVela 运行方式：PM2
+3. copilot-api 多实例管理脚本：/opt/cardvela/scripts/copilot-pool.sh
+4. copilot-api 端口：4141-4145
+5. CardVela 代码默认 new-api 地址：http://127.0.0.1:3001
+6. CardVela 默认读取 new-api SQLite 路径：/home/ubuntu/new-api/data/one-api.db
+7. new-api 官方仓库：https://github.com/QuantumNous/new-api
+8. new-api 官方推荐方式：Docker Compose
+9. Docker 镜像：calciumion/new-api:latest
 
-一、先确认 new-api 是否真的记录了调用用量
+------------------------------------------------------------
+三、部署计划清单
+------------------------------------------------------------
 
-检查项：
-1. 在 new-api 后台查看对应 token 的 used_quota、remain_quota 是否变化。
-2. 直接调用 new-api token 接口确认测试 Key 对应的 token 数据是否有增长。
-3. 核对测试时使用的 Key 是否就是平台页面显示的那个 sk Key，避免测的是别的 token。
+[ ] P0 备份现有 CardVela 环境变量和 PM2 状态
+[ ] P0 确认服务器已安装 docker 与 docker compose
+[ ] P0 在 /home/ubuntu/new-api 拉取官方仓库
+[ ] P0 用 docker compose 在 3002 启动自建 new-api
+[ ] P0 确认 new-api 可访问，能正常登录后台
+[ ] P0 创建管理员 token
+[ ] P0 在 new-api 中重建 copilot 渠道 4141-4145
+[ ] P0 配置 copilot 分组倍率与用户可选分组
+[ ] P0 手工创建测试 token 并完成一次真实调用验证
+[ ] P0 把 /opt/cardvela/.env.production 切到自建 new-api
+[ ] P0 重新构建并重启 CardVela
+[ ] P0 验证 CardVela 创建 Key、调用、同步用量全部正常
+[ ] P1 如需对外统一入口，再把 nginx 或正式端口切到自建 new-api
+[ ] P1 验证 3001 或域名切换后的完整链路
+[ ] P1 保留旧网关一段时间作为应急回退
 
-目标结果：
-如果 new-api 的 token 用量都没变，说明问题还在 new-api 或调用命中层。
-如果 new-api 的 token 用量已变，而平台前后端没变化，说明问题就在同步链和展示链。
+------------------------------------------------------------
+四、服务器可执行命令
+------------------------------------------------------------
 
-二、重点排查 /api/cron/sync-usage
+说明：以下命令默认在 Ubuntu 服务器执行。
 
-检查项：
-1. 确认服务器 .env 里的 CRON_SECRET 存在且当前服务已加载。
-2. 手工调用一次 /api/cron/sync-usage，查看返回 JSON。
-3. 查看 cardvela 服务日志，确认 sync-usage 执行时有没有报错。
-4. 确认该接口是否成功读取到 active/enabled 的 AI Key。
-5. 确认接口是否成功读取 new-api token 的 used_quota。
-6. 确认差值计算后是否真的执行了用户余额扣减、Key 统计更新、数据库写入。
-7. 确认接口是否因为 tokenName、group、状态、绑定关系等条件过滤过严，导致没有任何 Key 被同步。
+### 0. 进入服务器后先做备份
 
-目标结果：
-必须拿到一次手动同步成功的明确证据，例如：
-checked > 0
-synced > 0
-totalDeducted > 0
-或者至少日志里能看到具体每个 Key 的处理过程。
+```bash
+cd /opt/cardvela
+cp .env.production .env.production.bak.$(date +%F-%H%M%S)
+pm2 save
+pm2 status
+```
 
-三、核对数据库里哪些字段在承接“统计结果”
+### 1. 确认 Docker 环境
 
-检查项：
-1. User 表中当前用于显示 AI 费用、累计消费、企业统计的数据字段有哪些。
-2. AI Key 表中当前用于显示本月用量、累计用量、状态、余额、限额的数据字段有哪些。
-3. 是否还有旧的 AIUsageLog 或其他日志表，但当前逻辑已不再写入。
-4. 管理端 Key 管理页面读的是哪些字段。
-5. 用户端 API Key 页面和企业统计页面分别读的是哪些接口、哪些字段。
+```bash
+docker --version
+docker compose version
+```
 
-目标结果：
-明确“后端写哪几个字段，前端读哪几个字段”，把映射关系理清。
+如果这里失败，先安装 Docker，再继续后续步骤。
 
-四、修复“同步了但前端没展示”的问题
+### 2. 部署自建 new-api 到 3002
 
-检查项：
-1. 用户端页面的数据接口是否拿到了最新字段。
-2. 管理端 Key 管理接口是否返回了用量、费用、累计调用次数等信息。
-3. 企业统计接口是否真的做了聚合，还是写死/默认值。
-4. 页面是否只在初次加载时取一次数据，调用后没有刷新。
-5. 页面显示单位是否与 new-api quota 单位不一致，导致看起来像 0。
+```bash
+cd /home/ubuntu
+rm -rf new-api
+git clone https://github.com/QuantumNous/new-api.git
+cd new-api
+cp .env.example .env
+```
 
-目标结果：
-至少做到：
-1. 用户端能看到本月费用变化。
-2. 管理端能看到 Key 用量或消费变化。
-3. 企业统计卡片能看到至少一个非零数据。
+### 3. 修改 new-api 的 docker-compose 端口映射
 
-五、补一条完整验收链路
+目标：不要占用现网 3001，先临时映射到 3002。
 
-明天修完后必须做完整验收：
-1. 新建或选定一个测试 Key。
-2. 用该 Key 发起一次真实模型调用。
-3. 在 new-api 后台确认 used_quota 增加。
-4. 手工触发一次 /api/cron/sync-usage。
-5. 确认平台数据库中的用户余额/统计字段发生变化。
-6. 刷新用户前端页面，确认本月费用和 Key 数据变化。
-7. 刷新管理端页面，确认 Key 管理和企业统计变化。
+先查看原配置：
 
-============================================================
-明天优先级排序
-============================================================
+```bash
+cd /home/ubuntu/new-api
+grep -n "3000" docker-compose.yml
+grep -n "ports:" docker-compose.yml
+```
 
-P0
-1. 找出为什么 /api/cron/sync-usage 没把 new-api 用量同步回平台。
-2. 让数据库里至少出现一条真实的费用/统计变化。
+把端口映射改成宿主机 3002 到容器 3000。
 
-P1
-1. 管理端 Key 管理页面显示真实用量、费用、调用结果。
-2. 用户端 API Key 卡片和统计摘要显示真实变化。
-3. 企业统计卡片显示真实汇总数据。
+如果默认是 3000:3000，执行：
 
-P2
-1. 如果当前没有消费明细表，补一个最轻量的“用量同步记录”或“消费流水”方案。
-2. 增加调试日志，便于之后快速定位某个 Key 为什么没有被同步。
+```bash
+cd /home/ubuntu/new-api
+sed -i 's/3000:3000/3002:3000/g' docker-compose.yml
+```
 
-============================================================
-明天建议执行顺序
-============================================================
+如果默认是 3001:3000，执行：
 
-1. 先查 new-api token 实际 used_quota 是否已增长。
-2. 再手工调用一次 /api/cron/sync-usage 看返回值。
-3. 再看 cardvela 日志和代码，确认同步逻辑到底有没有写库。
-4. 再查前端接口和页面，确认是不是字段没接对。
-5. 最后做一次端到端验收，形成固定排查流程。
+```bash
+cd /home/ubuntu/new-api
+sed -i 's/3001:3000/3002:3000/g' docker-compose.yml
+```
 
-============================================================
-明天需要重点查看的代码位置
-============================================================
+改完再次确认：
 
-1. app/api/cron/sync-usage/route.ts
-	核心同步逻辑，优先看是否读取到 token 用量、是否正确计算差值、是否落库。
+```bash
+cd /home/ubuntu/new-api
+grep -n "3002:3000" docker-compose.yml
+```
 
-2. app/api/user/ai-service 相关接口
-	看用户端 API Key 列表、统计信息到底从哪些字段返回。
+### 4. 启动自建 new-api
 
-3. 管理端 AI 管理 / Key 管理相关接口
-	看管理端列表页显示的数据是不是仍来自旧逻辑。
+```bash
+cd /home/ubuntu/new-api
+docker compose pull
+docker compose up -d
+docker compose ps
+```
 
-4. src/lib/newapi.ts
-	看获取 token 用量的调用是否稳定，是否有单位换算问题。
+### 5. 检查 new-api 是否启动成功
 
-5. 前端页面
-	用户端 dashboard / API Key 页面
-	管理端 AI 管理页面
-	企业统计页面
+```bash
+curl -I http://127.0.0.1:3002
+ss -lntp | grep 3002
+docker compose logs --tail=100
+```
 
-============================================================
-明天的验收标准
-============================================================
+浏览器访问：
 
-满足以下 5 条才算完成：
+http://服务器IP:3002
 
-1. 一次真实模型调用后，new-api token 的 used_quota 明确增长。
-2. 手工触发 sync-usage 后，数据库中对应用户或 Key 的统计字段明确变化。
-3. 用户端页面能看到费用、调用量或 Key 统计变化。
-4. 管理端 Key 管理能看到该 Key 的真实使用结果。
-5. 企业统计卡片出现非零数据，且与测试调用结果方向一致。
+先完成管理员初始化登录。
 
-============================================================
-明天可能需要补的能力
-============================================================
+### 6. 确认 copilot-api 实例仍正常
 
-如果确认当前架构只有“余额扣减”但没有“展示明细”，则明天可能要补以下其一：
+```bash
+cd /opt/cardvela
+bash scripts/copilot-pool.sh status
+ss -lntp | grep 414
+curl -s http://127.0.0.1:4141/v1/models | python3 -m json.tool | head
+curl -s http://127.0.0.1:4142/v1/models | python3 -m json.tool | head
+curl -s http://127.0.0.1:4143/v1/models | python3 -m json.tool | head
+curl -s http://127.0.0.1:4144/v1/models | python3 -m json.tool | head
+curl -s http://127.0.0.1:4145/v1/models | python3 -m json.tool | head
+```
 
-方案 A：继续沿用轻量方案
-只维护 User 和 AI Key 上的聚合字段，例如：
-- 本月费用
-- 累计费用
-- 本月 tokens
-- 调用次数
+### 7. 在自建 new-api 后台添加 copilot 渠道
 
-方案 B：补一个轻量消费流水表
-每次 sync-usage 记录：
-- userId
-- aiKeyId
-- tokenName
-- quotaDiff
-- deductedAmount
-- syncedAt
+每个渠道都按下面规则配置：
 
-优先建议：先做方案 A，把前后端统计打通；如果明细需求明显，再加方案 B。
+1. 类型：OpenAI
+2. 分组：copilot
+3. Base URL：必须用宿主机地址，不要用 127.0.0.1
 
-============================================================
-手工排查命令
-============================================================
+建议地址：
 
-# 1. 看 new-api token 列表与用量
-curl -s "http://127.0.0.1:3001/api/token/" -H "Authorization: Bearer n5VL1gVWWWvfRt3sp8yxvIleKroi"
+```text
+http://172.17.0.1:4141
+http://172.17.0.1:4142
+http://172.17.0.1:4143
+http://172.17.0.1:4144
+http://172.17.0.1:4145
+```
 
-# 2. 手工触发一次同步
-curl -s "http://127.0.0.1:3000/api/cron/sync-usage?secret=YOUR_SECRET"
+如果不确定宿主机 docker0 地址，执行：
 
-# 3. 查看 cardvela 服务日志
+```bash
+ip addr show docker0 | grep 'inet '
+```
+
+### 8. 在 new-api 后台补齐分组设置
+
+必须至少确认两项：
+
+1. 分组倍率里有 copilot
+2. 用户可选分组里有 copilot
+
+建议值：
+
+```text
+copilot: 1
+```
+
+### 9. 在自建 new-api 后台创建管理员 token
+
+创建后先保存这几个值：
+
+```text
+NEW_API_BASE_URL=http://127.0.0.1:3002
+NEW_API_ADMIN_TOKEN=这里填你新生成的管理员 token
+NEW_API_ADMIN_USER=1
+NEW_API_SQLITE_PATH=/home/ubuntu/new-api/data/one-api.db
+```
+
+### 10. 在自建 new-api 上做一次手工调用验证
+
+先在后台创建一个测试 token，然后执行：
+
+```bash
+curl -s http://127.0.0.1:3002/v1/models \
+	-H "Authorization: Bearer 这里替换成测试 token" \
+	| python3 -m json.tool | head -40
+```
+
+再执行一次对话测试：
+
+```bash
+curl -s http://127.0.0.1:3002/v1/chat/completions \
+	-H "Authorization: Bearer 这里替换成测试 token" \
+	-H "Content-Type: application/json" \
+	-d '{"model":"gpt-4o","messages":[{"role":"user","content":"say hi"}],"max_tokens":10}' \
+	| python3 -m json.tool
+```
+
+验证成功标准：
+
+1. 有正常 JSON 返回
+2. new-api 后台日志有记录
+3. 命中 copilot 分组渠道
+
+### 11. 切 CardVela 到自建 new-api
+
+先改环境变量：
+
+```bash
+cd /opt/cardvela
+grep -n "NEW_API_" .env.production
+```
+
+用编辑器修改：
+
+```bash
+cd /opt/cardvela
+nano .env.production
+```
+
+至少改成：
+
+```env
+NEW_API_BASE_URL=http://127.0.0.1:3002
+NEW_API_ADMIN_TOKEN=替换成自建 new-api 的管理员 token
+NEW_API_ADMIN_USER=1
+NEW_API_SQLITE_PATH=/home/ubuntu/new-api/data/one-api.db
+```
+
+### 12. 重新加载 CardVela 环境并重启 PM2
+
+注意：PM2 下必须先把 .env.production 注入当前 shell，再启动或重启进程。
+
+```bash
+cd /opt/cardvela
+npm install
+npx prisma generate
+npm run build
+set -a
+source .env.production
+set +a
+pm2 restart all
+pm2 status
+```
+
+### 13. 验证 CardVela 已经连到自建 new-api
+
+先看 PM2 环境里是否已注入：
+
+```bash
+pm2 env 0 | grep NEW_API
+```
+
+再检查 CardVela 服务日志：
+
+```bash
+pm2 logs --lines 100
+```
+
+### 14. 做完整业务验证
+
+验证顺序：
+
+```bash
+cd /opt/cardvela
+curl -s "http://127.0.0.1:3000/api/config" | python3 -m json.tool | head -40
+curl -s "http://127.0.0.1:3000/api/cron/sync-usage?secret=这里替换成CRON_SECRET" | python3 -m json.tool
+```
+
+然后在前端后台继续验证：
+
+1. 新建一个平台 API Key
+2. 用该 Key 真实调一次模型
+3. 去自建 new-api 后台确认 token 与日志增长
+4. 触发 sync-usage
+5. 确认 CardVela 用户余额和统计变化
+
+------------------------------------------------------------
+五、切正式端口 3001 的命令
+------------------------------------------------------------
+
+只有在 3002 稳定验证后才做。
+
+### 方案 A：继续用 3002，不动 3001
+
+优点：最稳，回滚最简单。
+
+### 方案 B：把自建 new-api 切到 3001
+
+```bash
+cd /home/ubuntu/new-api
+sed -i 's/3002:3000/3001:3000/g' docker-compose.yml
+docker compose up -d
+docker compose ps
+ss -lntp | grep 3001
+```
+
+如果 CardVela 也要切回默认地址，再改：
+
+```bash
+cd /opt/cardvela
+nano .env.production
+```
+
+改成：
+
+```env
+NEW_API_BASE_URL=http://127.0.0.1:3001
+```
+
+然后：
+
+```bash
+cd /opt/cardvela
+set -a
+source .env.production
+set +a
+pm2 restart all
+```
+
+------------------------------------------------------------
+六、失败回滚命令
+------------------------------------------------------------
+
+如果切 CardVela 后发现异常，立刻回滚：
+
+```bash
+cd /opt/cardvela
+cp .env.production.bak.你备份时的时间戳 .env.production
+set -a
+source .env.production
+set +a
+pm2 restart all
+pm2 status
+```
+
+如果只想停掉自建 new-api：
+
+```bash
+cd /home/ubuntu/new-api
+docker compose down
+docker compose ps
+```
+
+------------------------------------------------------------
+七、验收标准
+------------------------------------------------------------
+
+1. http://127.0.0.1:3002 可打开自建 new-api 后台
+2. 自建 new-api 的 copilot 渠道全部可用
+3. 测试 token 能在自建 new-api 上成功调用模型
+4. CardVela 能成功创建 new-api token
+5. 平台用户 Key 能通过自建 new-api 正常调用
+6. sync-usage 能正常从自建 new-api 拉到日志并同步扣费
+7. 出现问题时，能在 5 分钟内切回旧网关
+
+------------------------------------------------------------
+八、容易踩坑
+------------------------------------------------------------
+
+1. new-api 在 Docker 内时，渠道地址不能填 127.0.0.1:4141，必须填宿主机地址。
+2. copilot 分组不是只建渠道就够，还要补系统设置里的分组倍率和用户可选分组。
+3. PM2 不一定会自动读到 .env.production，重启前必须先 source 到当前 shell。
+4. CardVela 创建 token 后如果拿不到完整 key，优先检查 NEW_API_SQLITE_PATH 是否正确。
+5. 不要一上来就抢占 3001，先在 3002 完成验证。
+
+------------------------------------------------------------
+九、部署完成交接清单（2026-04-06 验收通过）
+------------------------------------------------------------
+
+### 当前架构
+
+```
+用户浏览器
+  ↓
+https://cardvela.com (nginx :443) → CardVela (PM2, :3000)
+https://api.cardvela.com (nginx :443) → 自建 new-api (Docker, :3001)
+  ↓
+自建 new-api 内部路由 → copilot-api 实例 (PM2, :4141-4145)
+  ↓
+GitHub Copilot
+```
+
+### 服务状态汇总
+
+| 组件              | 运行方式    | 端口  | 状态      |
+|-------------------|-------------|-------|-----------|
+| CardVela 前端+API | PM2 (id=5)  | 3000  | ✅ 在线    |
+| 自建 new-api      | Docker      | 3001  | ✅ 运行 4 天 |
+| copilot-api #1    | PM2         | 4141  | ✅ 在线    |
+| copilot-api #2    | PM2         | 4142  | ✅ 在线    |
+| copilot-api #3    | PM2         | 4143  | ✅ 在线    |
+| copilot-api #4    | PM2         | 4144  | ✅ 在线    |
+| copilot-api #5    | PM2         | 4145  | ✅ 在线    |
+| PostgreSQL        | Docker      | 5432  | ✅ 在线    |
+| Nginx             | systemd     | 80/443| ✅ 在线    |
+
+### 关键入口地址
+
+| 用途                       | 地址                                  |
+|----------------------------|---------------------------------------|
+| CardVela 用户前端          | https://cardvela.com                  |
+| new-api 管理后台（你自己的）| https://api.cardvela.com              |
+| new-api 管理后台（内网直连）| http://23.106.142.166:3001            |
+| SSH 登录                   | ssh -i ~/.ssh/id_ed25519 root@23.106.142.166 |
+
+### new-api 后台登录
+
+这是你自建的 new-api，用你在初始化时设置的管理员账号密码登录。
+登录后可以管理：渠道、令牌、用户、日志、分组等。
+
+### 渠道配置（已完成，共 6 个）
+
+| ID | 名称                | 分组     | Base URL                |
+|----|---------------------|----------|-------------------------|
+| 1  | poloapi             | claude系 | https://poloapi.top     |
+| 2  | copilot-2937170996  | copilot  | http://172.17.0.1:4141  |
+| 3  | copilot-huynhanh... | copilot  | http://172.17.0.1:4142  |
+| 4  | copilot-Jessica...  | copilot  | http://172.17.0.1:4143  |
+| 5  | copilot-ferkel...   | copilot  | http://172.17.0.1:4144  |
+| 6  | copilot-BecksBw7    | copilot  | http://172.17.0.1:4145  |
+
+### CardVela 环境变量（/opt/cardvela/.env）
+
+```env
+NEW_API_BASE_URL=http://127.0.0.1:3001
+NEW_API_ADMIN_TOKEN=JyLH32oVwyGqUPUgNx8oqsvgaVItBc2F
+NEW_API_ADMIN_USER=1
+NEW_API_SQLITE_PATH=/opt/new-api/data/one-api.db
+```
+
+### 验收结果
+
+- [x] 自建 new-api 在 3001 运行正常
+- [x] 5 个 copilot 渠道 + 1 个 poloapi 渠道全部启用
+- [x] 真实 API 调用成功（gpt-4o "say hi" 正常返回）
+- [x] CardVela PM2 环境变量已注入，指向自建 new-api
+- [x] sync-usage 正常同步（checked=3, 数据一致）
+- [x] https://api.cardvela.com 已通过 nginx 指向自建 new-api :3001
+- [x] https://cardvela.com 前端正常
+
+### 关键文件位置
+
+| 文件                              | 用途                    |
+|-----------------------------------|-------------------------|
+| /opt/cardvela/.env                | CardVela 环境变量        |
+| /opt/new-api/data/one-api.db      | new-api SQLite 数据库    |
+| /etc/nginx/conf.d/cardvela.conf   | Nginx 反代配置           |
+| /opt/cardvela/scripts/copilot-pool.sh | copilot 实例管理脚本 |
+
+### 日常运维命令
+
+```bash
+# 查看所有服务状态
+pm2 status
+
+# 查看 CardVela 日志
 pm2 logs cardvela --lines 100
 
-# 4. 查看 new-api 日志
-curl -s "http://127.0.0.1:3001/api/log/?p=0&per_page=20" -H "Authorization: Bearer n5VL1gVWWWvfRt3sp8yxvIleKroi"
+# 查看 new-api 容器日志
+docker logs new-api --tail 100
 
-============================================================
-一句话总结
-============================================================
+# 重启 CardVela（改完 .env 后）
+cd /opt/cardvela && set -a && source .env && set +a && pm2 restart cardvela
 
-明天的核心不是“继续打调用”，而是把“new-api 用量 -> 平台扣费 -> 数据库存储 -> 用户端/管理端统计展示”这条链路彻底打通。
+# 重启 new-api
+docker restart new-api
+
+# 手动触发用量同步
+curl -s "http://127.0.0.1:3000/api/cron/sync-usage?secret=CRON_SECRET值"
+
+# 查看 copilot 实例状态
+cd /opt/cardvela && bash scripts/copilot-pool.sh status
+```
+
+### 回滚方案
+
+如果自建 new-api 出问题，只需把 CardVela .env 中的 NEW_API_* 改回旧地址，
+然后 source + pm2 restart 即可，5 分钟内可完成回滚。

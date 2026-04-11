@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       where: {
         userId: payload.userId,
         status: 'active',
-        tier: { OR: [{ channelGroup: 'copilot' }, { provider: { type: 'copilot-pool' } }] },
+        tier: { OR: [{ channelGroup: 'cardvela' }, { provider: { type: 'copilot-pool' } }] },
       },
     });
 
