@@ -106,9 +106,28 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
         }
       }
 
-      // 计算费用
-      const inputCost = (inputTokens / 1000000) * aiKey.tier.pricePerMillionInput;
-      const outputCost = (outputTokens / 1000000) * aiKey.tier.pricePerMillionOutput;
+      // 计算费用（支持模型级倍率）
+      let modelRatio = 1;
+      if (aiKey.tier.models) {
+        try {
+          const modelsConfig = typeof aiKey.tier.models === 'string'
+            ? JSON.parse(aiKey.tier.models)
+            : aiKey.tier.models;
+          if (Array.isArray(modelsConfig)) {
+            // 优先匹配最长的名称，避免 "gpt-5.4" 误匹配 "gpt-5.4-mini"
+            const modelEntry = modelsConfig
+              .filter((m: any) => m.name && model_name.toLowerCase().includes(m.name.toLowerCase()))
+              .sort((a: any, b: any) => (b.name?.length || 0) - (a.name?.length || 0))[0];
+            if (modelEntry?.ratio && modelEntry.ratio > 0) {
+              modelRatio = modelEntry.ratio;
+            }
+          }
+        } catch (e) {
+          console.warn(`[用量同步] 解析模型倍率失败, tierId=${aiKey.tier.id}:`, e);
+        }
+      }
+      const inputCost = (inputTokens / 1000000) * aiKey.tier.pricePerMillionInput * modelRatio;
+      const outputCost = (outputTokens / 1000000) * aiKey.tier.pricePerMillionOutput * modelRatio;
       const cost = Math.round((inputCost + outputCost) * 10000) / 10000;
 
       // 检查月度预算（超限禁用Key，但不跳过计费——请求已完成必须收费）
