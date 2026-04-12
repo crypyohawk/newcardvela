@@ -50,8 +50,10 @@ interface Order {
   txHash?: string | null;
   paymentProof?: string | null;
   createdAt: string;
-  cnyAmount?: number;       // 新增
-  exchangeRate?: number;    // 新增
+  cnyAmount?: number;
+  exchangeRate?: number;
+  hasTxHash?: boolean;
+  hasPaymentProof?: boolean;
   user: {
     id: string;
     username: string;
@@ -90,6 +92,11 @@ export default function AdminPage() {
   const [userStats, setUserStats] = useState({ totalUsers: 0, totalBalance: 0, totalCards: 0 });
   const [orders, setOrders] = useState<Order[]>([]);
   const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
+  const [orderStatusFilter, setOrderStatusFilter] = useState<string>('pending_review');
+  const [orderPage, setOrderPage] = useState(1);
+  const [orderPagination, setOrderPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 0 });
+  const [orderPendingCount, setOrderPendingCount] = useState(0);
+  const [proofLoading, setProofLoading] = useState(false);
   const [withdrawOrders, setWithdrawOrders] = useState<Order[]>([]);
   const [refunds, setRefunds] = useState<Order[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -399,15 +406,40 @@ export default function AdminPage() {
     }
   };
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (status?: string, page?: number) => {
     try {
-      const res = await fetch('/api/admin/orders', {
+      const s = status ?? orderStatusFilter;
+      const p = page ?? orderPage;
+      const res = await fetch(`/api/admin/orders?status=${s}&page=${p}&pageSize=20`, {
         headers: { 'Authorization': `Bearer ${getToken()}` },
       });
       const data = await res.json();
       if (data.orders) setOrders(data.orders);
+      if (data.pagination) setOrderPagination(data.pagination);
+      if (data.pendingCount !== undefined) setOrderPendingCount(data.pendingCount);
     } catch (error) {
       console.error('获取订单列表失败:', error);
+    }
+  };
+
+  const fetchOrderProof = async (orderId: string) => {
+    // 先打开弹窗（不含凭证数据），再异步加载凭证
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    setSelectedOrder({ ...order, txHash: null, paymentProof: null });
+    setProofLoading(true);
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}/proof`, {
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+      });
+      const data = await res.json();
+      if (data.id) {
+        setSelectedOrder({ ...order, txHash: data.txHash, paymentProof: data.paymentProof, type: data.type });
+      }
+    } catch (error) {
+      console.error('获取凭证失败:', error);
+    } finally {
+      setProofLoading(false);
     }
   };
 
@@ -975,7 +1007,7 @@ export default function AdminPage() {
       if (!res.ok) throw new Error(data.error);
 
       setMessage({ type: 'success', text: data.message || '操作成功' });
-      fetchOrders();
+      fetchOrders(orderStatusFilter, orderPage);
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
     } finally {
@@ -1748,7 +1780,30 @@ export default function AdminPage() {
         {/* 充值管理（原订单管理） */}
         {!tabLoading && activeTab === 'recharges' && (
           <div className="bg-slate-800 rounded-xl p-6">
-            <h2 className="text-xl font-bold mb-6">充值订单管理</h2>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+              <h2 className="text-xl font-bold">充值订单管理</h2>
+              <div className="flex gap-2 flex-wrap">
+                {[
+                  { key: 'pending_review', label: '待审核', badge: orderPendingCount },
+                  { key: 'all', label: '全部' },
+                  { key: 'completed', label: '已完成' },
+                  { key: 'failed', label: '已拒绝' },
+                ].map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => { setOrderStatusFilter(tab.key); setOrderPage(1); fetchOrders(tab.key, 1); }}
+                    className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                      orderStatusFilter === tab.key
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                    }`}
+                  >
+                    {tab.label}
+                    {tab.badge ? <span className="ml-1.5 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">{tab.badge}</span> : null}
+                  </button>
+                ))}
+              </div>
+            </div>
             {orders.length === 0 ? (
               <p className="text-gray-400 text-center py-8">暂无订单</p>
             ) : (
@@ -1808,9 +1863,9 @@ export default function AdminPage() {
                       </div>
 
                       <div className="flex gap-2 flex-wrap">
-                        {(order.txHash || order.paymentProof) && (
+                        {(order.hasTxHash || order.hasPaymentProof || order.txHash || order.paymentProof) && (
                           <button
-                            onClick={() => setSelectedOrder(order)}
+                            onClick={() => fetchOrderProof(order.id)}
                             className="flex-1 text-blue-400 hover:text-blue-300 text-xs p-2 bg-slate-600/50 rounded hover:bg-slate-600"
                           >
                             查看凭证
@@ -1879,9 +1934,9 @@ export default function AdminPage() {
                             </span>
                           </td>
                           <td className="py-4">
-                            {(order.txHash || order.paymentProof) ? (
+                            {(order.hasTxHash || order.hasPaymentProof || order.txHash || order.paymentProof) ? (
                               <button
-                                onClick={() => setSelectedOrder(order)}
+                                onClick={() => fetchOrderProof(order.id)}
                                 className="text-blue-400 hover:text-blue-300 text-sm"
                               >
                                 查看凭证
@@ -1932,6 +1987,30 @@ export default function AdminPage() {
                   </table>
                 </div>
               </>
+            )}
+            {/* 分页控件 */}
+            {orderPagination.totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-700">
+                <div className="text-sm text-gray-400">
+                  共 {orderPagination.total} 条，第 {orderPagination.page}/{orderPagination.totalPages} 页
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { const p = orderPage - 1; setOrderPage(p); fetchOrders(undefined, p); }}
+                    disabled={orderPage <= 1}
+                    className="px-3 py-1 rounded text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    上一页
+                  </button>
+                  <button
+                    onClick={() => { const p = orderPage + 1; setOrderPage(p); fetchOrders(undefined, p); }}
+                    disabled={orderPage >= orderPagination.totalPages}
+                    className="px-3 py-1 rounded text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    下一页
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -3396,6 +3475,10 @@ export default function AdminPage() {
                 </button>
               </div>
               
+              {proofLoading ? (
+                <div className="text-center py-8 text-gray-400">加载凭证中...</div>
+              ) : (
+                <>
               {selectedOrder.txHash && !selectedOrder.txHash.startsWith('data:image') && (
                 <div className="mb-4">
                   <label className="block text-sm text-gray-400 mb-2">
@@ -3437,6 +3520,8 @@ export default function AdminPage() {
 
               {!selectedOrder.txHash && !selectedOrder.paymentProof && (
                 <p className="text-gray-400">暂无凭证</p>
+              )}
+                </>
               )}
 
               <button

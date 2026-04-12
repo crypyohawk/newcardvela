@@ -4,12 +4,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../src/lib/db';
 import { verifyAdmin, adminError } from '../../../../src/lib/adminAuth';
 
-// 获取所有充值订单
+// 获取充值订单（支持分页、状态筛选）
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return adminError('未授权');
 
   try {
+    const { searchParams } = new URL(request.url);
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+    const pageSize = Math.min(50, Math.max(1, parseInt(searchParams.get('pageSize') || '20')));
+    const statusFilter = searchParams.get('status') || 'pending_review'; // pending_review | all | completed | failed
+    const skip = (page - 1) * pageSize;
+
     // 获取汇率配置
     let exchangeRate = 7.2;
     try {
@@ -23,28 +29,74 @@ export async function GET(request: NextRequest) {
       console.log('获取汇率配置失败，使用默认值 7.2');
     }
 
-    const orders = await db.transaction.findMany({
-      where: { 
-        type: 'recharge',
-        status: { not: 'pending' },  // 不显示未提交凭证的订单
-      },
-      include: {
-        user: { select: { id: true, username: true, email: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 200,  // 最多返回200条，避免数据量过大
-    });
+    // 构建筛选条件
+    const where: any = {
+      type: 'recharge',
+      status: { not: 'pending' },  // 不显示未提交凭证的订单
+    };
 
-    // 为每个订单添加人民币金额（USDT订单不需要汇率转换）
-    const ordersWithCNY = orders.map(order => ({
+    if (statusFilter === 'pending_review') {
+      where.status = 'processing';
+    } else if (statusFilter === 'completed') {
+      where.status = 'completed';
+    } else if (statusFilter === 'failed') {
+      where.status = 'failed';
+    }
+    // 'all' 保持 status: { not: 'pending' }
+
+    // 并行查询：订单列表 + 总数 + 各状态计数
+    const [orders, total, pendingCount] = await Promise.all([
+      db.transaction.findMany({
+        where,
+        select: {
+          id: true,
+          userId: true,
+          type: true,
+          amount: true,
+          status: true,
+          paymentMethod: true,
+          paymentNetwork: true,
+          // 排除 paymentProof 和 txHash 大字段，仅返回是否存在
+          createdAt: true,
+          updatedAt: true,
+          user: { select: { id: true, username: true, email: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      db.transaction.count({ where }),
+      db.transaction.count({ where: { type: 'recharge', status: 'processing' } }),
+    ]);
+
+    // 单独查询哪些订单有凭证（只查布尔值，不拉内容）
+    const orderIds = orders.map(o => o.id);
+    const proofFlags = orderIds.length > 0
+      ? await db.$queryRawUnsafe<Array<{ id: string; has_tx: boolean; has_proof: boolean }>>(
+          `SELECT id, ("txHash" IS NOT NULL AND "txHash" != '') as has_tx, ("paymentProof" IS NOT NULL AND "paymentProof" != '') as has_proof FROM "Transaction" WHERE id IN (${orderIds.map((_, i) => `$${i + 1}`).join(',')})`,
+          ...orderIds
+        )
+      : [];
+
+    const proofMap = new Map(proofFlags.map(p => [p.id, { hasTxHash: !!p.has_tx, hasPaymentProof: !!p.has_proof }]));
+
+    // 为每个订单添加人民币金额和凭证标记
+    const ordersWithExtra = orders.map(order => ({
       ...order,
       cnyAmount: order.paymentMethod === 'usdt' 
-        ? null  // USDT 直接按美元计价，不转换CNY
+        ? null
         : Math.ceil(order.amount * exchangeRate),
-      exchangeRate: exchangeRate,
+      exchangeRate,
+      hasTxHash: proofMap.get(order.id)?.hasTxHash || false,
+      hasPaymentProof: proofMap.get(order.id)?.hasPaymentProof || false,
     }));
 
-    return NextResponse.json({ orders: ordersWithCNY, exchangeRate });
+    return NextResponse.json({
+      orders: ordersWithExtra,
+      exchangeRate,
+      pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+      pendingCount,
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
