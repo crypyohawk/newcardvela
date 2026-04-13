@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
     const status = searchParams.get('status');
     const search = searchParams.get('search');
+    const tokenSearch = searchParams.get('tokenSearch');
 
     const where: any = {};
     // 默认不显示已吊销的 Key，除非明确筛选
@@ -24,7 +25,12 @@ export async function GET(request: NextRequest) {
     } else {
       where.status = { not: 'revoked' };
     }
-    if (search) {
+    if (tokenSearch) {
+      where.OR = [
+        { newApiTokenName: { contains: tokenSearch, mode: 'insensitive' } },
+        ...(isNaN(Number(tokenSearch)) ? [] : [{ newApiTokenId: Number(tokenSearch) }]),
+      ];
+    } else if (search) {
       where.OR = [
         { keyName: { contains: search, mode: 'insensitive' } },
         { apiKey: { contains: search, mode: 'insensitive' } },

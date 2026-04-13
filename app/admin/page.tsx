@@ -169,6 +169,9 @@ export default function AdminPage() {
   const [aiUsageStats, setAiUsageStats] = useState<any>(null);
   const [aiKeys, setAiKeys] = useState<any[]>([]);
   const [aiKeySearch, setAiKeySearch] = useState('');
+  const [tokenSearchInput, setTokenSearchInput] = useState('');
+  const [tokenSearchResult, setTokenSearchResult] = useState<any[] | null>(null);
+  const [tokenSearching, setTokenSearching] = useState(false);
   const [selectedAIUserId, setSelectedAIUserId] = useState<string | null>(null);
   const [selectedAIUserDetail, setSelectedAIUserDetail] = useState<AdminAIUserDetail | null>(null);
   const [aiUserDetailLoading, setAiUserDetailLoading] = useState(false);
@@ -695,6 +698,25 @@ export default function AdminPage() {
       if (providersRes.ok) { const d = await providersRes.json(); setAiProviders(d.providers || []); }
     } catch (error) {
       console.error('获取 AI 管理数据失败:', error);
+    }
+  };
+
+  const handleTokenSearch = async () => {
+    const q = tokenSearchInput.trim();
+    if (!q) { setTokenSearchResult(null); return; }
+    setTokenSearching(true);
+    try {
+      const res = await fetch(`/api/admin/ai-keys?tokenSearch=${encodeURIComponent(q)}&limit=10`, {
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setTokenSearchResult(d.keys || []);
+      }
+    } catch (error) {
+      console.error('Token 反查失败:', error);
+    } finally {
+      setTokenSearching(false);
     }
   };
 
@@ -2872,6 +2894,83 @@ export default function AdminPage() {
                   placeholder="搜索用户名或邮箱..."
                   className="w-full bg-slate-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              {/* Token 反查 */}
+              <div className="mb-4 rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm font-medium">🔍 New API Token 反查</span>
+                  <span className="text-xs text-gray-500">输入 New API 日志中的令牌名（如 proj-07785277）</span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={tokenSearchInput}
+                    onChange={(e) => setTokenSearchInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleTokenSearch()}
+                    placeholder="输入 Token 名称，如 proj-07785277"
+                    className="flex-1 bg-slate-900 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleTokenSearch}
+                    disabled={tokenSearching}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium disabled:opacity-50"
+                  >
+                    {tokenSearching ? '查询中...' : '反查'}
+                  </button>
+                  {tokenSearchResult !== null && (
+                    <button
+                      type="button"
+                      onClick={() => { setTokenSearchResult(null); setTokenSearchInput(''); }}
+                      className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm"
+                    >
+                      清除
+                    </button>
+                  )}
+                </div>
+                {tokenSearchResult !== null && (
+                  <div className="mt-3">
+                    {tokenSearchResult.length === 0 ? (
+                      <div className="text-sm text-gray-500 py-2">未找到匹配的 Key</div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="text-xs text-gray-400">找到 {tokenSearchResult.length} 个匹配 Key：</div>
+                        {tokenSearchResult.map((key: any) => (
+                          <div key={key.id} className="rounded-lg bg-slate-900/80 border border-slate-700 px-4 py-3">
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <span className="font-medium text-white">{key.keyName}</span>
+                                <code className="text-xs text-cyan-300 bg-slate-800 px-1.5 py-0.5 rounded">
+                                  {key.apiKey}
+                                </code>
+                                <span className={`text-xs px-2 py-0.5 rounded ${
+                                  key.status === 'active' ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'
+                                }`}>
+                                  {key.status === 'active' ? '正常' : '已停用'}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => { fetchAIUserDetail(key.user?.id); setTokenSearchResult(null); setTokenSearchInput(''); }}
+                                className="text-xs text-blue-400 hover:text-blue-300"
+                              >
+                                查看用户详情 →
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-4 mt-2 text-xs text-gray-400 flex-wrap">
+                              <span>用户: <span className="text-gray-200">{key.user?.username}</span></span>
+                              <span>邮箱: <span className="text-gray-200">{key.user?.email}</span></span>
+                              <span>套餐: <span className="text-gray-200">{key.tier?.displayName}</span></span>
+                              <span>本月: <span className="text-purple-300">${Number(key.monthUsed || 0).toFixed(4)}</span></span>
+                              <span>累计: <span className="text-orange-300">${Number(key.totalUsed || 0).toFixed(4)}</span></span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-[360px,1fr] gap-4">
                 <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-4">
