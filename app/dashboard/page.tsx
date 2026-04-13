@@ -1821,81 +1821,102 @@ export default function DashboardPage() {
 
             {/* 可选套餐 — 直接展示在 Key 区上方 */}
             {aiTiers.length > 0 && (
-              <div className="bg-slate-800 rounded-xl p-6">
-                <h2 className="text-xl font-bold mb-4">📦 可选套餐</h2>
-                <div className="grid md:grid-cols-2 gap-4">
-                  {aiTiers.map((tier: any) => (
-                    <div key={tier.id} className={`rounded-xl p-5 border transition-all hover:scale-[1.02] ${
-                      tier.modelGroup === 'gpt' ? 'border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-emerald-900/10' :
-                      tier.modelGroup === 'mixed' ? 'border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-purple-900/10' :
-                      'border-orange-500/30 bg-gradient-to-br from-orange-500/5 to-amber-900/10'
-                    }`}>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {tier.modelGroup === 'gpt' ? <span className="text-lg">🤖</span> : tier.modelGroup === 'mixed' ? <span className="text-lg">🔀</span> : <span><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-[#D4A27C] inline"><path d="M12 1L13.5 9L19 4L15 10.5L23 12L15 13.5L19 20L13.5 15L12 23L10.5 15L5 20L9 13.5L1 12L9 10.5L5 4L10.5 9Z"/></svg></span>}
-                          <span className="font-bold text-lg">{tier.displayName}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded ${
-                            tier.modelGroup === 'gpt' ? 'bg-emerald-500/20 text-emerald-400' :
-                            tier.modelGroup === 'mixed' ? 'bg-purple-500/20 text-purple-400' :
-                            'bg-amber-500/20 text-amber-400'
-                          }`}>
-                            {tier.modelGroup === 'gpt' ? 'GPT' : tier.modelGroup === 'mixed' ? '混合' : 'Claude'}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => { setNewKeyTier(tier.id); setShowCreateKey(true); }}
-                          disabled={tier.canUse === false}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
-                            tier.canUse === false
-                              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                              : 'bg-blue-600 hover:bg-blue-700'
-                          }`}
-                        >
-                          {tier.canUse === false ? '🔒 需企业认证' : '+ 创建 Key'}
-                        </button>
+              <div className="space-y-4">
+                <h2 className="text-xl font-bold">📦 可选套餐</h2>
+                {aiTiers.map((tier: any) => (
+                  <div key={tier.id} className={`rounded-xl p-6 border transition-all ${
+                    tier.modelGroup === 'gpt' ? 'border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-emerald-900/10' :
+                    tier.modelGroup === 'mixed' ? 'border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-purple-900/10' :
+                    'border-orange-500/30 bg-gradient-to-br from-orange-500/5 to-amber-900/10'
+                  }`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {tier.modelGroup === 'gpt' ? <span className="text-lg">🤖</span> : tier.modelGroup === 'mixed' ? <span className="text-lg">🔀</span> : <span><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-[#D4A27C] inline"><path d="M12 1L13.5 9L19 4L15 10.5L23 12L15 13.5L19 20L13.5 15L12 23L10.5 15L5 20L9 13.5L1 12L9 10.5L5 4L10.5 9Z"/></svg></span>}
+                        <span className="font-bold text-lg">{tier.displayName}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded ${
+                          tier.modelGroup === 'gpt' ? 'bg-emerald-500/20 text-emerald-400' :
+                          tier.modelGroup === 'mixed' ? 'bg-purple-500/20 text-purple-400' :
+                          'bg-amber-500/20 text-amber-400'
+                        }`}>
+                          {tier.modelGroup === 'gpt' ? 'GPT' : tier.modelGroup === 'mixed' ? '混合' : 'Claude'}
+                        </span>
                       </div>
-                      {tier.description && <p className="text-sm text-gray-400 mb-3">{tier.description}</p>}
-                      <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Input 价格</span>
-                          <span>${tier.pricePerMillionInput}/百万 tokens</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Output 价格</span>
-                          <span>${tier.pricePerMillionOutput}/百万 tokens</span>
-                        </div>
+                      <button
+                        onClick={() => { setNewKeyTier(tier.id); setShowCreateKey(true); }}
+                        disabled={tier.canUse === false}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${
+                          tier.canUse === false
+                            ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                            : 'bg-blue-600 hover:bg-blue-700'
+                        }`}
+                      >
+                        {tier.canUse === false ? '🔒 需企业认证' : '+ 创建 Key'}
+                      </button>
+                    </div>
+                    {tier.description && <p className="text-sm text-gray-400 mb-4">{tier.description}</p>}
+
+                    {/* 基础价格 + 特性 */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                      <div className="rounded-lg bg-slate-800/80 p-3">
+                        <div className="text-xs text-gray-400">基础 Input 价格</div>
+                        <div className="text-lg font-bold text-cyan-300 mt-1">${tier.pricePerMillionInput}<span className="text-xs text-gray-400 font-normal">/百万tokens</span></div>
                       </div>
-                      {tier.models && tier.models.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-slate-700">
-                          <p className="text-xs text-gray-500 mb-2">可用模型（倍率 = 相对基础价格的乘数）</p>
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                            {tier.models.map((m: any, i: number) => (
-                              <div key={i} className="flex justify-between text-xs">
-                                <span className="text-gray-300 truncate">{m.name}</span>
-                                <span className={`ml-2 font-mono ${
-                                  m.ratio >= 3 ? 'text-red-400' :
-                                  m.ratio >= 1 ? 'text-yellow-400' :
-                                  'text-green-400'
-                                }`}>
-                                  {m.ratio}x
-                                </span>
-                              </div>
+                      <div className="rounded-lg bg-slate-800/80 p-3">
+                        <div className="text-xs text-gray-400">基础 Output 价格</div>
+                        <div className="text-lg font-bold text-orange-300 mt-1">${tier.pricePerMillionOutput}<span className="text-xs text-gray-400 font-normal">/百万tokens</span></div>
+                      </div>
+                      {tier.features && tier.features.length > 0 && (
+                        <div className="rounded-lg bg-slate-800/80 p-3 col-span-2">
+                          <div className="text-xs text-gray-400 mb-1">核心特性</div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1">
+                            {tier.features.map((f: string, i: number) => (
+                              <span key={i} className="text-sm text-gray-300 flex items-center gap-1">
+                                <span className="text-green-400">✓</span> {f}
+                              </span>
                             ))}
                           </div>
                         </div>
                       )}
-                      {tier.features && tier.features.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-slate-700">
-                          {tier.features.map((f: string, i: number) => (
-                            <div key={i} className="text-sm text-gray-300 flex items-center gap-1.5">
-                              <span className="text-green-400">✓</span> {f}
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </div>
-                  ))}
-                </div>
+
+                    {/* 模型定价表 */}
+                    {tier.models && tier.models.length > 0 && (
+                      <div className="border-t border-slate-700 pt-4">
+                        <p className="text-sm font-medium text-gray-300 mb-3">可用模型定价明细</p>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-gray-400 border-b border-slate-700">
+                                <th className="pb-2 text-left font-medium">模型名称</th>
+                                <th className="pb-2 text-center font-medium">倍率</th>
+                                <th className="pb-2 text-right font-medium">Input $/百万tokens</th>
+                                <th className="pb-2 text-right font-medium">Output $/百万tokens</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {tier.models.map((m: any, i: number) => (
+                                <tr key={i} className="border-b border-slate-700/30 hover:bg-slate-800/40">
+                                  <td className="py-2 text-gray-200 font-mono text-xs">{m.name}</td>
+                                  <td className="py-2 text-center">
+                                    <span className={`font-mono text-xs px-1.5 py-0.5 rounded ${
+                                      m.ratio >= 3 ? 'bg-red-500/15 text-red-400' :
+                                      m.ratio >= 1 ? 'bg-yellow-500/15 text-yellow-400' :
+                                      'bg-green-500/15 text-green-400'
+                                    }`}>
+                                      {m.ratio}x
+                                    </span>
+                                  </td>
+                                  <td className="py-2 text-right text-cyan-300 font-mono text-xs">${(tier.pricePerMillionInput * m.ratio).toFixed(2)}</td>
+                                  <td className="py-2 text-right text-orange-300 font-mono text-xs">${(tier.pricePerMillionOutput * m.ratio).toFixed(2)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
 

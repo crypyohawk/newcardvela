@@ -172,6 +172,7 @@ export default function AdminPage() {
   const [selectedAIUserId, setSelectedAIUserId] = useState<string | null>(null);
   const [selectedAIUserDetail, setSelectedAIUserDetail] = useState<AdminAIUserDetail | null>(null);
   const [aiUserDetailLoading, setAiUserDetailLoading] = useState(false);
+  const [showTxModal, setShowTxModal] = useState(false);
   const [showAddTier, setShowAddTier] = useState(false);
   const [editingTier, setEditingTier] = useState<any>(null);
   const [tierForm, setTierForm] = useState({ displayName: '', description: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0' });
@@ -3019,7 +3020,46 @@ export default function AdminPage() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 2xl:grid-cols-[1.4fr,0.9fr] gap-4">
+                      <div className="space-y-4">
+                        {/* 最近交易 - 可展开弹窗 */}
+                        <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="font-semibold">最近交易</div>
+                            {(selectedAIUserDetail.user?.transactions || []).length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setShowTxModal(true)}
+                                className="text-xs text-blue-400 hover:text-blue-300"
+                              >
+                                查看全部 ({selectedAIUserDetail.user?.transactions?.length || 0}) →
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex gap-3 overflow-x-auto pb-1">
+                            {(selectedAIUserDetail.user?.transactions || []).slice(0, 5).map((tx: any) => {
+                              const statusMeta = getTransactionStatusMeta(tx.status);
+                              return (
+                                <div key={tx.id} className="rounded-lg bg-slate-900/70 px-3 py-2 min-w-[160px] flex-shrink-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs text-gray-300">{getTransactionTypeLabel(tx.type)}</span>
+                                    <span className={`text-sm font-semibold ${Number(tx.amount) >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+                                      {Number(tx.amount) >= 0 ? '+' : ''}{Number(tx.amount).toFixed(2)}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between mt-1">
+                                    <span className="text-xs text-gray-500">{formatDateTime(tx.createdAt)}</span>
+                                    <span className={`text-xs px-1.5 py-0.5 rounded ${statusMeta.className}`}>{statusMeta.text}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {(selectedAIUserDetail.user?.transactions || []).length === 0 && (
+                              <div className="text-sm text-gray-500">暂无交易记录</div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* AI Key 明细 - 全宽 */}
                         <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4 overflow-x-auto">
                           <div className="flex items-center justify-between mb-4">
                             <div>
@@ -3029,7 +3069,7 @@ export default function AdminPage() {
                             <div className="text-xs text-gray-400">{selectedAIUserDetail.aiKeys?.length || 0} 个 Key</div>
                           </div>
 
-                          <table className="w-full text-sm min-w-[760px]">
+                          <table className="w-full text-sm">
                             <thead>
                               <tr className="text-gray-400 border-b border-slate-700">
                                 <th className="pb-3 text-left">Key 名称</th>
@@ -3110,96 +3150,51 @@ export default function AdminPage() {
                             </tbody>
                           </table>
                         </div>
-
-                        <div className="space-y-4">
-                          <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
-                            <div className="font-semibold mb-4">账户概览</div>
-                            <div className="space-y-3 text-sm">
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-gray-400">注册时间</span>
-                                <span>{formatDateTime(selectedAIUserDetail.user?.createdAt)}</span>
-                              </div>
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-gray-400">累计充值</span>
-                                <span className="text-green-300">${Number(selectedAIUserDetail.stats?.totalRecharge || 0).toFixed(2)}</span>
-                              </div>
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-gray-400">累计提现</span>
-                                <span className="text-red-300">${Number(selectedAIUserDetail.stats?.totalWithdraw || 0).toFixed(2)}</span>
-                              </div>
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-gray-400">最近 50 条交易</span>
-                                <span>{selectedAIUserDetail.user?.transactions?.length || 0}</span>
-                              </div>
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-gray-400">卡片数量</span>
-                                <span>{selectedAIUserDetail.user?.userCards?.length || 0}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
-                            <div className="font-semibold mb-4">最近交易</div>
-                            <div className="space-y-3">
-                              {(selectedAIUserDetail.user?.transactions || []).slice(0, 6).map((tx: any) => {
-                                const statusMeta = getTransactionStatusMeta(tx.status);
-                                return (
-                                  <div key={tx.id} className="rounded-lg bg-slate-900/70 px-3 py-3">
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div>
-                                        <div className="font-medium">{getTransactionTypeLabel(tx.type)}</div>
-                                        <div className="text-xs text-gray-500 mt-1">{formatDateTime(tx.createdAt)}</div>
-                                      </div>
-                                      <div className="text-right">
-                                        <div className={`font-semibold ${Number(tx.amount) >= 0 ? 'text-green-300' : 'text-red-300'}`}>
-                                          {Number(tx.amount) >= 0 ? '+' : ''}{Number(tx.amount).toFixed(2)}
-                                        </div>
-                                        <span className={`inline-flex mt-1 text-xs px-2 py-0.5 rounded ${statusMeta.className}`}>
-                                          {statusMeta.text}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                              {(selectedAIUserDetail.user?.transactions || []).length === 0 && (
-                                <div className="text-sm text-gray-500">暂无交易记录</div>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
-                            <div className="font-semibold mb-4">卡片情况</div>
-                            <div className="space-y-3">
-                              {(selectedAIUserDetail.user?.userCards || []).slice(0, 6).map((card: any) => {
-                                const statusMeta = getCardStatusMeta(card.status);
-                                return (
-                                  <div key={card.id} className="rounded-lg bg-slate-900/70 px-3 py-3">
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div>
-                                        <div className="font-medium">{card.cardType?.name || '未命名卡种'}</div>
-                                        <div className="text-xs text-gray-500 mt-1">**** **** **** {card.cardNoLast4 || '----'}</div>
-                                      </div>
-                                      <div className="text-right">
-                                        <div className="text-green-300 font-semibold">${Number(card.balance || 0).toFixed(2)}</div>
-                                        <span className={`inline-flex mt-1 text-xs px-2 py-0.5 rounded ${statusMeta.className}`}>
-                                          {statusMeta.text}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                              {(selectedAIUserDetail.user?.userCards || []).length === 0 && (
-                                <div className="text-sm text-gray-500">暂无卡片</div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
                       </div>
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 最近交易弹窗 */}
+        {showTxModal && selectedAIUserDetail && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowTxModal(false)}>
+            <div className="bg-slate-800 rounded-xl w-full max-w-2xl max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between p-5 border-b border-slate-700">
+                <div>
+                  <div className="font-bold text-lg">最近交易记录</div>
+                  <div className="text-xs text-gray-400 mt-1">{selectedAIUserDetail.user?.username} · 共 {selectedAIUserDetail.user?.transactions?.length || 0} 条</div>
+                </div>
+                <button type="button" onClick={() => setShowTxModal(false)} className="text-gray-400 hover:text-white text-xl px-2">✕</button>
+              </div>
+              <div className="overflow-y-auto max-h-[65vh] p-5 space-y-3">
+                {(selectedAIUserDetail.user?.transactions || []).map((tx: any) => {
+                  const statusMeta = getTransactionStatusMeta(tx.status);
+                  return (
+                    <div key={tx.id} className="rounded-lg bg-slate-900/70 px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-medium">{getTransactionTypeLabel(tx.type)}</div>
+                          <div className="text-xs text-gray-500 mt-1">{formatDateTime(tx.createdAt)}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className={`font-semibold ${Number(tx.amount) >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+                            {Number(tx.amount) >= 0 ? '+' : ''}{Number(tx.amount).toFixed(2)}
+                          </div>
+                          <span className={`inline-flex mt-1 text-xs px-2 py-0.5 rounded ${statusMeta.className}`}>
+                            {statusMeta.text}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {(selectedAIUserDetail.user?.transactions || []).length === 0 && (
+                  <div className="text-sm text-gray-500 text-center py-8">暂无交易记录</div>
+                )}
               </div>
             </div>
           </div>
