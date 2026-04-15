@@ -28,11 +28,12 @@ export async function GET(request: NextRequest) {
     }
 
     // 根据用户角色过滤卡片类型
-    // admin 可以看到所有，普通用户看 user，代理商看 agent
+    // admin 可以看到所有，普通用户和企业用户看 user，代理商看 agent
+    const targetRole = userRole === 'admin' ? undefined : userRole === 'agent' ? 'agent' : 'user';
     const cardTypes = await prisma.cardType.findMany({
       where: { 
         isActive: true,
-        targetRole: userRole === 'admin' ? undefined : userRole
+        targetRole,
       },
       select: {
         id: true,
