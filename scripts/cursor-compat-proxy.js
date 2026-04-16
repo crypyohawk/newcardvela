@@ -22,6 +22,11 @@ const UPSTREAM_HOST = '127.0.0.1';
 const UPSTREAM_PORT = 3001;
 const LISTEN_PORT = parseInt(process.env.COMPAT_PORT || '3002', 10);
 
+// ─── 503/502 自动重试配置 ───
+const RETRY_MAX = 3;                     // 最多重试次数
+const RETRY_DELAYS = [500, 1000, 2000];  // 重试延迟 (ms)
+const RETRYABLE_STATUS = new Set([502, 503]);
+
 // ─── Responses API → Chat Completions 转换 ───
 
 // 规范化 content parts 的 type 字段
@@ -281,43 +286,106 @@ function fixReasoningWithTools(body) {
 
 // ─── HTTP 代理 ───
 
-function proxyRequest(clientReq, clientRes, bodyOverride) {
-  const options = {
-    hostname: UPSTREAM_HOST,
-    port: UPSTREAM_PORT,
-    path: clientReq.url,
-    method: clientReq.method,
-    headers: { ...clientReq.headers },
-  };
+// 单次代理请求, 返回 {statusCode, headers, body} 而不直接写入 clientRes
+function doUpstreamRequest(clientReq, bodyOverride) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: UPSTREAM_HOST,
+      port: UPSTREAM_PORT,
+      path: clientReq.url,
+      method: clientReq.method,
+      headers: { ...clientReq.headers },
+    };
 
-  // 更新 content-length
-  if (bodyOverride !== null) {
-    const buf = Buffer.from(bodyOverride, 'utf8');
-    options.headers['content-length'] = buf.length;
-  }
-
-  // 移除 host header, 让 upstream 自己决定
-  delete options.headers['host'];
-
-  const upstreamReq = http.request(options, (upstreamRes) => {
-    clientRes.writeHead(upstreamRes.statusCode, upstreamRes.headers);
-    upstreamRes.pipe(clientRes, { end: true });
-  });
-
-  upstreamReq.on('error', (err) => {
-    console.error(`[proxy] upstream error: ${err.message}`);
-    if (!clientRes.headersSent) {
-      clientRes.writeHead(502, { 'content-type': 'application/json' });
+    if (bodyOverride !== null) {
+      const buf = Buffer.from(bodyOverride, 'utf8');
+      options.headers['content-length'] = buf.length;
     }
-    clientRes.end(JSON.stringify({
-      error: { message: 'upstream connection failed', type: 'proxy_error' },
-    }));
-  });
 
-  if (bodyOverride !== null) {
-    upstreamReq.end(bodyOverride);
-  } else {
-    clientReq.pipe(upstreamReq, { end: true });
+    delete options.headers['host'];
+
+    const upstreamReq = http.request(options, (upstreamRes) => {
+      // 对于流式响应或非重试状态码, 直接 resolve 并附上 stream
+      const isRetryable = RETRYABLE_STATUS.has(upstreamRes.statusCode);
+      const isStream = (upstreamRes.headers['content-type'] || '').includes('text/event-stream');
+
+      if (!isRetryable || isStream) {
+        // 不需要缓冲, 直接交出 stream
+        resolve({ statusCode: upstreamRes.statusCode, headers: upstreamRes.headers, stream: upstreamRes });
+        return;
+      }
+
+      // 缓冲小响应体以便判断是否需要重试
+      const chunks = [];
+      upstreamRes.on('data', c => chunks.push(c));
+      upstreamRes.on('end', () => {
+        resolve({ statusCode: upstreamRes.statusCode, headers: upstreamRes.headers, body: Buffer.concat(chunks) });
+      });
+      upstreamRes.on('error', reject);
+    });
+
+    upstreamReq.on('error', reject);
+
+    if (bodyOverride !== null) {
+      upstreamReq.end(bodyOverride);
+    } else {
+      // bodyOverride === null 但我们可能需要重试, 所以这里不 pipe
+      // 对于没有 body 的情况直接结束
+      upstreamReq.end();
+    }
+  });
+}
+
+// 带重试的代理请求
+async function proxyRequest(clientReq, clientRes, bodyOverride) {
+  // 对于非 POST 请求或没有 body 的 pipe 请求, 不支持重试 (无法重放 body)
+  const canRetry = bodyOverride !== null;
+
+  for (let attempt = 0; attempt <= (canRetry ? RETRY_MAX : 0); attempt++) {
+    try {
+      if (attempt > 0) {
+        const delay = RETRY_DELAYS[Math.min(attempt - 1, RETRY_DELAYS.length - 1)];
+        console.log(`[proxy] retry #${attempt} after ${delay}ms | path=${clientReq.url}`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+
+      const result = await doUpstreamRequest(clientReq, bodyOverride);
+
+      // 如果有 stream (非重试场景或成功的流式响应), 直接 pipe
+      if (result.stream) {
+        clientRes.writeHead(result.statusCode, result.headers);
+        result.stream.pipe(clientRes, { end: true });
+        return;
+      }
+
+      // 检查是否可重试
+      if (RETRYABLE_STATUS.has(result.statusCode) && canRetry && attempt < RETRY_MAX) {
+        console.log(`[proxy] upstream returned ${result.statusCode}, will retry | path=${clientReq.url} | attempt=${attempt + 1}/${RETRY_MAX}`);
+        continue;
+      }
+
+      // 最终响应 (成功或最后一次重试)
+      if (RETRYABLE_STATUS.has(result.statusCode) && attempt > 0) {
+        console.log(`[proxy] all ${RETRY_MAX} retries exhausted, returning ${result.statusCode} | path=${clientReq.url}`);
+      }
+      clientRes.writeHead(result.statusCode, result.headers);
+      clientRes.end(result.body);
+      return;
+
+    } catch (err) {
+      if (attempt < (canRetry ? RETRY_MAX : 0)) {
+        console.error(`[proxy] upstream error on attempt ${attempt + 1}: ${err.message}, will retry`);
+        continue;
+      }
+      console.error(`[proxy] upstream error: ${err.message}`);
+      if (!clientRes.headersSent) {
+        clientRes.writeHead(502, { 'content-type': 'application/json' });
+      }
+      clientRes.end(JSON.stringify({
+        error: { message: 'upstream connection failed', type: 'proxy_error' },
+      }));
+      return;
+    }
   }
 }
 
@@ -341,12 +409,38 @@ function collectBody(req) {
 }
 
 const server = http.createServer(async (req, res) => {
-  // 只处理 POST /v1/chat/completions
+  // POST /v1/chat/completions: 需要解析和可能转换 body
   const isChatCompletions = req.method === 'POST' && req.url && req.url.startsWith('/v1/chat/completions');
+  // POST /v1/messages: Claude Code 原生格式, 需要缓冲 body 以支持重试
+  const isMessages = req.method === 'POST' && req.url && req.url.startsWith('/v1/messages');
 
-  if (!isChatCompletions) {
-    // 其他请求完全透传
+  if (!isChatCompletions && !isMessages) {
+    // 其他请求 (GET /v1/models 等): 直接透传, 不重试
     return proxyRequest(req, res, null);
+  }
+
+  if (isMessages) {
+    // Claude Code /v1/messages 请求: 缓冲 body 以支持 503 自动重试
+    try {
+      const rawBody = await collectBody(req);
+      // [DEBUG-MESSAGES] 临时调试日志, 后续确认无问题后删除
+      try {
+        const parsed = JSON.parse(rawBody);
+        const ua = req.headers['user-agent'] || '';
+        console.log(`[messages] ${req.url} | model=${parsed.model || 'unknown'} | stream=${!!parsed.stream} | tools=${Array.isArray(parsed.tools) ? parsed.tools.length : 0} | UA=${ua.substring(0, 50)}`);
+      } catch (_) { /* ignore parse errors for logging */ }
+      // [/DEBUG-MESSAGES]
+      return proxyRequest(req, res, rawBody);
+    } catch (err) {
+      console.error(`[compat] error buffering /v1/messages: ${err.message}`);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'content-type': 'application/json' });
+      }
+      res.end(JSON.stringify({
+        error: { message: 'proxy body buffer error', type: 'proxy_error' },
+      }));
+      return;
+    }
   }
 
   try {
@@ -416,5 +510,5 @@ const server = http.createServer(async (req, res) => {
 server.listen(LISTEN_PORT, '127.0.0.1', () => {
   console.log(`[compat-proxy] listening on 127.0.0.1:${LISTEN_PORT}`);
   console.log(`[compat-proxy] upstream: ${UPSTREAM_HOST}:${UPSTREAM_PORT}`);
-  console.log(`[compat-proxy] fixes: Responses API→Chat Completions, max_tokens→max_completion_tokens`);
+  console.log(`[compat-proxy] fixes: Responses API→Chat Completions, max_tokens→max_completion_tokens, 503 auto-retry (max ${RETRY_MAX})`);
 });
