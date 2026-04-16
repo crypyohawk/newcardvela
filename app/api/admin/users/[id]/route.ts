@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import bcrypt from 'bcryptjs';
 import { prisma } from '../../../../../src/lib/prisma';
 import { verifyAdmin, adminError } from '../../../../../src/lib/adminAuth';
 import { getCardDetail } from '../../../../../src/lib/gsalary';
@@ -165,6 +166,24 @@ export async function POST(
   try {
     const body = await request.json();
     const { action, gsalaryCardId, cardTypeId } = body;
+
+    // 管理员重置用户密码
+    if (action === 'resetPassword') {
+      const { newPassword } = body;
+      if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+        return NextResponse.json({ error: '密码至少6位' }, { status: 400 });
+      }
+      const user = await prisma.user.findUnique({ where: { id: params.id } });
+      if (!user) {
+        return NextResponse.json({ error: '用户不存在' }, { status: 404 });
+      }
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await prisma.user.update({
+        where: { id: params.id },
+        data: { password: hashedPassword },
+      });
+      return NextResponse.json({ success: true, message: '密码已重置' });
+    }
 
     if (action !== 'bindExistingCard') {
       return NextResponse.json({ error: '未知操作' }, { status: 400 });

@@ -82,6 +82,10 @@ export default function UserDetailPage() {
   const [binding, setBinding] = useState(false);
   const [bindError, setBindError] = useState('');
   const [bindSuccess, setBindSuccess] = useState('');
+  const [showResetPwd, setShowResetPwd] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [resettingPwd, setResettingPwd] = useState(false);
+  const [resetPwdMsg, setResetPwdMsg] = useState('');
 
   const getToken = () => localStorage.getItem('token') || '';
 
@@ -165,6 +169,34 @@ export default function UserDetailPage() {
       setBindError(error.message || '绑定失败');
     } finally {
       setBinding(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      setResetPwdMsg('密码至少6位');
+      return;
+    }
+    try {
+      setResettingPwd(true);
+      setResetPwdMsg('');
+      const res = await fetch(`/api/admin/users/${params.id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ action: 'resetPassword', newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '重置失败');
+      setResetPwdMsg('密码已重置');
+      setNewPassword('');
+      setTimeout(() => { setShowResetPwd(false); setResetPwdMsg(''); }, 2000);
+    } catch (error: any) {
+      setResetPwdMsg(error.message || '重置失败');
+    } finally {
+      setResettingPwd(false);
     }
   };
 
@@ -275,6 +307,46 @@ export default function UserDetailPage() {
               <span className="text-gray-400">用户ID：</span>
               <span className="font-mono text-xs">{user.id}</span>
             </div>
+          </div>
+
+          {/* 重置密码 */}
+          <div className="mt-4 pt-4 border-t border-slate-700">
+            {!showResetPwd ? (
+              <button
+                onClick={() => setShowResetPwd(true)}
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-500 rounded text-sm"
+              >
+                重置密码
+              </button>
+            ) : (
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="输入新密码（至少6位）"
+                  className="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm w-64"
+                />
+                <button
+                  onClick={handleResetPassword}
+                  disabled={resettingPwd}
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 rounded text-sm"
+                >
+                  {resettingPwd ? '重置中...' : '确认重置'}
+                </button>
+                <button
+                  onClick={() => { setShowResetPwd(false); setNewPassword(''); setResetPwdMsg(''); }}
+                  className="px-4 py-2 bg-slate-600 hover:bg-slate-500 rounded text-sm"
+                >
+                  取消
+                </button>
+                {resetPwdMsg && (
+                  <span className={`text-sm ${resetPwdMsg === '密码已重置' ? 'text-green-400' : 'text-red-400'}`}>
+                    {resetPwdMsg}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
