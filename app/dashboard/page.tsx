@@ -969,12 +969,12 @@ export default function DashboardPage() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3">
-                <h3 className="font-bold text-white text-lg">Claude AI 服务</h3>
+                <h3 className="font-bold text-white text-base sm:text-lg">Claude AI 服务</h3>
                 {aiKeys.length > 0 && (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300">{aiKeys.length} 个 Key 运行中</span>
                 )}
               </div>
-              <p className="text-sm text-gray-400 mt-0.5">稳定高速的 Claude 官转 API 代理 · 支持 vscode / Cursor / Claude Code 等全系列工具</p>
+              <p className="text-xs sm:text-sm text-gray-400 mt-0.5">稳定高速的 Claude 官转 API 代理 · 支持 vscode / Cursor / Claude Code 等全系列工具</p>
             </div>
             <div className="flex-shrink-0 hidden md:flex items-center gap-2 text-sm">
               <span className={`px-3 py-1.5 rounded-lg transition ${
@@ -1223,7 +1223,7 @@ export default function DashboardPage() {
               <img 
                 src={welfareQrcode} 
                 alt="扫码进群" 
-                className="w-72 h-72 sm:w-80 sm:h-80 rounded-2xl bg-white p-3 shadow-2xl" 
+                className="w-56 h-56 sm:w-72 sm:h-72 md:w-80 md:h-80 rounded-2xl bg-white p-3 shadow-2xl" 
               />
               <button 
                 onClick={() => setShowQrModal(false)}
@@ -1238,8 +1238,8 @@ export default function DashboardPage() {
 
         {/* 卡片详情弹窗 */}
         {showCardDetail && selectedCard && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-slate-800 p-6 rounded-xl w-full max-w-md">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+            <div className="bg-slate-800 p-4 sm:p-6 rounded-xl w-full max-w-md">
               <h3 className="text-lg font-bold mb-4">卡片详情</h3>
               
               {!cardDetail ? (
@@ -1365,7 +1365,7 @@ export default function DashboardPage() {
                     </div>
                     
                     {/* 费用信息 - 紧凑布局 */}
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mb-3">
+                    <div className="grid grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-1 text-xs sm:text-sm mb-3">
                       <div className="flex justify-between">
                         <span className="opacity-70">开卡费:</span>
                         <span className="font-medium">${card.displayOpenFee ?? card.openFee}</span>
@@ -1712,7 +1712,7 @@ export default function DashboardPage() {
                 <div className="bg-slate-700 rounded-lg p-4">
                   <h3 className="font-semibold mb-3">我的推荐码</h3>
                   <div className="flex items-center gap-3">
-                    <div className="flex-1 bg-slate-800 px-4 py-3 rounded-lg font-mono text-xl tracking-wider">
+                    <div className="flex-1 bg-slate-800 px-4 py-3 rounded-lg font-mono text-sm sm:text-xl tracking-wider break-all">
                       {referralInfo.referralCode || '生成中...'}
                     </div>
                     <button
@@ -1738,7 +1738,7 @@ export default function DashboardPage() {
                         navigator.clipboard.writeText(referralInfo.referralLink || '');
                         setMessage({ type: 'success', text: '推荐链接已复制！' });
                       }}
-                      className="bg-green-600 px-4 py-3 rounded-lg hover:bg-green-700 whitespace-nowrap"
+                      className="bg-green-600 px-3 sm:px-4 py-3 rounded-lg hover:bg-green-700 whitespace-nowrap text-sm"
                     >
                       复制链接
                     </button>
@@ -1856,7 +1856,7 @@ export default function DashboardPage() {
                     {tier.description && <p className="text-sm text-gray-400 mb-4">{tier.description}</p>}
 
                     {/* 基础价格 + 特性 */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4">
                       <div className="rounded-lg bg-slate-800/80 p-3">
                         <div className="text-xs text-gray-400">基础 Input 价格</div>
                         <div className="text-lg font-bold text-cyan-300 mt-1">${tier.pricePerMillionInput}<span className="text-xs text-gray-400 font-normal">/百万tokens</span></div>
@@ -1888,16 +1888,16 @@ export default function DashboardPage() {
                             <thead>
                               <tr className="text-gray-400 border-b border-slate-700">
                                 <th className="pb-2 text-left font-medium">模型名称</th>
-                                <th className="pb-2 text-center font-medium">倍率</th>
-                                <th className="pb-2 text-right font-medium">Input $/百万tokens</th>
-                                <th className="pb-2 text-right font-medium">Output $/百万tokens</th>
+                                <th className="pb-2 text-center font-medium hidden sm:table-cell">倍率</th>
+                                <th className="pb-2 text-right font-medium">Input</th>
+                                <th className="pb-2 text-right font-medium">Output</th>
                               </tr>
                             </thead>
                             <tbody>
                               {tier.models.map((m: any, i: number) => (
                                 <tr key={i} className="border-b border-slate-700/30 hover:bg-slate-800/40">
                                   <td className="py-2 text-gray-200 font-mono text-xs">{m.name}</td>
-                                  <td className="py-2 text-center">
+                                  <td className="py-2 text-center hidden sm:table-cell">
                                     <span className={`font-mono text-xs px-1.5 py-0.5 rounded ${
                                       m.ratio >= 3 ? 'bg-red-500/15 text-red-400' :
                                       m.ratio >= 1 ? 'bg-yellow-500/15 text-yellow-400' :
@@ -2256,30 +2256,30 @@ export default function DashboardPage() {
                         <thead>
                           <tr className="text-gray-400 border-b border-slate-700">
                             <th className="text-left py-2 px-3">Key 名称（员工）</th>
-                            <th className="text-left py-2 px-3">标签</th>
+                            <th className="text-left py-2 px-3 hidden md:table-cell">标签</th>
                             <th className="text-right py-2 px-3">本月消费</th>
-                            <th className="text-right py-2 px-3">月限额</th>
-                            <th className="text-right py-2 px-3">累计消费</th>
+                            <th className="text-right py-2 px-3 hidden sm:table-cell">月限额</th>
+                            <th className="text-right py-2 px-3 hidden md:table-cell">累计消费</th>
                             <th className="text-center py-2 px-3">状态</th>
-                            <th className="text-left py-2 px-3">最后使用</th>
+                            <th className="text-left py-2 px-3 hidden sm:table-cell">最后使用</th>
                           </tr>
                         </thead>
                         <tbody>
                           {aiKeys.map((key: any) => (
                             <tr key={key.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition">
                               <td className="py-3 px-3 font-medium">{key.keyName}</td>
-                              <td className="py-3 px-3 text-gray-400 text-sm">{key.label || '-'}</td>
+                              <td className="py-3 px-3 text-gray-400 text-sm hidden md:table-cell">{key.label || '-'}</td>
                               <td className="py-3 px-3 text-right text-blue-400">${(key.monthUsed || 0).toFixed(4)}</td>
-                              <td className="py-3 px-3 text-right">
+                              <td className="py-3 px-3 text-right hidden sm:table-cell">
                                 {key.monthlyLimit ? <span className="text-yellow-400">${key.monthlyLimit}</span> : <span className="text-gray-500">不限</span>}
                               </td>
-                              <td className="py-3 px-3 text-right text-gray-300">${(key.totalUsed || 0).toFixed(2)}</td>
+                              <td className="py-3 px-3 text-right text-gray-300 hidden md:table-cell">${(key.totalUsed || 0).toFixed(2)}</td>
                               <td className="py-3 px-3 text-center">
                                 <span className={`text-xs px-2 py-0.5 rounded ${key.status === 'active' ? 'bg-green-600/20 text-green-400' : 'bg-red-600/20 text-red-400'}`}>
                                   {key.status === 'active' ? '正常' : '已停用'}
                                 </span>
                               </td>
-                              <td className="py-3 px-3 text-gray-400 text-sm">
+                              <td className="py-3 px-3 text-gray-400 text-sm hidden sm:table-cell">
                                 {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString('zh-CN') : '从未使用'}
                               </td>
                             </tr>
@@ -2298,8 +2298,8 @@ export default function DashboardPage() {
 
       {/* 创建 AI Key 弹窗 */}
       {showCreateKey && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 p-6 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+          <div className="bg-slate-800 p-4 sm:p-6 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">🔑 创建 API Key</h3>
             {(user?.aiBalance ?? 0) <= 0 && (
               <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 mb-4">
@@ -2419,8 +2419,8 @@ export default function DashboardPage() {
 
       {/* AI 钱包转账弹窗 */}
       {showAiTransfer && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 p-6 rounded-xl w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+          <div className="bg-slate-800 p-4 sm:p-6 rounded-xl w-full max-w-sm">
             <h3 className="text-lg font-bold mb-4">💰 AI 钱包转账</h3>
             {(() => {
               const normalizedRole = user?.role?.toLowerCase();
@@ -2505,8 +2505,8 @@ export default function DashboardPage() {
 
       {/* 企业账户申请弹窗 */}
       {showEnterpriseApply && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 p-6 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+          <div className="bg-slate-800 p-4 sm:p-6 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">🏢 申请企业账户</h3>
             <div className="space-y-4">
               <div>
@@ -2589,8 +2589,8 @@ export default function DashboardPage() {
 
       {/* 卡充值/提现弹窗 */}
       {selectedCardForRecharge && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 p-6 rounded-xl w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+          <div className="bg-slate-800 p-4 sm:p-6 rounded-xl w-full max-w-md">
             <h3 className="text-lg font-bold mb-4">卡片余额管理</h3>
             
             {/* 切换充值/提现 */}
@@ -2755,8 +2755,8 @@ export default function DashboardPage() {
 
       {/* 账户提现弹窗 - 添加余额验证提示 */}
       {showAccountWithdraw && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 p-6 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+          <div className="bg-slate-800 p-4 sm:p-6 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">💸 账户提现</h3>
             
             <div className="space-y-4">
@@ -2943,8 +2943,8 @@ export default function DashboardPage() {
 
       {/* 开卡确认弹窗 */}
       {showOpenCardConfirm && selectedCardType && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 p-6 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+          <div className="bg-slate-800 p-4 sm:p-6 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">确认开卡</h3>
             
             {/* 开卡须知 - 必须阅读才能同意 */}

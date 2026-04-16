@@ -1,9 +1,15 @@
 import './globals.css';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { AuthProvider } from '../src/hooks/useAuth';
 import ClientAuthProvider from '../src/components/ClientAuthProvider';
 
 export const dynamic = 'force-dynamic';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+};
 
 export const metadata: Metadata = {
   title: 'CardVela - 卡维拉',

@@ -80,7 +80,7 @@ export default function HomePage() {
             <div className="relative">
               {/* Glow behind card */}
               <div className="absolute inset-0 bg-gradient-to-r from-blue-500/30 to-cyan-400/30 blur-2xl scale-110 rounded-3xl" />
-              <div className="relative w-[340px] h-[200px] bg-gradient-to-br from-[#1a1f35] to-[#0d1120] rounded-2xl border border-white/10 p-6 shadow-2xl">
+              <div className="relative w-full max-w-[340px] h-[200px] bg-gradient-to-br from-[#1a1f35] to-[#0d1120] rounded-2xl border border-white/10 p-6 shadow-2xl">
                 <div className="flex justify-between items-start mb-8">
                   <div>
                     <span className="text-xs text-gray-500 tracking-widest uppercase">Virtual Card</span>
