@@ -14,6 +14,7 @@ const BASE_COPILOT_MODELS = [
   'claude-opus-4.5',
   'claude-opus-4.6',
   'claude-opus-4.6-fast',
+  'claude-opus-4.7',
   'claude-haiku-4.5',
   'gpt-4o',
   'gpt-4o-mini',

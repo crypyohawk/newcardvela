@@ -509,7 +509,7 @@ model CopilotAccount {
   token           String   // ghu_开头的token
   quotaUsed       Float    @default(0)  // 已用额度（美元）
   quotaLimit      Float    @default(10) // 月额度上限
-  status          String   @default("active") // active/inactive/error/bound
+  status          String   @default("active") // active/inactive/error/bound/quota_exhausted
   port            Int?     // copilot-api 实例端口号
   newApiChannelId Int?     // 对应的 new-api 渠道 ID
 

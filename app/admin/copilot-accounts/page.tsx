@@ -245,9 +245,11 @@ export default function CopilotAccountsPage() {
   };
 
   // 用 boundAiKeyId 判断是否已绑定（比 status 字段更可靠）
-  const idleCount = accounts.filter(a => !a.boundAiKeyId && a.status !== 'inactive').length;
+  const idleCount = accounts.filter(a => !a.boundAiKeyId && a.status !== 'inactive' && a.status !== 'error' && a.status !== 'quota_exhausted').length;
   const boundCount = accounts.filter(a => a.boundAiKeyId).length;
   const syncedCount = accounts.filter(a => a.newApiChannelId).length;
+  const errorCount = accounts.filter(a => a.status === 'error').length;
+  const exhaustedCount = accounts.filter(a => a.status === 'quota_exhausted').length;
   const totalQuotaUsed = accounts.reduce((sum, a) => sum + a.quotaUsed, 0);
 
   // 已被绑定的渠道ID列表
@@ -299,7 +301,7 @@ export default function CopilotAccountsPage() {
           <div>
             <h1 className="text-2xl font-bold">Copilot 账号池管理</h1>
             <p className="text-gray-500 text-sm mt-1">
-              共 {accounts.length} 个账号 · {idleCount} 个空闲 · {boundCount} 个已绑定 · {syncedCount} 个已绑渠道 · 本月总消耗 ${totalQuotaUsed.toFixed(2)}
+              共 {accounts.length} 个账号 · {idleCount} 个空闲 · {boundCount} 个已绑定 · {syncedCount} 个已绑渠道{errorCount > 0 && <span className="text-red-600"> · {errorCount} 个异常</span>}{exhaustedCount > 0 && <span className="text-orange-600"> · {exhaustedCount} 个额度耗尽</span>} · 本月总消耗 ${totalQuotaUsed.toFixed(2)}
             </p>
           </div>
           <div className="flex gap-2">
@@ -487,12 +489,14 @@ export default function CopilotAccountsPage() {
                   <td className="px-4 py-3">{account.githubId}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded text-sm ${
+                      account.status === 'quota_exhausted' ? 'bg-orange-100 text-orange-800' :
                       account.boundAiKeyId ? 'bg-blue-100 text-blue-800' :
                       account.status === 'inactive' ? 'bg-gray-100 text-gray-800' :
                       account.status === 'error' ? 'bg-red-100 text-red-800' :
                       'bg-green-100 text-green-800'
                     }`}>
-                      {account.boundAiKeyId ? '已绑定' :
+                      {account.status === 'quota_exhausted' ? '额度耗尽' :
+                       account.boundAiKeyId ? '已绑定' :
                        account.status === 'inactive' ? '已禁用' :
                        account.status === 'error' ? '异常' :
                        '空闲'}
@@ -561,7 +565,14 @@ export default function CopilotAccountsPage() {
                     {account.lastUsed ? new Date(account.lastUsed).toLocaleString() : '从未'}
                   </td>
                   <td className="px-4 py-3 space-x-2">
-                    {account.boundAiKeyId ? (
+                    {account.status === 'quota_exhausted' || account.status === 'error' ? (
+                      <button
+                        onClick={() => handleStatusChange(account.id, 'active')}
+                        className="text-green-600 hover:text-green-800"
+                      >
+                        恢复
+                      </button>
+                    ) : account.boundAiKeyId ? (
                       <span className="text-gray-400 text-sm" title="已绑定 Key，需用户删除 Key 后才能操作">
                         禁用
                       </span>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAdmin, adminError } from '@/lib/adminAuth';
+import { updateNewApiChannel } from '@/lib/newapi';
 
 interface Params {
   params: { id: string };
@@ -34,6 +35,17 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         return NextResponse.json({ error: '该账号已绑定 Key，无法手动更改状态。用户删除 Key 后会自动释放' }, { status: 400 });
       }
       updateData.status = status;
+
+      // 从 quota_exhausted / error 恢复为 active 时，同步重新启用 new-api 渠道
+      if (status === 'active' && existing?.newApiChannelId &&
+          (existing.status === 'quota_exhausted' || existing.status === 'error')) {
+        try {
+          await updateNewApiChannel(existing.newApiChannelId, { status: 1 });
+          console.log(`[admin] 已重新启用 new-api 渠道 #${existing.newApiChannelId} (${existing.githubId})`);
+        } catch (e: any) {
+          console.error(`[admin] 重新启用渠道 #${existing.newApiChannelId} 失败:`, e.message);
+        }
+      }
     }
     if (quotaLimit !== undefined) updateData.quotaLimit = parseFloat(quotaLimit);
 

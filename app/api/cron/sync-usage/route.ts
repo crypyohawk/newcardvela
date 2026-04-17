@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAvailableTokenUsd, isAiKeyQuotaExhausted } from '../../../../src/lib/aiKeyQuota';
-import { findNewApiTokenIdByName, getAllNewApiLogs, getNewApiChannels, getNewApiTokenUsage, isNewApiRecordNotFoundError, repairAiKeyNewApiTokenId, updateNewApiToken, quotaToUSD, usdToQuota } from '../../../../src/lib/newapi';
+import { findNewApiTokenIdByName, getAllNewApiLogs, getNewApiChannels, getNewApiTokenUsage, isNewApiRecordNotFoundError, repairAiKeyNewApiTokenId, updateNewApiToken, updateNewApiChannel, quotaToUSD, usdToQuota } from '../../../../src/lib/newapi';
 import { db } from '../../../../src/lib/db';
 import { isCopilotPoolTier } from '../../../../src/lib/copilotPool';
 import { sendAdminAlert } from '../../../../src/lib/email';
@@ -776,22 +776,61 @@ async function checkCopilotChannelHealth() {
     const channels = await getNewApiChannels();
     const copilotAccounts = await db.copilotAccount.findMany({
       where: { newApiChannelId: { not: null } },
-      select: { id: true, githubId: true, newApiChannelId: true, status: true },
+      select: { id: true, githubId: true, newApiChannelId: true, port: true, status: true },
     });
 
-    if (copilotAccounts.length === 0) return { checked: 0, errors: 0, recovered: 0 };
+    if (copilotAccounts.length === 0) return { checked: 0, errors: 0, recovered: 0, portDown: 0 };
 
     const channelMap = new Map(channels.map(ch => [ch.id, ch]));
     let errorCount = 0;
     let recoveredCount = 0;
+    let portDownCount = 0;
 
     for (const account of copilotAccounts) {
       const channel = channelMap.get(account.newApiChannelId!);
 
+      // 先检查端口连通性（如果有端口配置）
+      if (account.port && account.status !== 'inactive') {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          const res = await fetch(`http://127.0.0.1:${account.port}/`, {
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+
+          if (!res.ok && res.status !== 401) {
+            // 端口响应但非正常状态
+            console.warn(`[health] 端口 ${account.port} (${account.githubId}) 返回 ${res.status}`);
+          }
+        } catch {
+          // 端口不通 → 标记 error + 禁用 new-api 通道
+          if (account.status !== 'error') {
+            await db.copilotAccount.update({
+              where: { id: account.id },
+              data: { status: 'error' },
+            });
+            console.warn(`[health] 端口 ${account.port} (${account.githubId}) 不可达，标记为 error`);
+            errorCount++;
+          }
+          // 确保对应的 new-api 通道也被禁用
+          if (channel && channel.status === 1) {
+            try {
+              await updateNewApiChannel(account.newApiChannelId!, { status: 2 });
+              console.warn(`[health] 已禁用 new-api 渠道 #${account.newApiChannelId} (端口 ${account.port} 不通)`);
+            } catch (e: any) {
+              console.error(`[health] 禁用渠道 #${account.newApiChannelId} 失败:`, e.message);
+            }
+          }
+          portDownCount++;
+          continue; // 端口不通，跳过后续检查
+        }
+      }
+
       // 渠道不存在或 status != 1（被 new-api 自动禁用/手动禁用）
       const isChannelDown = !channel || channel.status !== 1;
 
-      if (isChannelDown && account.status !== 'error' && account.status !== 'inactive') {
+      if (isChannelDown && account.status !== 'error' && account.status !== 'inactive' && account.status !== 'quota_exhausted') {
         await db.copilotAccount.update({
           where: { id: account.id },
           data: { status: 'error' },
@@ -809,7 +848,7 @@ async function checkCopilotChannelHealth() {
       }
     }
 
-    return { checked: copilotAccounts.length, errors: errorCount, recovered: recoveredCount };
+    return { checked: copilotAccounts.length, errors: errorCount, recovered: recoveredCount, portDown: portDownCount };
   } catch (error: any) {
     console.error('[health] 渠道健康检查失败:', error);
     return { error: error.message };
@@ -822,7 +861,7 @@ const PREMIUM_ALERT_LAST_SENT_KEY = 'premium_alert_last_sent_at';
 const PREMIUM_ALERT_COOLDOWN_SECONDS = 2 * 60 * 60;
 
 // 高级模型列表：这些模型失败时需要报警
-const PREMIUM_MODELS = ['claude-opus-4.6', 'claude-sonnet-4.6', 'gpt-5.4'];
+const PREMIUM_MODELS = ['claude-opus-4.6', 'claude-opus-4.7', 'claude-sonnet-4.6', 'gpt-5.4'];
 // 测试用的最小请求体
 const TEST_PAYLOAD = JSON.stringify({
   model: '', // will be replaced per test
@@ -875,13 +914,33 @@ async function checkPremiumModelHealth() {
         clearTimeout(timeoutId);
 
         if (res.status === 402 || res.status === 403) {
-          console.warn(`[premium-alert] 账号 ${account.githubId} (port ${account.port}) 模型 ${testModel} 返回 ${res.status} — 配额耗尽`);
+          console.warn(`[premium-alert] 账号 ${account.githubId} (port ${account.port}) 模型 ${testModel} 返回 ${res.status} — 配额耗尽，自动禁用`);
           failures.push({
             githubId: account.githubId,
-            port: account.port,
+            port: account.port!,
             model: testModel,
             status: res.status,
           });
+
+          // 自动标记账号为 quota_exhausted
+          await db.copilotAccount.update({
+            where: { id: account.id },
+            data: { status: 'quota_exhausted' },
+          });
+
+          // 自动禁用 new-api 渠道，阻止后续请求路由到该账号
+          const acct = await db.copilotAccount.findUnique({
+            where: { id: account.id },
+            select: { newApiChannelId: true },
+          });
+          if (acct?.newApiChannelId) {
+            try {
+              await updateNewApiChannel(acct.newApiChannelId, { status: 2 });
+              console.warn(`[premium-alert] 已禁用 new-api 渠道 #${acct.newApiChannelId} (${account.githubId} 配额耗尽)`);
+            } catch (e: any) {
+              console.error(`[premium-alert] 禁用渠道 #${acct.newApiChannelId} 失败:`, e.message);
+            }
+          }
         } else if (res.status === 200) {
           // 正常，discarding response body
           try { await res.text(); } catch {}
