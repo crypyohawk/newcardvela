@@ -499,6 +499,158 @@ export default function AdminSettingsPage() {
             <p className="text-gray-500 text-xs">手续费 = 提现金额 × {accountWithdrawFeePercent}%，最低收取 ${accountWithdrawFeeMin}</p>
           </div>
         </div>
+
+        {/* VPN 节点配置 */}
+        <div className="bg-slate-800 rounded-xl p-6 mb-6">
+          <h2 className="text-xl font-bold mb-1">🌐 临时 VPN 节点配置</h2>
+          <p className="text-gray-400 text-sm mb-4">配置后用户才能领取/购买临时 VPN 会话。节点信息将在用户创建会话后展示。</p>
+
+          <div className="space-y-4">
+            {/* 节点基本信息 */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">节点名称</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={configs['vpn_temp_name'] || ''}
+                    onChange={(e) => setConfigs(prev => ({ ...prev, vpn_temp_name: e.target.value }))}
+                    placeholder="例如：香港 HK01"
+                    className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                  />
+                  <button onClick={() => saveConfig('vpn_temp_name', configs['vpn_temp_name'] || '')} disabled={saving} className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">保存</button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">地区</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={configs['vpn_temp_region'] || ''}
+                    onChange={(e) => setConfigs(prev => ({ ...prev, vpn_temp_region: e.target.value }))}
+                    placeholder="例如：香港"
+                    className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                  />
+                  <button onClick={() => saveConfig('vpn_temp_region', configs['vpn_temp_region'] || '')} disabled={saving} className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">保存</button>
+                </div>
+              </div>
+            </div>
+
+            {/* 协议 + 端口 */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">协议类型</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={configs['vpn_temp_protocol'] || ''}
+                    onChange={(e) => setConfigs(prev => ({ ...prev, vpn_temp_protocol: e.target.value }))}
+                    placeholder="例如：VLESS"
+                    className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                  />
+                  <button onClick={() => saveConfig('vpn_temp_protocol', configs['vpn_temp_protocol'] || '')} disabled={saving} className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">保存</button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">端口</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={configs['vpn_temp_port'] || ''}
+                    onChange={(e) => setConfigs(prev => ({ ...prev, vpn_temp_port: e.target.value }))}
+                    placeholder="例如：443"
+                    className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                  />
+                  <button onClick={() => saveConfig('vpn_temp_port', configs['vpn_temp_port'] || '')} disabled={saving} className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">保存</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Host */}
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">节点 Host（IP 或域名）</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={configs['vpn_temp_host'] || ''}
+                  onChange={(e) => setConfigs(prev => ({ ...prev, vpn_temp_host: e.target.value }))}
+                  placeholder="例如：1.2.3.4 或 hk01.example.com"
+                  className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                />
+                <button onClick={() => saveConfig('vpn_temp_host', configs['vpn_temp_host'] || '')} disabled={saving} className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">保存</button>
+              </div>
+            </div>
+
+            {/* SNI */}
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">SNI（可选，Reality / TLS 用）</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={configs['vpn_temp_sni'] || ''}
+                  onChange={(e) => setConfigs(prev => ({ ...prev, vpn_temp_sni: e.target.value }))}
+                  placeholder="例如：www.microsoft.com"
+                  className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                />
+                <button onClick={() => saveConfig('vpn_temp_sni', configs['vpn_temp_sni'] || '')} disabled={saving} className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">保存</button>
+              </div>
+            </div>
+
+            {/* Public Key */}
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">公钥 Public Key（可选，Reality 用）</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={configs['vpn_temp_public_key'] || ''}
+                  onChange={(e) => setConfigs(prev => ({ ...prev, vpn_temp_public_key: e.target.value }))}
+                  placeholder="Reality 公钥"
+                  className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                />
+                <button onClick={() => saveConfig('vpn_temp_public_key', configs['vpn_temp_public_key'] || '')} disabled={saving} className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">保存</button>
+              </div>
+            </div>
+
+            {/* Short ID */}
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">Short ID（可选，Reality 用）</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={configs['vpn_temp_short_id'] || ''}
+                  onChange={(e) => setConfigs(prev => ({ ...prev, vpn_temp_short_id: e.target.value }))}
+                  placeholder="Short ID"
+                  className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"
+                />
+                <button onClick={() => saveConfig('vpn_temp_short_id', configs['vpn_temp_short_id'] || '')} disabled={saving} className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">保存</button>
+              </div>
+            </div>
+
+            {/* 完整分享链接 */}
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">完整节点分享链接（vless:// 或 vmess://）</label>
+              <div className="flex gap-2">
+                <textarea
+                  rows={2}
+                  value={configs['vpn_temp_link'] || ''}
+                  onChange={(e) => setConfigs(prev => ({ ...prev, vpn_temp_link: e.target.value }))}
+                  placeholder="vless://..."
+                  className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-xs font-mono resize-none"
+                />
+                <button onClick={() => saveConfig('vpn_temp_link', configs['vpn_temp_link'] || '')} disabled={saving} className="bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 self-start">保存</button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">用户领取会话后可一键复制此链接导入客户端。填写后 host/port 字段可省略单独填写。</p>
+            </div>
+
+            {/* 节点状态指示 */}
+            <div className={`rounded-lg px-4 py-3 text-sm ${configs['vpn_temp_link'] || configs['vpn_temp_host'] ? 'bg-emerald-600/20 text-emerald-300' : 'bg-yellow-600/20 text-yellow-300'}`}>
+              {configs['vpn_temp_link'] || configs['vpn_temp_host']
+                ? '✅ 节点已配置，用户可正常领取/购买 VPN 会话'
+                : '⚠️ 节点尚未配置（至少需填写「完整链接」或「Host + 端口」），用户无法领取会话'}
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   );
