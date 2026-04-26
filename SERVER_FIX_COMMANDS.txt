@@ -1,507 +1,745 @@
-﻿# New API 自建部署清单
+﻿# CardVela AI 出海工作空间 MVP 方案
 
-更新时间：2026-04-06
+更新时间：2026-04-24
 
-目标：把 CardVela 当前依赖的第三方 new-api 网关替换为自建 new-api，且不动现有 CardVela、GSalary、copilot-api 4141-4145 主链路。
+目标：基于 CardVela 当前已有的虚拟卡能力，新增 AI 专用 VPN 板块，并预置教程、工作空间、AI 聚合能力入口，先跑通一个可收费、可转化、可持续迭代的 MVP。
 
-最终链路：
-CardVela -> 自建 new-api -> copilot-api 4141-4145 -> GitHub Copilot
-
-------------------------------------------------------------
-一、执行原则
-------------------------------------------------------------
-
-1. 先并行部署，再切换，不直接覆盖现网。
-2. 第一阶段自建 new-api 先跑在 3002，验证完再决定是否迁到 3001。
-3. copilot-api 实例继续沿用现有 4141-4145，不重做。
-4. CardVela 只改 NEW_API_* 环境变量，不改业务代码。
-5. 如果切换失败，随时把 CardVela 环境变量切回旧网关并 pm2 重启即可回滚。
+当前阶段结论：
+1. 先做虚拟卡 + VPN + 免费教程闭环。
+2. VPN 先作为平台新增板块上线，但控制在付费用户可见或可购买。
+3. 教程、工作空间、AI 聚合 API 先做产品预置，不在第一阶段重开发。
+4. 所有设计围绕“帮助用户完成 AI 出海使用”而不是“单纯卖节点”展开。
 
 ------------------------------------------------------------
-二、当前约束
+一、产品定位
 ------------------------------------------------------------
 
-1. CardVela 生产目录：/opt/cardvela
-2. CardVela 运行方式：PM2
-3. copilot-api 多实例管理脚本：/opt/cardvela/scripts/copilot-pool.sh
-4. copilot-api 端口：4141-4145
-5. CardVela 代码默认 new-api 地址：http://127.0.0.1:3001
-6. CardVela 默认读取 new-api SQLite 路径：/home/ubuntu/new-api/data/one-api.db
-7. new-api 官方仓库：https://github.com/QuantumNous/new-api
-8. new-api 官方推荐方式：Docker Compose
-9. Docker 镜像：calciumion/new-api:latest
+产品名称建议：CardVela AI 出海工作空间
+
+一句话定位：
+帮助用户一站式完成 AI 出海支付、网络、配置与学习。
+
+目标用户：
+1. 需要订阅 Claude、OpenAI、Cursor、Windsurf、GitHub Copilot 的个人用户。
+2. 不熟悉国际支付、账号风控和网络环境的小白用户。
+3. 想稳定使用 AI 编程工具的开发者、自由职业者、小团队。
+
+核心卖点：
+1. AI 专用虚拟卡。
+2. AI 专用 VPN。
+3. 免费教程和实时风控更新。
+4. 后续可演进为完整的 AI 出海工作空间。
 
 ------------------------------------------------------------
-三、部署计划清单
+二、MVP 原则
 ------------------------------------------------------------
 
-[ ] P0 备份现有 CardVela 环境变量和 PM2 状态
-[ ] P0 确认服务器已安装 docker 与 docker compose
-[ ] P0 在 /home/ubuntu/new-api 拉取官方仓库
-[ ] P0 用 docker compose 在 3002 启动自建 new-api
-[ ] P0 确认 new-api 可访问，能正常登录后台
-[ ] P0 创建管理员 token
-[ ] P0 在 new-api 中重建 copilot 渠道 4141-4145
-[ ] P0 配置 copilot 分组倍率与用户可选分组
-[ ] P0 手工创建测试 token 并完成一次真实调用验证
-[ ] P0 把 /opt/cardvela/.env.production 切到自建 new-api
-[ ] P0 重新构建并重启 CardVela
-[ ] P0 验证 CardVela 创建 Key、调用、同步用量全部正常
-[ ] P1 如需对外统一入口，再把 nginx 或正式端口切到自建 new-api
-[ ] P1 验证 3001 或域名切换后的完整链路
-[ ] P1 保留旧网关一段时间作为应急回退
+1. 先卖最成熟的能力，不碰最重的风险。
+2. 优先上线能直接带来付费转化的模块。
+3. 页面和流程先简洁，不追求功能过多。
+4. 后台先能人工运营，不要求一开始全自动。
+5. 先验证用户是否愿意为“卡 + VPN + 配置便利”付费，再扩产品深度。
+
+本阶段不做：
+1. 不做 AI 模型聚合 API 中转主业务。
+2. 不做复杂代理套餐体系。
+3. 不做多节点智能调度。
+4. 不做企业级权限系统。
+5. 不做重社区和论坛功能。
 
 ------------------------------------------------------------
-四、服务器可执行命令
+三、MVP 功能范围
 ------------------------------------------------------------
 
-说明：以下命令默认在 Ubuntu 服务器执行。
-
-### 0. 进入服务器后先做备份
-
-```bash
-cd /opt/cardvela
-cp .env.production .env.production.bak.$(date +%F-%H%M%S)
-pm2 save
-pm2 status
-```
-
-### 1. 确认 Docker 环境
-
-```bash
-docker --version
-docker compose version
-```
-
-如果这里失败，先安装 Docker，再继续后续步骤。
-
-### 2. 部署自建 new-api 到 3002
-
-```bash
-cd /home/ubuntu
-rm -rf new-api
-git clone https://github.com/QuantumNous/new-api.git
-cd new-api
-cp .env.example .env
-```
-
-### 3. 修改 new-api 的 docker-compose 端口映射
-
-目标：不要占用现网 3001，先临时映射到 3002。
-
-先查看原配置：
-
-```bash
-cd /home/ubuntu/new-api
-grep -n "3000" docker-compose.yml
-grep -n "ports:" docker-compose.yml
-```
-
-把端口映射改成宿主机 3002 到容器 3000。
-
-如果默认是 3000:3000，执行：
-
-```bash
-cd /home/ubuntu/new-api
-sed -i 's/3000:3000/3002:3000/g' docker-compose.yml
-```
-
-如果默认是 3001:3000，执行：
-
-```bash
-cd /home/ubuntu/new-api
-sed -i 's/3001:3000/3002:3000/g' docker-compose.yml
-```
-
-改完再次确认：
-
-```bash
-cd /home/ubuntu/new-api
-grep -n "3002:3000" docker-compose.yml
-```
-
-### 4. 启动自建 new-api
-
-```bash
-cd /home/ubuntu/new-api
-docker compose pull
-docker compose up -d
-docker compose ps
-```
-
-### 5. 检查 new-api 是否启动成功
-
-```bash
-curl -I http://127.0.0.1:3002
-ss -lntp | grep 3002
-docker compose logs --tail=100
-```
-
-浏览器访问：
-
-http://服务器IP:3002
-
-先完成管理员初始化登录。
-
-### 6. 确认 copilot-api 实例仍正常
-
-```bash
-cd /opt/cardvela
-bash scripts/copilot-pool.sh status
-ss -lntp | grep 414
-curl -s http://127.0.0.1:4141/v1/models | python3 -m json.tool | head
-curl -s http://127.0.0.1:4142/v1/models | python3 -m json.tool | head
-curl -s http://127.0.0.1:4143/v1/models | python3 -m json.tool | head
-curl -s http://127.0.0.1:4144/v1/models | python3 -m json.tool | head
-curl -s http://127.0.0.1:4145/v1/models | python3 -m json.tool | head
-```
-
-### 7. 在自建 new-api 后台添加 copilot 渠道
-
-每个渠道都按下面规则配置：
-
-1. 类型：OpenAI
-2. 分组：copilot
-3. Base URL：必须用宿主机地址，不要用 127.0.0.1
-
-建议地址：
-
-```text
-http://172.17.0.1:4141
-http://172.17.0.1:4142
-http://172.17.0.1:4143
-http://172.17.0.1:4144
-http://172.17.0.1:4145
-```
-
-如果不确定宿主机 docker0 地址，执行：
-
-```bash
-ip addr show docker0 | grep 'inet '
-```
-
-### 8. 在 new-api 后台补齐分组设置
-
-必须至少确认两项：
-
-1. 分组倍率里有 copilot
-2. 用户可选分组里有 copilot
-
-建议值：
-
-```text
-copilot: 1
-```
-
-### 9. 在自建 new-api 后台创建管理员 token
-
-创建后先保存这几个值：
-
-```text
-NEW_API_BASE_URL=http://127.0.0.1:3002
-NEW_API_ADMIN_TOKEN=这里填你新生成的管理员 token
-NEW_API_ADMIN_USER=1
-NEW_API_SQLITE_PATH=/home/ubuntu/new-api/data/one-api.db
-```
-
-### 10. 在自建 new-api 上做一次手工调用验证
-
-先在后台创建一个测试 token，然后执行：
-
-```bash
-curl -s http://127.0.0.1:3002/v1/models \
-	-H "Authorization: Bearer 这里替换成测试 token" \
-	| python3 -m json.tool | head -40
-```
-
-再执行一次对话测试：
-
-```bash
-curl -s http://127.0.0.1:3002/v1/chat/completions \
-	-H "Authorization: Bearer 这里替换成测试 token" \
-	-H "Content-Type: application/json" \
-	-d '{"model":"gpt-4o","messages":[{"role":"user","content":"say hi"}],"max_tokens":10}' \
-	| python3 -m json.tool
-```
-
-验证成功标准：
-
-1. 有正常 JSON 返回
-2. new-api 后台日志有记录
-3. 命中 copilot 分组渠道
-
-### 11. 切 CardVela 到自建 new-api
-
-先改环境变量：
-
-```bash
-cd /opt/cardvela
-grep -n "NEW_API_" .env.production
-```
-
-用编辑器修改：
-
-```bash
-cd /opt/cardvela
-nano .env.production
-```
-
-至少改成：
-
-```env
-NEW_API_BASE_URL=http://127.0.0.1:3002
-NEW_API_ADMIN_TOKEN=替换成自建 new-api 的管理员 token
-NEW_API_ADMIN_USER=1
-NEW_API_SQLITE_PATH=/home/ubuntu/new-api/data/one-api.db
-```
-
-### 12. 重新加载 CardVela 环境并重启 PM2
-
-注意：PM2 下必须先把 .env.production 注入当前 shell，再启动或重启进程。
-
-```bash
-cd /opt/cardvela
-npm install
-npx prisma generate
-npm run build
-set -a
-source .env.production
-set +a
-pm2 restart all
-pm2 status
-```
-
-### 13. 验证 CardVela 已经连到自建 new-api
-
-先看 PM2 环境里是否已注入：
-
-```bash
-pm2 env 0 | grep NEW_API
-```
-
-再检查 CardVela 服务日志：
-
-```bash
-pm2 logs --lines 100
-```
-
-### 14. 做完整业务验证
-
-验证顺序：
-
-```bash
-cd /opt/cardvela
-curl -s "http://127.0.0.1:3000/api/config" | python3 -m json.tool | head -40
-curl -s "http://127.0.0.1:3000/api/cron/sync-usage?secret=这里替换成CRON_SECRET" | python3 -m json.tool
-```
-
-然后在前端后台继续验证：
-
-1. 新建一个平台 API Key
-2. 用该 Key 真实调一次模型
-3. 去自建 new-api 后台确认 token 与日志增长
-4. 触发 sync-usage
-5. 确认 CardVela 用户余额和统计变化
+P0：第一阶段必须上线
+1. 虚拟卡展示与购买入口。
+2. VPN 板块。
+3. 免费教程板块。
+4. 用户中心里的“我的服务”聚合入口。
+
+P1：预置但先不深做
+1. AI 出海工作空间首页。
+2. 一键配置包说明页。
+3. 风控动态和公告页。
+4. 个人推荐教程模块。
+
+P2：占位，不在本阶段开发
+1. AI 模型聚合 API 中转。
+2. 自动生成多端客户端订阅。
+3. 企业团队协作功能。
+4. 节点多地域切换。
 
 ------------------------------------------------------------
-五、切正式端口 3001 的命令
+四、信息架构建议
 ------------------------------------------------------------
 
-只有在 3002 稳定验证后才做。
+前台导航建议：
+1. 首页
+2. 虚拟卡
+3. AI 专用 VPN
+4. 教程中心
+5. 工作空间
+6. 帮助中心
 
-### 方案 A：继续用 3002，不动 3001
+用户中心建议：
+1. 我的卡片
+2. 我的 VPN（仅入口卡片，点击跳转独立页面）
+3. 我的教程
+4. 风控提醒
+5. 账号与订单
 
-优点：最稳，回滚最简单。
-
-### 方案 B：把自建 new-api 切到 3001
-
-```bash
-cd /home/ubuntu/new-api
-sed -i 's/3002:3000/3001:3000/g' docker-compose.yml
-docker compose up -d
-docker compose ps
-ss -lntp | grep 3001
-```
-
-如果 CardVela 也要切回默认地址，再改：
-
-```bash
-cd /opt/cardvela
-nano .env.production
-```
-
-改成：
-
-```env
-NEW_API_BASE_URL=http://127.0.0.1:3001
-```
-
-然后：
-
-```bash
-cd /opt/cardvela
-set -a
-source .env.production
-set +a
-pm2 restart all
-```
+后台运营建议：
+1. 用户管理
+2. 订单管理
+3. VPN 用户授权
+4. 教程内容管理
+5. 公告与风控动态
+6. 套餐和权益配置
 
 ------------------------------------------------------------
-六、失败回滚命令
+五、P0 核心模块：VPN 板块
 ------------------------------------------------------------
 
-如果切 CardVela 后发现异常，立刻回滚：
+### 1. 模块定位
 
-```bash
-cd /opt/cardvela
-cp .env.production.bak.你备份时的时间戳 .env.production
-set -a
-source .env.production
-set +a
-pm2 restart all
-pm2 status
-```
+定位：
+AI 专用优化线路，不强调“翻墙”，强调“用于 Claude、ChatGPT、GitHub Copilot、Gmail 等 AI 与海外工具访问优化”。
 
-如果只想停掉自建 new-api：
+模块目标：
+1. 为已购卡用户提供高附加值服务。
+2. 提高平台复购率和用户停留时长。
+3. 形成“买卡之后继续留在平台”的第二层黏性。
 
-```bash
-cd /home/ubuntu/new-api
-docker compose down
-docker compose ps
-```
+### 2. 用户可见页面结构
+
+VPN 首页建议包含以下区域：
+
+1. 顶部权益状态区
+	- 当前套餐状态
+	- 到期时间
+	- 是否可用
+	- 在线说明
+2. 一键连接区
+	- Windows 下载指引
+	- Android 下载指引
+	- iPhone 下载指引
+	- 节点链接复制按钮
+	- 手动配置参数展开区
+3. 推荐使用场景区
+	- Claude Code
+	- Cursor
+	- GitHub Copilot
+	- ChatGPT
+	- Gmail / Google 登录
+4. 使用教程区
+	- Windows 配置教程
+	- Android 配置教程
+	- iPhone 配置教程
+	- 常见错误排查
+5. 服务公告区
+	- 当前节点状态
+	- 高峰期提醒
+	- 维护通知
+6. 常见问题区
+	- 为什么能打开 Google 但打不开 YouTube
+	- 为什么节点正常但浏览器不生效
+	- 手机怎么配置
+	- 是否支持多设备
+
+### 3. VPN 权限策略
+
+建议初期权限：
+1. 免费用户不可直接使用 VPN。
+2. 购买专业版套餐的用户可用。
+3. 购买虚拟卡的高阶套餐可赠送 VPN。
+4. 企业版用户可申请多人共享或独享线路。
+
+建议初期运营策略：
+1. 单节点先控制在 30 个稳定活跃用户规模内。
+2. 对外文案可写“限量开放”。
+3. 如果高峰期负载增大，再加第二台服务器。
+4. 先人工发放与续期，后台保留自动化升级空间。
+
+### 4. VPN 页面功能清单
+
+用户侧功能：
+1. 查看 VPN 是否已开通。
+2. 查看套餐有效期。
+3. 复制节点链接。
+4. 查看各端教程。
+5. 查看节点状态公告。
+6. 查看常见问题。
+7. 查看最近更新记录。
+
+运营侧功能：
+1. 开通用户 VPN 权限。
+2. 设置开始时间和到期时间。
+3. 设置套餐类型。
+4. 发布节点变更公告。
+5. 临时关闭或维护提示。
+6. 查看授权用户列表。
+7. 预留多节点字段。
+
+### 5. VPN 数据结构建议
+
+建议最小字段：
+
+用户 VPN 权限表：
+1. user_id
+2. plan_type
+3. vpn_enabled
+4. vpn_start_at
+5. vpn_expire_at
+6. vpn_node_id
+7. status
+8. remark
+9. created_at
+10. updated_at
+
+VPN 节点表：
+1. id
+2. node_name
+3. region
+4. protocol
+5. host
+6. port
+7. public_key
+8. short_id
+9. sni
+10. link_text
+11. status
+12. max_active_users
+13. notice
+14. created_at
+15. updated_at
+
+VPN 公告表：
+1. id
+2. title
+3. content
+4. level
+5. is_active
+6. created_at
+7. updated_at
+
+### 6. VPN 用户流程
+
+用户购买后流程建议：
+1. 用户购买卡或专业版套餐。
+2. 系统判断是否包含 VPN 权益。
+3. 用户中心出现“我的 VPN”入口卡片，不在原用户页内联展开内容。
+4. 用户点击后跳转到独立 VPN 页面，查看节点链接、配置教程和状态说明。
+5. 用户按系统或手机类型完成配置。
+6. 用户使用 Claude / Gmail / GitHub 等场景。
+7. 到期前 3 天推送续费提醒。
+
+### 7. VPN 页面文案方向
+
+推荐标题：
+1. AI 专用 VPN
+2. 更适合 Claude、Cursor、Gmail 的稳定访问线路
+
+推荐说明文案：
+1. 本服务面向 AI 工具与海外工作流优化。
+2. 适合 Claude Code、GitHub Copilot、ChatGPT、Google 登录等场景。
+3. 已内置 Windows、Android、iPhone 配置教程。
+4. 线路名额限量开放，保障稳定性。
+
+### 8. VPN MVP 验收标准
+
+1. 登录用户能看到 VPN 板块入口。
+2. 无权限用户看到购买或升级引导。
+3. 有权限用户能看到节点链接和配置教程。
+4. 节点公告可后台修改并前台显示。
+5. 管理员可开通和关闭单个用户的 VPN 权限。
+6. 页面可支持后续新增第二个节点而不重做结构。
 
 ------------------------------------------------------------
-七、验收标准
+六、P0 核心模块：教程中心
 ------------------------------------------------------------
 
-1. http://127.0.0.1:3002 可打开自建 new-api 后台
-2. 自建 new-api 的 copilot 渠道全部可用
-3. 测试 token 能在自建 new-api 上成功调用模型
-4. CardVela 能成功创建 new-api token
-5. 平台用户 Key 能通过自建 new-api 正常调用
-6. sync-usage 能正常从自建 new-api 拉到日志并同步扣费
-7. 出现问题时，能在 5 分钟内切回旧网关
+### 1. 模块定位
+
+定位：
+免费内容流量入口，目标不是直接收费，而是建立信任、降低用户使用门槛，并转化为卡和 VPN 用户。
+
+### 2. 第一阶段内容方向
+
+1. Claude / Cursor / Copilot 开通教程。
+2. OpenAI / Anthropic / OpenRouter 使用路径比较。
+3. 虚拟卡绑定教程。
+4. Gmail、Google 登录配置说明。
+5. VPN 配置教程。
+6. AI 出海风控和避坑合集。
+
+### 3. 页面结构建议
+
+1. 最新教程
+2. 热门教程
+3. 新手入门
+4. AI 编程专题
+5. 支付与订阅专题
+6. 风控更新专题
+
+### 4. 转化设计
+
+每篇教程底部建议增加：
+1. 需要稳定支付？去开通 AI 专用卡。
+2. 需要稳定网络？升级专业版获取 VPN。
+3. 需要一站式解决？进入工作空间。
 
 ------------------------------------------------------------
-八、容易踩坑
+七、P0 核心模块：虚拟卡板块增强
 ------------------------------------------------------------
 
-1. new-api 在 Docker 内时，渠道地址不能填 127.0.0.1:4141，必须填宿主机地址。
-2. copilot 分组不是只建渠道就够，还要补系统设置里的分组倍率和用户可选分组。
-3. PM2 不一定会自动读到 .env.production，重启前必须先 source 到当前 shell。
-4. CardVela 创建 token 后如果拿不到完整 key，优先检查 NEW_API_SQLITE_PATH 是否正确。
-5. 不要一上来就抢占 3001，先在 3002 完成验证。
+定位：
+继续作为平台最核心变现模块，但表达方式要从“卖卡”升级为“AI 出海支付解决方案”。
+
+建议新增展示内容：
+1. AI 出海专用卡分类。
+2. 推荐 BIN 标签。
+3. 支持平台标签。
+4. 最新实测结果。
+5. 常见失败原因。
+
+建议前台展示维度：
+1. 适合 Claude
+2. 适合 OpenRouter
+3. 适合 ChatGPT
+4. 适合 Google 订阅
+5. 推荐程度
+6. 风控提醒
 
 ------------------------------------------------------------
-九、部署完成交接清单（2026-04-06 验收通过）
+八、P1 预置模块：AI 出海工作空间
 ------------------------------------------------------------
 
-### 当前架构
+定位：
+不是单独卖功能，而是把虚拟卡、VPN、教程、提醒整合成一个让用户感觉“平台在帮我安排好一切”的个人中心。
 
-```
-用户浏览器
-  ↓
-https://cardvela.com (nginx :443) → CardVela (PM2, :3000)
-https://api.cardvela.com (nginx :443) → 自建 new-api (Docker, :3001)
-  ↓
-自建 new-api 内部路由 → copilot-api 实例 (PM2, :4141-4145)
-  ↓
-GitHub Copilot
-```
+建议工作空间首页包含：
+1. 我的虚拟卡
+2. 我的 VPN
+3. 推荐教程
+4. 本周风控提醒
+5. 常用配置入口
+6. 一键复制配置包
 
-### 服务状态汇总
+工作空间首页第一阶段可只做静态聚合，不做复杂交互。
 
-| 组件              | 运行方式    | 端口  | 状态      |
-|-------------------|-------------|-------|-----------|
-| CardVela 前端+API | PM2 (id=5)  | 3000  | ✅ 在线    |
-| 自建 new-api      | Docker      | 3001  | ✅ 运行 4 天 |
-| copilot-api #1    | PM2         | 4141  | ✅ 在线    |
-| copilot-api #2    | PM2         | 4142  | ✅ 在线    |
-| copilot-api #3    | PM2         | 4143  | ✅ 在线    |
-| copilot-api #4    | PM2         | 4144  | ✅ 在线    |
-| copilot-api #5    | PM2         | 4145  | ✅ 在线    |
-| PostgreSQL        | Docker      | 5432  | ✅ 在线    |
-| Nginx             | systemd     | 80/443| ✅ 在线    |
+------------------------------------------------------------
+九、P2 预置模块：AI 模型聚合 API 中转
+------------------------------------------------------------
 
-### 关键入口地址
+当前策略：
+1. 导航可预留“即将上线”入口。
+2. 不作为 MVP 主功能开发。
+3. 不对外承诺上线时间。
+4. 等现金流和来源稳定后再评估。
 
-| 用途                       | 地址                                  |
-|----------------------------|---------------------------------------|
-| CardVela 用户前端          | https://cardvela.com                  |
-| new-api 管理后台（你自己的）| https://api.cardvela.com              |
-| new-api 管理后台（内网直连）| http://23.106.142.166:3001            |
-| SSH 登录                   | ssh -i ~/.ssh/id_ed25519 root@23.106.142.166 |
+原因：
+1. 风控高。
+2. 资金压力大。
+3. 服务稳定性要求高。
+4. 容易分散当前最该做的业务精力。
 
-### new-api 后台登录
+------------------------------------------------------------
+十、定价建议
+------------------------------------------------------------
 
-这是你自建的 new-api，用你在初始化时设置的管理员账号密码登录。
-登录后可以管理：渠道、令牌、用户、日志、分组等。
+建议采用三层结构：
 
-### 渠道配置（已完成，共 6 个）
+1. 基础用户
+	- 可购买虚拟卡
+	- 可免费查看教程
+	- 不含 VPN
 
-| ID | 名称                | 分组     | Base URL                |
-|----|---------------------|----------|-------------------------|
-| 1  | poloapi             | claude系 | https://poloapi.top     |
-| 2  | copilot-2937170996  | copilot  | http://172.17.0.1:4141  |
-| 3  | copilot-huynhanh... | copilot  | http://172.17.0.1:4142  |
-| 4  | copilot-Jessica...  | copilot  | http://172.17.0.1:4143  |
-| 5  | copilot-ferkel...   | copilot  | http://172.17.0.1:4144  |
-| 6  | copilot-BecksBw7    | copilot  | http://172.17.0.1:4145  |
+2. 专业版
+	- 虚拟卡
+	- VPN 权益
+	- 配置教程优先入口
+	- 风控动态提醒
 
-### CardVela 环境变量（/opt/cardvela/.env）
+3. 企业版
+	- 更高额度
+	- 专属支持
+	- 后续可增加专属节点或企业服务
 
-```env
-NEW_API_BASE_URL=http://127.0.0.1:3001
-NEW_API_ADMIN_TOKEN=JyLH32oVwyGqUPUgNx8oqsvgaVItBc2F
-NEW_API_ADMIN_USER=1
-NEW_API_SQLITE_PATH=/opt/new-api/data/one-api.db
-```
+当前建议：
+1. VPN 可以做独立增值项。
+2. 也可以作为专业版打包权益。
+3. 第一阶段以“买卡送 VPN”或“升级专业版赠 VPN”更容易促成转化。
 
-### 验收结果
+------------------------------------------------------------
+十一、页面实现建议
+------------------------------------------------------------
 
-- [x] 自建 new-api 在 3001 运行正常
-- [x] 5 个 copilot 渠道 + 1 个 poloapi 渠道全部启用
-- [x] 真实 API 调用成功（gpt-4o "say hi" 正常返回）
-- [x] CardVela PM2 环境变量已注入，指向自建 new-api
-- [x] sync-usage 正常同步（checked=3, 数据一致）
-- [x] https://api.cardvela.com 已通过 nginx 指向自建 new-api :3001
-- [x] https://cardvela.com 前端正常
+页面架构约束：
+1. 不在现有用户页内联展开 VPN 详情。
+2. 用户页只保留“我的 VPN”入口卡片或按钮。
+3. 用户点击后跳转到独立页面处理全部 VPN 功能。
+4. 这样可以避免用户页文件继续膨胀，降低后续编辑和维护成本。
 
-### 关键文件位置
+前端建议优先新增页面：
+1. /vpn
+2. /tutorials
+3. /workspace
 
-| 文件                              | 用途                    |
-|-----------------------------------|-------------------------|
-| /opt/cardvela/.env                | CardVela 环境变量        |
-| /opt/new-api/data/one-api.db      | new-api SQLite 数据库    |
-| /etc/nginx/conf.d/cardvela.conf   | Nginx 反代配置           |
-| /opt/cardvela/scripts/copilot-pool.sh | copilot 实例管理脚本 |
+用户中心建议新增卡片：
+1. 我的 VPN：点击跳转 /vpn
+2. 我的教程：点击跳转 /tutorials
+3. 风控公告：点击跳转 /workspace 或公告页
 
-### 日常运维命令
+第一阶段页面实现优先级：
+1. 先做 VPN 独立页面。
+2. 再做教程列表页。
+3. 再做工作空间聚合页。
+4. AI 聚合 API 页面先做占位。
 
-```bash
-# 查看所有服务状态
-pm2 status
+------------------------------------------------------------
+十二、开发阶段拆分
+------------------------------------------------------------
 
-# 查看 CardVela 日志
-pm2 logs cardvela --lines 100
+Phase 1：VPN MVP 上线
+1. 新增 VPN 导航入口。
+2. 新增 /vpn 独立页面。
+3. 在用户中心新增跳转入口，不做内容内联展开。
+4. 新增用户 VPN 权限判断。
+5. 新增管理员可配置的公告区。
+6. 新增节点信息展示和复制功能。
 
-# 查看 new-api 容器日志
-docker logs new-api --tail 100
+Phase 2：教程中心上线
+1. 新增教程列表页。
+2. 支持教程分类。
+3. 支持推荐内容位。
+4. 支持教程底部转化引导。
 
-# 重启 CardVela（改完 .env 后）
-cd /opt/cardvela && set -a && source .env && set +a && pm2 restart cardvela
+Phase 3：工作空间聚合页
+1. 聚合虚拟卡、VPN、教程。
+2. 显示风控提醒。
+3. 预留配置包入口。
 
-# 重启 new-api
-docker restart new-api
+Phase 4：视业务增长继续扩展
+1. 多节点支持。
+2. 自动续期与到期提醒。
+3. 一键导入订阅。
+4. 企业权限与分配机制。
 
-# 手动触发用量同步
-curl -s "http://127.0.0.1:3000/api/cron/sync-usage?secret=CRON_SECRET值"
+------------------------------------------------------------
+十三、风险与应对
+------------------------------------------------------------
 
-# 查看 copilot 实例状态
-cd /opt/cardvela && bash scripts/copilot-pool.sh status
-```
+风险一：VPN 高峰期卡顿
+应对：
+1. 初期限量开放。
+2. 默认只面向付费用户。
+3. 负载接近阈值时再加第二节点。
 
-### 回滚方案
+风险二：教程流量高但付费转化低
+应对：
+1. 每篇教程加入自然转化入口。
+2. 把“支付 + 网络 + 教程”组合成完整解决方案。
+3. 把 VPN 权益和专业版捆绑。
 
-如果自建 new-api 出问题，只需把 CardVela .env 中的 NEW_API_* 改回旧地址，
-然后 source + pm2 restart 即可，5 分钟内可完成回滚。
+风险三：产品过早做重
+应对：
+1. 先只上 VPN。
+2. 教程先做内容页。
+3. 工作空间先做聚合，不做复杂自动化。
+
+------------------------------------------------------------
+十四、当前执行建议
+------------------------------------------------------------
+
+当前最优先事项：
+1. 先设计并上线 /vpn 独立页面。
+2. 用户体系里预留 VPN 权限字段。
+3. 后台增加 VPN 权限开关和公告能力。
+4. 用户页只保留 VPN 跳转入口，避免继续膨胀。
+5. 教程中心先做列表结构和占位分类。
+6. 工作空间页面先做信息聚合原型。
+
+一句话执行顺序：
+先让用户能在平台上点击入口进入独立 VPN 页面并完成配置使用，再逐步补教程和工作空间。
+
+------------------------------------------------------------
+十五、下一步开发清单
+------------------------------------------------------------
+
+[ ] 新增 /vpn 独立页面方案
+[ ] 新增用户中心 VPN 跳转入口
+[ ] 新增 VPN 权限字段与后台开关
+[ ] 新增节点信息展示组件
+[ ] 新增教程中心页面框架
+[ ] 新增工作空间首页框架
+[ ] 增加套餐与权益说明文案
+[ ] 预留 AI 聚合 API 占位入口
+
+------------------------------------------------------------
+十六、VPN 独立页面开发方案
+------------------------------------------------------------
+
+页面定位：
+1. /vpn 是用户查看和使用 VPN 的唯一业务页面。
+2. 用户中心不再承载 VPN 详情，只负责跳转。
+3. 这样可以把复杂逻辑从大文件中剥离出来，降低维护成本。
+
+建议路由：
+1. 前台用户页入口：/dashboard 或用户中心中的“我的 VPN”卡片
+2. 独立页面：/vpn
+3. 可选详情页：后续如有多节点，再扩为 /vpn/nodes 或 /vpn/history
+
+页面状态拆分：
+1. 未登录：提示登录
+2. 已登录无权限：展示购买或升级引导
+3. 已登录有权限：展示节点、教程、公告、FAQ
+4. 节点维护中：展示维护公告和恢复时间说明
+
+页面模块拆分建议：
+1. Hero 区
+   - 标题
+   - 当前权益状态
+   - 到期时间
+   - 购买/续费按钮
+2. 节点信息区
+   - 节点名称
+   - 节点链接复制按钮
+   - 手动配置参数折叠面板
+3. 客户端下载区
+   - Windows
+   - Android
+   - iPhone
+4. 配置教程区
+   - Windows 教程
+   - Android 教程
+   - iPhone 教程
+5. 公告区
+   - 维护通知
+   - 高峰提醒
+   - 最近更新
+6. FAQ 区
+   - YouTube 打不开
+   - 浏览器不走代理
+   - 手机配置方式
+
+组件拆分建议：
+1. VPNStatusCard
+2. VPNNodeCard
+3. VPNConfigAccordion
+4. VPNClientDownloadCard
+5. VPNNoticeList
+6. VPNFaqList
+7. VPNPurchaseGuide
+
+推荐数据获取方式：
+1. 页面首屏请求一个聚合接口，避免前端多次串行请求。
+2. 公告和 FAQ 可拆独立接口，但首版更建议聚合返回。
+3. 用户中心只请求一个 very light summary 接口，用于显示是否开通和按钮跳转。
+
+------------------------------------------------------------
+十七、接口与字段清单
+------------------------------------------------------------
+
+前台最小接口建议：
+
+1. 获取 VPN 页面聚合数据
+   - 路径：/api/user/vpn
+   - 方法：GET
+   - 用途：/vpn 页面首屏渲染
+
+建议返回字段：
+1. enabled
+2. planType
+3. status
+4. expireAt
+5. purchaseUrl
+6. renewalUrl
+7. node
+8. notices
+9. tutorials
+10. faq
+
+node 建议字段：
+1. id
+2. name
+3. region
+4. protocol
+5. host
+6. port
+7. sni
+8. publicKey
+9. shortId
+10. link
+11. supportPlatforms
+12. status
+
+notices 建议字段：
+1. id
+2. title
+3. content
+4. level
+5. createdAt
+
+tutorials 建议字段：
+1. windows
+2. android
+3. ios
+
+每个平台教程建议字段：
+1. title
+2. steps
+3. downloadUrl
+4. updatedAt
+
+faq 建议字段：
+1. id
+2. question
+3. answer
+
+2. 获取用户中心 VPN 摘要
+   - 路径：/api/user/vpn/summary
+   - 方法：GET
+   - 用途：用户中心卡片，仅显示摘要和跳转按钮
+
+建议返回字段：
+1. enabled
+2. status
+3. expireAt
+4. actionText
+5. actionUrl
+
+3. 管理员更新用户 VPN 权限
+   - 路径：/api/admin/vpn/users/:id
+   - 方法：PATCH
+   - 用途：开通、禁用、续期
+
+建议请求字段：
+1. vpnEnabled
+2. planType
+3. vpnNodeId
+4. vpnExpireAt
+5. status
+6. remark
+
+4. 管理员维护节点
+   - 路径：/api/admin/vpn/nodes
+   - 方法：GET/POST/PATCH
+
+建议节点管理字段：
+1. nodeName
+2. region
+3. host
+4. port
+5. protocol
+6. sni
+7. publicKey
+8. shortId
+9. linkText
+10. status
+11. maxActiveUsers
+12. notice
+
+------------------------------------------------------------
+十八、当前产品方向结论
+------------------------------------------------------------
+
+这是一个务实、低风险、可快速上线的 MVP 路线。当前最重要的实现约束已经明确：VPN 不能继续塞进现有大用户页，必须做成独立跳转页面。先把 /vpn 跑通，再逐步补教程和工作空间。
+
+------------------------------------------------------------
+十一、页面实现建议
+------------------------------------------------------------
+
+前端建议优先新增页面：
+1. /vpn
+2. /tutorials
+3. /workspace
+
+用户中心建议新增卡片：
+1. 我的 VPN
+2. 我的教程
+3. 风控公告
+
+第一阶段页面实现优先级：
+1. 先做 VPN 页面。
+2. 再做教程列表页。
+3. 再做工作空间聚合页。
+4. AI 聚合 API 页面先做占位。
+
+------------------------------------------------------------
+十二、开发阶段拆分
+------------------------------------------------------------
+
+Phase 1：VPN MVP 上线
+1. 新增 VPN 导航入口。
+2. 新增 VPN 页面。
+3. 新增用户 VPN 权限判断。
+4. 新增管理员可配置的公告区。
+5. 新增节点信息展示和复制功能。
+
+Phase 2：教程中心上线
+1. 新增教程列表页。
+2. 支持教程分类。
+3. 支持推荐内容位。
+4. 支持教程底部转化引导。
+
+Phase 3：工作空间聚合页
+1. 聚合虚拟卡、VPN、教程。
+2. 显示风控提醒。
+3. 预留配置包入口。
+
+Phase 4：视业务增长继续扩展
+1. 多节点支持。
+2. 自动续期与到期提醒。
+3. 一键导入订阅。
+4. 企业权限与分配机制。
+
+------------------------------------------------------------
+十三、风险与应对
+------------------------------------------------------------
+
+风险一：VPN 高峰期卡顿
+应对：
+1. 初期限量开放。
+2. 默认只面向付费用户。
+3. 负载接近阈值时再加第二节点。
+
+风险二：教程流量高但付费转化低
+应对：
+1. 每篇教程加入自然转化入口。
+2. 把“支付 + 网络 + 教程”组合成完整解决方案。
+3. 把 VPN 权益和专业版捆绑。
+
+风险三：产品过早做重
+应对：
+1. 先只上 VPN。
+2. 教程先做内容页。
+3. 工作空间先做聚合，不做复杂自动化。
+
+------------------------------------------------------------
+十四、当前执行建议
+------------------------------------------------------------
+
+当前最优先事项：
+1. 先设计并上线 VPN 板块页面。
+2. 用户体系里预留 VPN 权限字段。
+3. 后台增加 VPN 权限开关和公告能力。
+4. 教程中心先做列表结构和占位分类。
+5. 工作空间页面先做信息聚合原型。
+
+一句话执行顺序：
+先让用户能在平台上看到、购买、进入、配置并使用 VPN，再逐步补教程和工作空间。
+
+------------------------------------------------------------
+十五、下一步开发清单
+------------------------------------------------------------
+
+[ ] 新增 VPN 页面方案
+[ ] 新增 VPN 权限字段与后台开关
+[ ] 新增节点信息展示组件
+[ ] 新增教程中心页面框架
+[ ] 新增工作空间首页框架
+[ ] 增加套餐与权益说明文案
+[ ] 预留 AI 聚合 API 占位入口
+
+当前产品方向结论：
+这是一个务实、低风险、可快速上线的 MVP 路线。先把“虚拟卡 + VPN + 免费教程”做成闭环，再考虑更重的 AI 聚合能力。

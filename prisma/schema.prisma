@@ -49,6 +49,7 @@ model User {
   subAccountOf        EnterpriseSubAccount[] @relation("SubAccount")
   enterpriseApps      EnterpriseApplication[]
   poolRequests        PoolExpansionRequest[]
+  vpnSessions         VpnSession[]
 
   @@index([email])
   @@index([referralCode])
@@ -215,6 +216,9 @@ model CardType {
   // 产品说明
   description           String?  @db.Text
   
+  // 卡段显示（如：4413-Apple Pay）
+  cardSegment           String?
+  
   // 目标用户角色（user=普通用户, agent=代理商）
   targetRole            String   @default("user")
   
@@ -323,6 +327,28 @@ model ReferralReward {
   updatedAt       DateTime @updatedAt
 
   @@index([referrerId])
+}
+
+model VpnSession {
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateKey            String
+  status             String    @default("pending_activation")
+  chargeAmount       Float     @default(0)
+  isFree             Boolean   @default(false)
+  hasCardBenefit     Boolean   @default(false)
+  startedAt          DateTime?
+  expiresAt          DateTime?
+  disconnectedAt     DateTime?
+  note               String?   @db.Text
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([userId, dateKey])
+  @@index([userId, status])
+  @@index([status, expiresAt])
 }
 
 // ============================================================

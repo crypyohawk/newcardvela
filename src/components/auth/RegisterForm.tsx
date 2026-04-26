@@ -19,6 +19,10 @@ export default function RegisterForm() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    if (!searchParams) {
+      return;
+    }
+
     const ref = searchParams.get('ref');
     if (ref) {
       setReferralCode(ref);

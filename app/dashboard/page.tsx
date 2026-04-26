@@ -22,6 +22,7 @@ interface CardType {
   rechargeFeePercent: number;
   rechargeFeeMin: number;
   description: string | null;  // 确保有这行
+  cardSegment: string | null;  // 卡段显示
 }
 
 interface UserCard {
@@ -908,7 +909,7 @@ export default function DashboardPage() {
         )}
 
         {/* 快捷操作 */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-4">
           <button
             onClick={() => setActiveTab('cards')}
             className={`p-4 rounded-xl text-left transition ${activeTab === 'cards' ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'}`}
@@ -949,6 +950,14 @@ export default function DashboardPage() {
             <div className="font-semibold">推荐奖励</div>
             <div className="text-sm text-gray-400">邀请好友得奖励</div>
           </button>
+          <Link
+            href="/vpn"
+            className="p-4 rounded-xl text-left transition bg-slate-800 hover:bg-slate-700"
+          >
+            <div className="text-2xl mb-2">🌐</div>
+            <div className="font-semibold">临时 VPN</div>
+            <div className="text-sm text-gray-400">1 小时短时使用</div>
+          </Link>
         </div>
 
         {/* Claude AI 常驻横幅 */}
@@ -1334,12 +1343,17 @@ export default function DashboardPage() {
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {cardTypes.map(card => (
-                  <div key={card.id} className={`rounded-xl p-5 ${card.name.toUpperCase().includes('VISA') ? 'bg-gradient-to-br from-blue-600 to-blue-800' : 'bg-gradient-to-br from-orange-500 to-red-600'}`}>
+                  <div key={card.id} className={`rounded-xl p-5 border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.22)] ${card.name.toUpperCase().includes('VISA') ? 'bg-gradient-to-br from-blue-600 to-blue-800' : 'bg-gradient-to-br from-orange-500 to-red-600'}`}>
                     {/* 卡头部 - 发行地区和卡组织图标 */}
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <span className="text-xs opacity-70">{card.issuer}发行</span>
                         <h3 className="text-lg font-bold">{card.name}</h3>
+                        {/* 卡产品编号和卡段 */}
+                        <div className="mt-1.5 space-y-1">
+                          <div className="text-xs opacity-80">卡编号（#{card.cardBin}）</div>
+                          <div className="text-xs opacity-75">卡段（{card.cardSegment || '未配置'}）</div>
+                        </div>
                       </div>
                       {/* CardVela品牌 + 卡组织图标 */}
                       <div className="flex items-center gap-2">
@@ -1365,55 +1379,55 @@ export default function DashboardPage() {
                     </div>
                     
                     {/* 费用信息 - 紧凑布局 */}
-                    <div className="grid grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-1 text-xs sm:text-sm mb-3">
-                      <div className="flex justify-between">
-                        <span className="opacity-70">开卡费:</span>
-                        <span className="font-medium">${card.displayOpenFee ?? card.openFee}</span>
+                    <div className="grid grid-cols-2 gap-x-2 sm:gap-x-3 gap-y-1.5 text-xs sm:text-sm mb-3">
+                      <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
+                        <span className="opacity-80">开卡费</span>
+                        <span className="font-semibold">${card.displayOpenFee ?? card.openFee}</span>
                       </div>
                             {getMinimumInitialAmountForCardBin(card.cardBin) > 0 && (
                               <>
-                                <div className="flex justify-between">
-                                  <span className="opacity-70">预充值:</span>
-                                  <span>${getCardPricing(card).initialAmount.toFixed(2)}</span>
+                                <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
+                                  <span className="opacity-80">预充值</span>
+                                  <span className="font-medium">${getCardPricing(card).initialAmount.toFixed(2)}</span>
                                 </div>
-                                <div className="flex justify-between">
-                                  <span className="opacity-70">手续费:</span>
-                                  <span>${getCardPricing(card).rechargeFee.toFixed(2)}</span>
+                                <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
+                                  <span className="opacity-80">手续费</span>
+                                  <span className="font-medium">${getCardPricing(card).rechargeFee.toFixed(2)}</span>
                                 </div>
-                                <div className="flex justify-between col-span-2 border-t border-white/15 pt-1 mt-1">
-                                  <span className="opacity-70">开卡合计:</span>
+                                <div className="flex items-center justify-between col-span-2 rounded-md border border-white/25 bg-white/10 px-2.5 py-1.5 mt-0.5">
+                                  <span className="opacity-90">开卡合计</span>
                                   <span className="font-semibold">${getCardPricing(card).totalCost.toFixed(2)}</span>
                                 </div>
                               </>
                             )}
                       {(card.displayMonthlyFee !== null && card.displayMonthlyFee !== undefined) && (
-                        <div className="flex justify-between">
-                          <span className="opacity-70">月费:</span>
-                          <span>${card.displayMonthlyFee}</span>
+                        <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
+                          <span className="opacity-80">月费</span>
+                          <span className="font-medium">${card.displayMonthlyFee}</span>
                         </div>
                       )}
                       {card.displayRechargeFee && (
-                        <div className="flex justify-between">
-                          <span className="opacity-70">充值费:</span>
-                          <span>{card.displayRechargeFee}</span>
+                        <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
+                          <span className="opacity-80">充值费</span>
+                          <span className="font-medium">{card.displayRechargeFee}</span>
                         </div>
                       )}
                       {card.displayTransactionFee && (
-                        <div className="flex justify-between">
-                          <span className="opacity-70">交易费:</span>
-                          <span>{card.displayTransactionFee}</span>
+                        <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
+                          <span className="opacity-80">交易费</span>
+                          <span className="font-medium">{card.displayTransactionFee}</span>
                         </div>
                       )}
                       {card.displayAuthFee && (
-                        <div className="flex justify-between">
-                          <span className="opacity-70">授权费:</span>
-                          <span>{card.displayAuthFee}</span>
+                        <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
+                          <span className="opacity-80">授权费</span>
+                          <span className="font-medium">{card.displayAuthFee}</span>
                         </div>
                       )}
                       {card.displayRefundFee && (
-                        <div className="flex justify-between">
-                          <span className="opacity-70">退款费:</span>
-                          <span>{card.displayRefundFee}</span>
+                        <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
+                          <span className="opacity-80">退款费</span>
+                          <span className="font-medium">{card.displayRefundFee}</span>
                         </div>
                       )}
                     </div>

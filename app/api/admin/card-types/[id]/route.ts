@@ -48,6 +48,8 @@ export async function PUT(
         displayAuthFee: body.displayAuthFee,
         // 产品说明
         description: body.description || null,
+        // 卡段显示
+        cardSegment: body.cardSegment || null,
         // 适用对象
         targetRole: body.targetRole || 'user',  // 新增这一行
         // 实际运行

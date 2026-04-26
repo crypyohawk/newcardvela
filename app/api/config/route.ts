@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
         id: true,
         name: true,
         cardBin: true,
+        cardSegment: true,
         issuer: true,
         displayOpenFee: true,
         displayMonthlyFee: true,

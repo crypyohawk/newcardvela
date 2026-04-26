@@ -33,6 +33,9 @@ export default function Header() {
                     <Link href="/dashboard" className="block px-4 py-2 hover:bg-slate-600">
                       我的卡片
                     </Link>
+                    <Link href="/vpn" className="block px-4 py-2 hover:bg-slate-600">
+                      临时 VPN
+                    </Link>
                     <Link href="/recharge" className="block px-4 py-2 hover:bg-slate-600">
                       充值
                     </Link>
@@ -86,6 +89,9 @@ export default function Header() {
               <div className="text-gray-300 text-sm py-1">余额: ${user.balance.toFixed(2)}</div>
               <Link href="/dashboard" onClick={() => setMobileOpen(false)} className="block py-2 text-gray-300 hover:text-white">
                 我的卡片
+              </Link>
+              <Link href="/vpn" onClick={() => setMobileOpen(false)} className="block py-2 text-gray-300 hover:text-white">
+                临时 VPN
               </Link>
               <Link href="/recharge" onClick={() => setMobileOpen(false)} className="block py-2 text-gray-300 hover:text-white">
                 充值

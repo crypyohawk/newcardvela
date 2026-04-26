@@ -17,6 +17,7 @@
  */
 
 const http = require('http');
+const { Transform } = require('stream');
 
 const UPSTREAM_HOST = '127.0.0.1';
 const UPSTREAM_PORT = 3001;
@@ -284,6 +285,116 @@ function fixReasoningWithTools(body) {
   return false;
 }
 
+// ─── Claude Messages SSE 修复 ───
+// new-api 双向转换 (Claude Messages→OpenAI→Claude Messages) 有 bug:
+//   1. content_block index 不连续 (从 0 跳到 3 等)
+//   2. 产生幽灵 content_block_stop (对从未 start 的 index)
+// 导致 Claude Code 报 "Content block not found"
+// 修复策略: 重映射 index 使其连续, 过滤掉未 start 的 stop 事件
+
+function createSSEFixTransform() {
+  const indexMap = new Map();   // originalIndex → sequential newIndex
+  let nextIndex = 0;
+  let buffer = '';
+
+  return new Transform({
+    transform(chunk, encoding, callback) {
+      buffer += chunk.toString();
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';  // 最后一个可能不完整
+
+      let output = '';
+      for (const part of parts) {
+        if (!part.trim()) {
+          output += '\n\n';
+          continue;
+        }
+
+        // 解析 event: 和 data: 行
+        const lines = part.split('\n');
+        const dataLine = lines.find(l => l.startsWith('data: '));
+        if (!dataLine) {
+          output += part + '\n\n';
+          continue;
+        }
+
+        const dataStr = dataLine.substring(6);
+        if (dataStr === '[DONE]') {
+          output += part + '\n\n';
+          continue;
+        }
+
+        let parsed;
+        try { parsed = JSON.parse(dataStr); } catch {
+          output += part + '\n\n';
+          continue;
+        }
+
+        const type = parsed.type;
+
+        if (type === 'content_block_start') {
+          const origIdx = parsed.index;
+          const newIdx = nextIndex++;
+          indexMap.set(origIdx, newIdx);
+          parsed.index = newIdx;
+          // 替换 data 行
+          output += rebuildSSEEvent(lines, parsed) + '\n\n';
+          continue;
+        }
+
+        if (type === 'content_block_delta') {
+          const origIdx = parsed.index;
+          if (!indexMap.has(origIdx)) {
+            // delta 引用了从未 start 的 block → 丢弃
+            continue;
+          }
+          parsed.index = indexMap.get(origIdx);
+          output += rebuildSSEEvent(lines, parsed) + '\n\n';
+          continue;
+        }
+
+        if (type === 'content_block_stop') {
+          const origIdx = parsed.index;
+          if (!indexMap.has(origIdx)) {
+            // stop 引用了从未 start 的 block → 丢弃 (幽灵事件)
+            continue;
+          }
+          parsed.index = indexMap.get(origIdx);
+          output += rebuildSSEEvent(lines, parsed) + '\n\n';
+          continue;
+        }
+
+        // 其他事件 (message_start, message_delta, message_stop, ping) 原样通过
+        output += part + '\n\n';
+      }
+
+      if (output) callback(null, output);
+      else callback();
+    },
+    flush(callback) {
+      // 处理残余 buffer
+      if (buffer.trim()) {
+        callback(null, buffer);
+      } else {
+        callback();
+      }
+    }
+  });
+}
+
+function rebuildSSEEvent(originalLines, newData) {
+  // 保留 event: 行, 替换 data: 行
+  const result = [];
+  for (const line of originalLines) {
+    if (line.startsWith('data: ')) {
+      result.push('data: ' + JSON.stringify(newData));
+    } else {
+      result.push(line);
+    }
+  }
+  return result.join('\n');
+}
+
 // ─── HTTP 代理 ───
 
 // 单次代理请求, 返回 {statusCode, headers, body} 而不直接写入 clientRes
@@ -354,7 +465,15 @@ async function proxyRequest(clientReq, clientRes, bodyOverride) {
       // 如果有 stream (非重试场景或成功的流式响应), 直接 pipe
       if (result.stream) {
         clientRes.writeHead(result.statusCode, result.headers);
-        result.stream.pipe(clientRes, { end: true });
+
+        // /v1/messages SSE 修复: 修正 new-api 转换导致的 index 不连续和幽灵 stop 事件
+        const isMessagesStream = clientReq.url && clientReq.url.startsWith('/v1/messages');
+        if (isMessagesStream) {
+          const sseFix = createSSEFixTransform();
+          result.stream.pipe(sseFix).pipe(clientRes, { end: true });
+        } else {
+          result.stream.pipe(clientRes, { end: true });
+        }
         return;
       }
 

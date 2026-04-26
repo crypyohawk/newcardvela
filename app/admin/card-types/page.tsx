@@ -35,6 +35,7 @@ interface CardType {
   crossBorderFeeMin: number;
   chargebackFee: number;
   description: string | null;  // 新增
+  cardSegment: string | null;  // 卡段显示
   isActive: boolean;
   createdAt: string;
   targetRole: string;  // 新增这一行
@@ -81,6 +82,7 @@ export default function CardTypesPage() {
     crossBorderFeeMin: 0,
     chargebackFee: 15,
     description: '',  // 新增
+    cardSegment: '',  // 卡段显示
     targetRole: 'user',  // 新增这一行
     isActive: true,
   });
@@ -143,6 +145,7 @@ export default function CardTypesPage() {
         crossBorderFeeMin: card.crossBorderFeeMin || 0,
         chargebackFee: card.chargebackFee || 15,
         description: card.description || '',
+        cardSegment: card.cardSegment || '',  // 卡段显示
         targetRole: card.targetRole || 'user',  // 新增这一行
         isActive: card.isActive,
       });
@@ -176,6 +179,7 @@ export default function CardTypesPage() {
         crossBorderFeeMin: 0,
         chargebackFee: 15,
         description: '',  // 新增
+        cardSegment: '',  // 卡段显示
         targetRole: 'user',  // 新增这一行
         isActive: true,
       });
@@ -301,6 +305,7 @@ export default function CardTypesPage() {
                   <tr className="text-left text-gray-400 border-b border-slate-700">
                     <th className="pb-3">名称</th>
                     <th className="pb-3">卡产品编号</th>
+                    <th className="pb-3">卡段显示</th>
                     <th className="pb-3">发行地</th>
                     <th className="pb-3">显示开卡费</th>
                     <th className="pb-3">实际开卡费</th>
@@ -314,6 +319,7 @@ export default function CardTypesPage() {
                     <tr key={card.id} className="border-b border-slate-700">
                       <td className="py-4 font-medium">{card.name}</td>
                       <td className="py-4 font-mono text-sm">{card.cardBin}</td>
+                      <td className="py-4 text-gray-300 text-sm">{card.cardSegment || <span className="text-gray-500">-</span>}</td>
                       <td className="py-4">{card.issuer}</td>
                       <td className="py-4 text-blue-400">${card.displayOpenFee ?? card.openFee}</td>
                       <td className="py-4 text-green-400">${card.openFee}</td>
@@ -362,6 +368,10 @@ export default function CardTypesPage() {
                     <label className="block text-sm text-gray-400 mb-1">卡产品编号</label>
                     <input type="text" value={formData.cardBin} onChange={(e) => setFormData({ ...formData, cardBin: e.target.value })} placeholder="如 G36161" className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2" />
                   </div>
+                </div>
+                <div className="mt-4">
+                  <label className="block text-sm text-gray-400 mb-1">卡段显示</label>
+                  <input type="text" value={formData.cardSegment || ''} onChange={(e) => setFormData({ ...formData, cardSegment: e.target.value })} placeholder="如 4413-Apple Pay" className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2" />
                 </div>
                 <div className="mt-4">
                   <label className="block text-sm text-gray-400 mb-1">发行地区</label>
