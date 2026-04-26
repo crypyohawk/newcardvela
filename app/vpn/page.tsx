@@ -483,7 +483,7 @@ export default function VpnPage() {
                 </div>
                 <div>
                   <div className="font-medium text-white">什么时候开始计时？</div>
-                  <p className="mt-1 leading-6 text-slate-400">你点击"立即扣费/免费领取"后只是创建会话并展示节点。只有在你确认连接成功并点击"开始计时"后，6 小时倒计时才会开始。</p>
+                  <p className="mt-1 leading-6 text-slate-400">你点击&ldquo;立即扣费/免费领取&rdquo;后只是创建会话并展示节点。只有在你确认连接成功并点击&ldquo;开始计时&rdquo;后，6 小时倒计时才会开始。</p>
                 </div>
                 <div>
                   <div className="font-medium text-white">余额不足会怎样？</div>
