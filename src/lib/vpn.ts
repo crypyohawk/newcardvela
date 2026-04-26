@@ -86,9 +86,9 @@ function getVpnNodeFromConfig(configMap: Record<string, string>) {
     sni: configMap.vpn_temp_sni || '',
     publicKey: configMap.vpn_temp_public_key || '',
     shortId: configMap.vpn_temp_short_id || '',
-    notice: configMap.vpn_temp_notice || '本线路仅提供给用户用于海�?AI 订阅、Google/Gmail 登录、海淘支付等短时场景�?,
+    notice: configMap.vpn_temp_notice || '本线路仅提供给用户用于海外 AI 订阅、Google/Gmail 登录、海淘支付等短时场景。',
     supportPlatforms,
-    purchaseTip: configMap.vpn_temp_purchase_tip || '连接成功后再点击开始计时，系统�?1 小时会话管理，到时自动失效�?,
+    purchaseTip: configMap.vpn_temp_purchase_tip || '连接成功后再点击开始计时，系统按 1 小时会话管理，到时自动失效。',
   };
 }
 
@@ -164,7 +164,7 @@ export async function getUserVpnState(userId: string) {
   ]);
 
   if (!user) {
-    throw new VpnApiError('用户不存�?, 404);
+    throw new VpnApiError('用户不存在', 404);
   }
 
   const activeSession = await expireVpnSessionIfNeeded(activeSessionRaw);
@@ -181,7 +181,7 @@ export async function getUserVpnState(userId: string) {
       price: VPN_SESSION_PRICE_USD,
       freeEligible,
       freeUsed: freeBenefitUsedCount > 0,
-      freeRule: '已开卡用户可免费领取 1 �?1 小时体验，之后每�?1 美元�?,
+      freeRule: '已开卡用户可免费领取 1 次 1 小时体验，之后每次 1 美元。',
     },
     limits: {
       dailyLimit: VPN_DAILY_LIMIT,
@@ -194,9 +194,9 @@ export async function getUserVpnState(userId: string) {
     rechargeUrl: '/dashboard',
     policy: {
       title: '临时订阅 VPN 使用说明',
-      usageScope: '仅限海外 AI 订阅、Google/Gmail 登录、海淘支付等短时使用场景，不提供长期科学上网服务�?,
-      compliance: '禁止用于任何违法违规活动。若发现异常用途，平台有权立即停用服务，并保留追究责任的权利�?,
-      actionNotice: '请在确认已阅读说明并手动连接成功后，再点击开始计时�?,
+      usageScope: '仅限海外 AI 订阅、Google/Gmail 登录、海淘支付等短时使用场景，不提供长期科学上网服务。',
+      compliance: '禁止用于任何违法违规活动。若发现异常用途，平台有权立即停用服务，并保留追究责任的权利。',
+      actionNotice: '请在确认已阅读说明并手动连接成功后，再点击开始计时。',
     },
     activeSession: serializeSession(activeSession),
     recentSessions: recentSessions.map(serializeSession),
@@ -239,7 +239,7 @@ export async function startVpnSession(userId: string) {
     ]);
 
     if (!user) {
-      throw new VpnApiError('用户不存�?, 404);
+      throw new VpnApiError('用户不存在', 404);
     }
 
     if (activeSessionRaw?.status === 'active' && activeSessionRaw.expiresAt && activeSessionRaw.expiresAt.getTime() <= now.getTime()) {
@@ -251,7 +251,7 @@ export async function startVpnSession(userId: string) {
         },
       });
     } else if (activeSessionRaw) {
-      throw new VpnApiError('当前已有未结束的 VPN 会话，请先完成或等待倒计时结�?, 409);
+      throw new VpnApiError('当前已有未结束的 VPN 会话，请先完成或等待倒计时结束', 409);
     }
 
     if (todayUsedCount >= VPN_DAILY_LIMIT) {
@@ -263,7 +263,7 @@ export async function startVpnSession(userId: string) {
     const chargeAmount = shouldUseFreeBenefit ? 0 : VPN_SESSION_PRICE_USD;
 
     if (chargeAmount > 0 && user.balance < chargeAmount) {
-      throw new VpnApiError('账号余额不足请先充�?, 400);
+      throw new VpnApiError('账号余额不足请先充值', 400);
     }
 
     if (chargeAmount > 0) {
@@ -298,7 +298,7 @@ export async function startVpnSession(userId: string) {
         hasCardBenefit: shouldUseFreeBenefit,
         note: shouldUseFreeBenefit
           ? '已开卡用户首小时免费体验'
-          : '临时订阅 VPN 会话，待用户连接成功后开始计�?,
+          : '临时订阅 VPN 会话，待用户连接成功后开始计时',
       },
     });
 
@@ -314,7 +314,7 @@ export async function activateVpnSession(userId: string, sessionId: string) {
     const session = await tx.vpnSession.findUnique({ where: { id: sessionId } });
 
     if (!session || session.userId !== userId) {
-      throw new VpnApiError('VPN 会话不存�?, 404);
+      throw new VpnApiError('VPN 会话不存在', 404);
     }
 
     if (session.status === 'active' && session.expiresAt && session.expiresAt.getTime() > now.getTime()) {
@@ -322,7 +322,7 @@ export async function activateVpnSession(userId: string, sessionId: string) {
     }
 
     if (session.status !== 'pending_activation') {
-      throw new VpnApiError('当前会话无法开始计�?, 400);
+      throw new VpnApiError('当前会话无法开始计时', 400);
     }
 
     const updated = await tx.vpnSession.update({
@@ -345,7 +345,7 @@ export async function disconnectVpnSession(userId: string, sessionId: string) {
     const session = await tx.vpnSession.findUnique({ where: { id: sessionId } });
 
     if (!session || session.userId !== userId) {
-      throw new VpnApiError('VPN 会话不存�?, 404);
+      throw new VpnApiError('VPN 会话不存在', 404);
     }
 
     if (!['pending_activation', 'active'].includes(session.status)) {
@@ -371,7 +371,7 @@ export function getVpnSummaryFromState(state: Awaited<ReturnType<typeof getUserV
       enabled: true,
       status: 'active',
       expireAt: state.activeSession.expiresAt,
-      actionText: '查看倒计�?,
+      actionText: '查看倒计时',
       actionUrl: '/vpn',
     };
   }
@@ -400,7 +400,7 @@ export function getVpnSummaryFromState(state: Awaited<ReturnType<typeof getUserV
     enabled: state.canStartNewSession,
     status: state.pricing.freeEligible ? 'free_available' : state.requiresRecharge ? 'insufficient_balance' : 'available',
     expireAt: null,
-    actionText: state.pricing.freeEligible ? '免费�?1 小时' : state.requiresRecharge ? '余额不足去充�? : '立即使用',
+    actionText: state.pricing.freeEligible ? '免费领 1 小时' : state.requiresRecharge ? '余额不足去充值' : '立即使用',
     actionUrl: state.requiresRecharge ? state.rechargeUrl : '/vpn',
   };
 }
