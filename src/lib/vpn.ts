@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma';
 
 export const VPN_SESSION_PRICE_USD = 1;
 export const VPN_DAILY_LIMIT = 5;
-export const VPN_SESSION_DURATION_MINUTES = 60;
+export const VPN_SESSION_DURATION_MINUTES = 360;
 export const VPN_SESSION_DURATION_MS = VPN_SESSION_DURATION_MINUTES * 60 * 1000;
 export const VPN_TIME_ZONE = 'Asia/Shanghai';
 
@@ -88,7 +88,7 @@ function getVpnNodeFromConfig(configMap: Record<string, string>) {
     shortId: configMap.vpn_temp_short_id || '',
     notice: configMap.vpn_temp_notice || '本线路仅提供给用户用于海外 AI 订阅、Google/Gmail 登录、海淘支付等短时场景。',
     supportPlatforms,
-    purchaseTip: configMap.vpn_temp_purchase_tip || '连接成功后再点击开始计时，系统按 1 小时会话管理，到时自动失效。',
+    purchaseTip: configMap.vpn_temp_purchase_tip || '连接成功后再点击开始计时，系统按 6 小时会话管理，到时自动失效。',
   };
 }
 
@@ -181,7 +181,7 @@ export async function getUserVpnState(userId: string) {
       price: VPN_SESSION_PRICE_USD,
       freeEligible,
       freeUsed: freeBenefitUsedCount > 0,
-      freeRule: '已开卡用户可免费领取 1 次 1 小时体验，之后每次 1 美元。',
+      freeRule: '已开卡用户可免费领取 1 次 6 小时体验，之后每次 1 美元。',
     },
     limits: {
       dailyLimit: VPN_DAILY_LIMIT,
@@ -297,8 +297,8 @@ export async function startVpnSession(userId: string) {
         isFree: shouldUseFreeBenefit,
         hasCardBenefit: shouldUseFreeBenefit,
         note: shouldUseFreeBenefit
-          ? '已开卡用户首小时免费体验'
-          : '临时订阅 VPN 会话，待用户连接成功后开始计时',
+          ? '已开卡用户首次 6 小时免费体验'
+          : '临时订阅 VPN 会话（6 小时），待用户连接成功后开始计时',
       },
     });
 
@@ -400,7 +400,7 @@ export function getVpnSummaryFromState(state: Awaited<ReturnType<typeof getUserV
     enabled: state.canStartNewSession,
     status: state.pricing.freeEligible ? 'free_available' : state.requiresRecharge ? 'insufficient_balance' : 'available',
     expireAt: null,
-    actionText: state.pricing.freeEligible ? '免费领 1 小时' : state.requiresRecharge ? '余额不足去充值' : '立即使用',
+    actionText: state.pricing.freeEligible ? '免费领 6 小时' : state.requiresRecharge ? '余额不足去充値' : '立即使用',
     actionUrl: state.requiresRecharge ? state.rechargeUrl : '/vpn',
   };
 }

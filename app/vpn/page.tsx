@@ -276,6 +276,14 @@ export default function VpnPage() {
       </nav>
 
       <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+        {/* 暂未上线提示 */}
+        <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-5 py-4 flex items-start gap-3">
+          <span className="text-amber-400 text-xl mt-0.5">🔔</span>
+          <div>
+            <p className="font-semibold text-amber-200">温馨提示：该板块功能暂未上线，请静待通知</p>
+            <p className="text-sm text-amber-300/70 mt-1">VPN 服务正在接入中，敬请期待。如有需要请联系客服了解最新进展。</p>
+          </div>
+        </div>
         {message && (
           <div className={`rounded-2xl border px-4 py-3 ${message.type === 'success' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : 'border-red-500/30 bg-red-500/10 text-red-200'}`}>
             {message.text}
@@ -289,7 +297,7 @@ export default function VpnPage() {
                 <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs text-amber-200">
                   仅限短时订阅 / 海淘使用
                 </div>
-                <h1 className="mt-4 text-3xl font-bold">1 小时临时 VPN 会话</h1>
+                <h1 className="mt-4 text-3xl font-bold">6 小时临时 VPN 会话</h1>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
                   仅用于海外 AI 订阅、Google/Gmail 登录、海淘支付等短时场景。不是长期线路，不提供持续代理用途。
                 </p>
@@ -297,7 +305,7 @@ export default function VpnPage() {
               <div className="rounded-2xl border border-slate-700 bg-slate-900/80 px-5 py-4 text-right">
                 <div className="text-xs text-slate-400">当前价格</div>
                 <div className="mt-1 text-3xl font-bold text-white">${data.pricing.price.toFixed(2)}</div>
-                <div className="text-xs text-slate-400">每次 1 小时，每日最多 {data.limits.dailyLimit} 次</div>
+                <div className="text-xs text-slate-400">每次 6 小时，每日最多 {data.limits.dailyLimit} 次</div>
               </div>
             </div>
 
@@ -313,7 +321,7 @@ export default function VpnPage() {
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
                 <div className="text-xs text-slate-400">开卡福利</div>
                 <div className="mt-2 text-sm text-slate-200">
-                  {data.pricing.freeEligible ? '你已开卡，可免费使用 1 次' : data.pricing.freeUsed ? '免费次数已使用' : '开卡后可免费使用 1 次'}
+                  {data.pricing.freeEligible ? '你已开卡，可免费使用 1 次' : data.pricing.freeUsed ? '免费次数已使用' : '开卡后可免费体验 1 次'}
                 </div>
               </div>
             </div>
@@ -341,7 +349,7 @@ export default function VpnPage() {
                   disabled={submitting || !data.canStartNewSession}
                   className="w-full rounded-2xl bg-cyan-400 px-4 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
                 >
-                  {submitting ? '处理中...' : data.pricing.freeEligible ? '免费领取 1 小时' : `立即扣费 $${data.pricing.price.toFixed(2)}`}
+                  {submitting ? '处理中...' : data.pricing.freeEligible ? '免费领取 6 小时' : `立即扣费 $${data.pricing.price.toFixed(2)}`}
                 </button>
 
                 {data.requiresRecharge && (
@@ -364,7 +372,7 @@ export default function VpnPage() {
                     onChange={(event) => setAgreedPolicy(event.target.checked)}
                     className="mt-1 h-4 w-4 rounded border-emerald-400 bg-slate-900 text-emerald-500"
                   />
-                  <span>我已阅读使用说明与免责声明，且已确认 VPN 已连接成功。勾选后按钮变绿，才能开始 1 小时倒计时。</span>
+                  <span>我已阅读使用说明与免责声明，且已确认 VPN 已连接成功。勾选后按鈕变绿，才能开始 6 小时倒计时。</span>
                 </label>
                 <button
                   onClick={activateSession}
@@ -475,7 +483,7 @@ export default function VpnPage() {
                 </div>
                 <div>
                   <div className="font-medium text-white">什么时候开始计时？</div>
-                  <p className="mt-1 leading-6 text-slate-400">你点击“立即扣费/免费领取”后只是创建会话并展示节点。只有在你确认连接成功并点击“开始计时”后，1 小时倒计时才会开始。</p>
+                  <p className="mt-1 leading-6 text-slate-400">你点击"立即扣费/免费领取"后只是创建会话并展示节点。只有在你确认连接成功并点击"开始计时"后，6 小时倒计时才会开始。</p>
                 </div>
                 <div>
                   <div className="font-medium text-white">余额不足会怎样？</div>

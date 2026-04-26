@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: session?.isFree ? '已领取免费 1 小时会话，请连接成功后再开始计时' : '已扣费 1 美元，请连接成功后再开始计时',
+      message: session?.isFree ? '已领取免费 6 小时会话，请连接成功后再开始计时' : '已扣费 1 美元，请连接成功后再开始计时',
       session,
       state,
     });
