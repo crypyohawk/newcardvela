@@ -958,6 +958,14 @@ export default function DashboardPage() {
             <div className="font-semibold">临时 VPN</div>
             <div className="text-sm text-gray-400">1 小时短时使用</div>
           </Link>
+          <Link
+            href="/guide"
+            className="p-4 rounded-xl text-left transition bg-slate-800 hover:bg-slate-700"
+          >
+            <div className="text-2xl mb-2">📖</div>
+            <div className="font-semibold">订阅教程</div>
+            <div className="text-sm text-gray-400">保姆级出海 AI 指南</div>
+          </Link>
         </div>
 
         {/* Claude AI 常驻横幅 */}

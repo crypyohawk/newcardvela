@@ -36,6 +36,9 @@ export default function Header() {
                     <Link href="/vpn" className="block px-4 py-2 hover:bg-slate-600">
                       临时 VPN
                     </Link>
+                    <Link href="/guide" className="block px-4 py-2 hover:bg-slate-600">
+                      订阅教程
+                    </Link>
                     <Link href="/recharge" className="block px-4 py-2 hover:bg-slate-600">
                       充值
                     </Link>
@@ -92,6 +95,9 @@ export default function Header() {
               </Link>
               <Link href="/vpn" onClick={() => setMobileOpen(false)} className="block py-2 text-gray-300 hover:text-white">
                 临时 VPN
+              </Link>
+              <Link href="/guide" onClick={() => setMobileOpen(false)} className="block py-2 text-gray-300 hover:text-white">
+                订阅教程
               </Link>
               <Link href="/recharge" onClick={() => setMobileOpen(false)} className="block py-2 text-gray-300 hover:text-white">
                 充值
