@@ -1183,6 +1183,7 @@ export default function AdminPage() {
         <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
           <h1 className="text-2xl font-bold">CardVela 管理后台</h1>
           <div className="flex gap-4">
+            <Link href="/admin/guide" className="text-gray-400 hover:text-white">📖 教程管理</Link>
             <Link href="/admin/settings" className="text-gray-400 hover:text-white">系统设置</Link>
             <Link href="/dashboard" className="text-gray-400 hover:text-white">返回前台</Link>
           </div>
