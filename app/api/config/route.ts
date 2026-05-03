@@ -106,6 +106,15 @@ export async function GET(request: NextRequest) {
       welfareQrcode: configMap['welfare_qrcode'] || '',
       aiApiBaseUrl: configMap['ai_api_base_url'] || '',
       aiTransferMultiplier: parseFloat(configMap['ai_balance_recharge_multiplier'] || '1') || 1,
+      platformAnnouncement: (() => {
+        try {
+          const raw = configMap['platform_announcement'];
+          if (!raw) return null;
+          const d = JSON.parse(raw);
+          if (!d.enabled) return null;
+          return { content: d.content, version: d.version || 1 };
+        } catch { return null; }
+      })(),
     });
   } catch (error) {
     console.error('获取配置失败:', error);

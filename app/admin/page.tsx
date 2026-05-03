@@ -77,7 +77,7 @@ interface AdminAIUserDetail {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds' | 'referral' | 'monthlyFee' | 'ai' | 'enterprise' | 'copilot'>('cards');
+  const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds' | 'referral' | 'monthlyFee' | 'ai' | 'enterprise' | 'copilot' | 'announcement'>('cards');
   const [monthlyFeePreview, setMonthlyFeePreview] = useState<any>(null);
   const [monthlyFeeLoading, setMonthlyFeeLoading] = useState(false);
   const [monthlyFeeExecuting, setMonthlyFeeExecuting] = useState(false);
@@ -101,6 +101,9 @@ export default function AdminPage() {
   const [refunds, setRefunds] = useState<Order[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [newNotice, setNewNotice] = useState('');
+  // 平台公告
+  const [announcement, setAnnouncement] = useState({ content: '', enabled: false, version: 1 });
+  const [announcementSaving, setAnnouncementSaving] = useState(false);
   const [subscriptionGuide, setSubscriptionGuide] = useState('');
   const [subscriptionGuideSaving, setSubscriptionGuideSaving] = useState(false);
   const [welfareGuide, setWelfareGuide] = useState('');
@@ -178,7 +181,7 @@ export default function AdminPage() {
   const [showTxModal, setShowTxModal] = useState(false);
   const [showAddTier, setShowAddTier] = useState(false);
   const [editingTier, setEditingTier] = useState<any>(null);
-  const [tierForm, setTierForm] = useState({ displayName: '', description: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0' });
+  const [tierForm, setTierForm] = useState({ displayName: '', description: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0', groupRatio: '1' });
 
   // Provider 管理状态
   const [aiProviders, setAiProviders] = useState<any[]>([]);
@@ -373,6 +376,9 @@ export default function AdminPage() {
         case 'enterprise':
           await fetchEnterpriseApps();
           break;
+        case 'announcement':
+          await fetchAnnouncement();
+          break;
       }
       setLoadedTabs(prev => new Set(prev).add(tab));
     } catch (error) {
@@ -485,6 +491,42 @@ export default function AdminPage() {
       }
     } catch (error) {
       console.error('获取开卡须知失败:', error);
+    }
+  };
+
+  const fetchAnnouncement = async () => {
+    try {
+      const res = await fetch('/api/admin/announcement', {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAnnouncement({ content: data.content || '', enabled: !!data.enabled, version: data.version || 1 });
+      }
+    } catch (e) {
+      console.error('获取平台公告失败:', e);
+    }
+  };
+
+  const saveAnnouncement = async () => {
+    setAnnouncementSaving(true);
+    try {
+      const res = await fetch('/api/admin/announcement', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: announcement.content, enabled: announcement.enabled }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAnnouncement(prev => ({ ...prev, version: data.version }));
+        setMessage({ type: 'success', text: `平台公告已保存（版本 v${data.version}）` });
+      } else {
+        setMessage({ type: 'error', text: data.error || '保存失败' });
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message });
+    } finally {
+      setAnnouncementSaving(false);
     }
   };
 
@@ -765,6 +807,7 @@ export default function AdminPage() {
         maxKeys: parseInt(tierForm.maxKeys) || 0,
         requiredRole: tierForm.requiredRole || null,
         minAiBalance: parseFloat(tierForm.minAiBalance) || 0,
+        groupRatio: parseFloat(tierForm.groupRatio) || 1,
       };
       const url = editingTier ? `/api/admin/ai-tiers/${editingTier.id}` : '/api/admin/ai-tiers';
       const res = await fetch(url, {
@@ -776,7 +819,7 @@ export default function AdminPage() {
       setMessage({ type: 'success', text: editingTier ? '套餐已更新' : '套餐已创建' });
       setShowAddTier(false);
       setEditingTier(null);
-      setTierForm({ displayName: '', description: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0' });
+      setTierForm({ displayName: '', description: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0', groupRatio: '1' });
       fetchAIManagement();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
@@ -1211,6 +1254,7 @@ export default function AdminPage() {
             { key: 'enterprise', label: '🏢 企业审核' },
             { key: 'ai', label: '✦ AI 管理' },
             { key: 'copilot', label: '🤖 Copilot池' },
+            { key: 'announcement', label: '📢 平台公告' },
           ].map(tab => (
             <button
               key={tab.key}
@@ -2802,7 +2846,7 @@ export default function AdminPage() {
                 <button
                   onClick={() => {
                     setEditingTier(null);
-                    setTierForm({ displayName: '', description: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0' });
+                    setTierForm({ displayName: '', description: '', pricePerMillionInput: '', pricePerMillionOutput: '', features: '', isActive: true, providerId: '', modelGroup: 'claude', channelGroup: '', maxKeys: '0', requiredRole: '', minAiBalance: '0', groupRatio: '1' });
                     setShowAddTier(true);
                   }}
                   className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm"
@@ -2840,6 +2884,7 @@ export default function AdminPage() {
                         {tier.maxKeys > 0 && <span className="ml-2 text-purple-400">限{tier.maxKeys}个Key</span>}
                         {tier.requiredRole && <span className="ml-2 text-orange-400">需{tier.requiredRole === 'enterprise' ? '企业' : '管理员'}</span>}
                         {tier.minAiBalance > 0 && <span className="ml-2 text-yellow-400">最低AI余额${tier.minAiBalance}</span>}
+                        {tier.groupRatio != null && tier.groupRatio !== 1 && <span className="ml-2 text-pink-400">分组倍率×{tier.groupRatio}</span>}
                         {tier._count?.aiKeys > 0 && <span className="ml-2 text-blue-400">({tier._count.aiKeys} 个 Key)</span>}
                       </p>
                     </div>
@@ -2860,6 +2905,7 @@ export default function AdminPage() {
                             maxKeys: String(tier.maxKeys || 0),
                             requiredRole: tier.requiredRole || '',
                             minAiBalance: String(tier.minAiBalance || 0),
+                            groupRatio: String(tier.groupRatio ?? 1),
                           });
                           setShowAddTier(true);
                         }}
@@ -3325,6 +3371,71 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* 平台公告 */}
+        {!tabLoading && activeTab === 'announcement' && (
+          <div className="space-y-6">
+            <div className="bg-slate-800 p-6 rounded-xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold">📢 平台公告管理</h3>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-400">版本 v{announcement.version}</span>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <span className="text-sm text-gray-400">启用公告</span>
+                    <div
+                      onClick={() => setAnnouncement(prev => ({ ...prev, enabled: !prev.enabled }))}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${announcement.enabled ? 'bg-green-500' : 'bg-slate-600'}`}
+                    >
+                      <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${announcement.enabled ? 'translate-x-5' : ''}`} />
+                    </div>
+                    <span className={`text-sm font-medium ${announcement.enabled ? 'text-green-400' : 'text-gray-500'}`}>
+                      {announcement.enabled ? '已启用' : '已关闭'}
+                    </span>
+                  </label>
+                </div>
+              </div>
+              <p className="text-sm text-gray-400 mb-4">
+                启用后，用户登录进入首页时将弹出此公告，用户需将内容完整阅读后才能关闭弹窗。每次修改内容后版本号自动 +1，强制所有用户重新阅读。
+              </p>
+              <div className="mb-4">
+                <label className="block text-sm text-gray-400 mb-2">公告内容（支持换行）</label>
+                <textarea
+                  value={announcement.content}
+                  onChange={(e) => setAnnouncement(prev => ({ ...prev, content: e.target.value }))}
+                  rows={16}
+                  className="w-full bg-slate-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y font-mono"
+                  placeholder="请输入平台公告内容..."
+                />
+                <p className="text-xs text-gray-500 mt-1">当前字数：{announcement.content.length}</p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={saveAnnouncement}
+                  disabled={announcementSaving || !announcement.content.trim()}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition"
+                >
+                  {announcementSaving ? '保存中...' : '保存公告'}
+                </button>
+                <button
+                  onClick={fetchAnnouncement}
+                  className="px-6 py-2 bg-slate-600 hover:bg-slate-500 rounded-lg text-sm font-medium transition"
+                >
+                  重新加载
+                </button>
+              </div>
+            </div>
+
+            {/* 预览 */}
+            {announcement.content && (
+              <div className="bg-slate-800 p-6 rounded-xl">
+                <h3 className="text-sm font-bold text-gray-400 mb-3">预览效果（用户看到的弹窗内容）</h3>
+                <div className="bg-slate-900 rounded-lg p-4 max-h-64 overflow-y-auto border border-slate-700">
+                  <p className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed">{announcement.content}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 新建/编辑套餐弹窗 */}
         {showAddTier && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -3460,6 +3571,24 @@ export default function AdminPage() {
                       className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">
+                    分组扣费倍率 (groupRatio)
+                    <span className="ml-2 text-xs text-pink-300">仅后台计费用，不对用户展示</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={tierForm.groupRatio}
+                    onChange={(e) => setTierForm({ ...tierForm, groupRatio: e.target.value })}
+                    placeholder="1"
+                    min="0.1"
+                    step="0.1"
+                    className="w-full bg-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    实际扣费 = 用户看到的官方 token 价 × 此倍率。例：1.0=按官方价；2.0=每次扣双倍。
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <input

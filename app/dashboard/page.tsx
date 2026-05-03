@@ -176,6 +176,11 @@ export default function DashboardPage() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [platformApiUrl, setPlatformApiUrl] = useState('');
 
+  // 平台公告弹窗
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+  const [announcementData, setAnnouncementData] = useState<{ content: string; version: number } | null>(null);
+  const [announcementScrolled, setAnnouncementScrolled] = useState(false);
+
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
@@ -242,6 +247,17 @@ export default function DashboardPage() {
       }
       if (configData.welfareQrcode) {
         setWelfareQrcode(configData.welfareQrcode);
+      }
+
+      // 检查平台公告
+      if (configData.platformAnnouncement) {
+        const ann = configData.platformAnnouncement;
+        const readKey = `announcement_read_v${ann.version}`;
+        if (!localStorage.getItem(readKey)) {
+          setAnnouncementData(ann);
+          setAnnouncementScrolled(false);
+          setShowAnnouncementModal(true);
+        }
       }
       
     } catch (error) {
@@ -3170,6 +3186,48 @@ export default function DashboardPage() {
                 }`}
               >
                 {notices.length > 0 && !agreedToNotices ? '请先同意须知' : '确认开卡'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 平台公告弹窗 */}
+      {showAnnouncementModal && announcementData && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-slate-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col" style={{ maxHeight: '80vh' }}>
+            <div className="px-6 pt-6 pb-4 border-b border-slate-700 flex-shrink-0">
+              <h2 className="text-xl font-bold text-white">📢 平台公告</h2>
+              <p className="text-sm text-gray-400 mt-1">请将以下内容完整阅读后方可关闭</p>
+            </div>
+            <div
+              className="flex-1 overflow-y-auto px-6 py-4"
+              onScroll={(e) => {
+                const el = e.currentTarget;
+                if (el.scrollTop + el.clientHeight >= el.scrollHeight - 10) {
+                  setAnnouncementScrolled(true);
+                }
+              }}
+            >
+              <p className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed">{announcementData!.content}</p>
+            </div>
+            <div className="px-6 pb-6 pt-4 border-t border-slate-700 flex-shrink-0">
+              {!announcementScrolled && (
+                <p className="text-xs text-yellow-400 mb-3 text-center">↓ 请向下滚动阅读完整公告</p>
+              )}
+              <button
+                disabled={!announcementScrolled}
+                onClick={() => {
+                  localStorage.setItem(`announcement_read_v${announcementData!.version}`, '1');
+                  setShowAnnouncementModal(false);
+                }}
+                className={`w-full py-3 rounded-xl text-sm font-semibold transition ${
+                  announcementScrolled
+                    ? 'bg-blue-600 hover:bg-blue-500 text-white'
+                    : 'bg-slate-600 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                {announcementScrolled ? '我已阅读，确认关闭' : '请先阅读完整公告'}
               </button>
             </div>
           </div>
