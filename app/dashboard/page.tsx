@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getMinimumInitialAmountForCardBin, getOpenCardPricing } from '../../src/lib/cardOpening';
+import { CreditCard, CirclePlus, WalletMinimal, ArrowUpFromLine, Gift, Globe, BookOpen } from 'lucide-react';
 
 interface CardType {
   id: string;
@@ -909,99 +910,171 @@ export default function DashboardPage() {
         )}
 
         {/* 快捷操作 */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
+          {/* 我的卡片 */}
           <button
             onClick={() => setActiveTab('cards')}
-            className={`p-4 rounded-xl text-left transition ${activeTab === 'cards' ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'}`}
+            className={`relative overflow-hidden p-4 rounded-2xl text-left transition-all group border ${
+              activeTab === 'cards'
+                ? 'bg-blue-600/90 border-blue-500/60 shadow-lg shadow-blue-900/40'
+                : 'bg-slate-800/60 border-slate-700/50 hover:border-blue-500/40 hover:bg-slate-800'
+            }`}
           >
-            <div className="text-2xl mb-2">💳</div>
-            <div className="font-semibold">我的卡片</div>
-            <div className="text-sm text-gray-400">{userCards.length} 张卡片</div>
+            {activeTab !== 'cards' && <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-blue-400/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />}
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 transition-transform group-hover:scale-105 ${
+              activeTab === 'cards' ? 'bg-white/20' : 'bg-gradient-to-br from-blue-400 to-blue-700 shadow-lg shadow-blue-900/50'
+            }`}>
+              <CreditCard className="w-5 h-5 text-white" strokeWidth={1.5} />
+            </div>
+            <div className="font-semibold text-sm">我的卡片</div>
+            <div className="text-xs text-slate-400 mt-0.5">{userCards.length} 张卡片</div>
           </button>
+          {/* 开通新卡 */}
           <button
             onClick={() => setActiveTab('open')}
-            className={`p-4 rounded-xl text-left transition ${activeTab === 'open' ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'}`}
+            className={`relative overflow-hidden p-4 rounded-2xl text-left transition-all group border ${
+              activeTab === 'open'
+                ? 'bg-violet-600/90 border-violet-500/60 shadow-lg shadow-violet-900/40'
+                : 'bg-slate-800/60 border-slate-700/50 hover:border-violet-500/40 hover:bg-slate-800'
+            }`}
           >
-            <div className="text-2xl mb-2">➕</div>
-            <div className="font-semibold">开通新卡</div>
-            <div className="text-sm text-gray-400">申请虚拟信用卡</div>
+            {activeTab !== 'open' && <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-violet-400/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />}
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 transition-transform group-hover:scale-105 ${
+              activeTab === 'open' ? 'bg-white/20' : 'bg-gradient-to-br from-violet-400 to-purple-700 shadow-lg shadow-violet-900/50'
+            }`}>
+              <CirclePlus className="w-5 h-5 text-white" strokeWidth={1.5} />
+            </div>
+            <div className="font-semibold text-sm">开通新卡</div>
+            <div className="text-xs text-slate-400 mt-0.5">申请虚拟信用卡</div>
           </button>
+          {/* 充值 */}
           <button
             onClick={() => setActiveTab('recharge')}
-            className={`p-4 rounded-xl text-left transition ${activeTab === 'recharge' ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'}`}
+            className={`relative overflow-hidden p-4 rounded-2xl text-left transition-all group border ${
+              activeTab === 'recharge'
+                ? 'bg-emerald-600/90 border-emerald-500/60 shadow-lg shadow-emerald-900/40'
+                : 'bg-slate-800/60 border-slate-700/50 hover:border-emerald-500/40 hover:bg-slate-800'
+            }`}
           >
-            <div className="text-2xl mb-2">💰</div>
-            <div className="font-semibold">充值</div>
-            <div className="text-sm text-gray-400">账户余额充值</div>
+            {activeTab !== 'recharge' && <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-emerald-400/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />}
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 transition-transform group-hover:scale-105 ${
+              activeTab === 'recharge' ? 'bg-white/20' : 'bg-gradient-to-br from-emerald-400 to-teal-700 shadow-lg shadow-emerald-900/50'
+            }`}>
+              <WalletMinimal className="w-5 h-5 text-white" strokeWidth={1.5} />
+            </div>
+            <div className="font-semibold text-sm">充值</div>
+            <div className="text-xs text-slate-400 mt-0.5">账户余额充值</div>
           </button>
+          {/* 提现 */}
           <button
             onClick={() => setShowAccountWithdraw(true)}
-            className="p-4 rounded-xl text-left transition bg-slate-800 hover:bg-slate-700"
+            className="relative overflow-hidden p-4 rounded-2xl text-left transition-all group border bg-slate-800/60 border-slate-700/50 hover:border-cyan-500/40 hover:bg-slate-800"
           >
-            <div className="text-2xl mb-2">💸</div>
-            <div className="font-semibold">提现</div>
-            <div className="text-sm text-gray-400">账户余额提现</div>
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 to-sky-700 shadow-lg shadow-cyan-900/50 flex items-center justify-center mb-3 transition-transform group-hover:scale-105">
+              <ArrowUpFromLine className="w-5 h-5 text-white" strokeWidth={1.5} />
+            </div>
+            <div className="font-semibold text-sm">提现</div>
+            <div className="text-xs text-slate-400 mt-0.5">账户余额提现</div>
           </button>
+          {/* 推荐奖励 */}
           <button
             onClick={() => setActiveTab('referral')}
-            className={`p-4 rounded-xl text-left transition ${activeTab === 'referral' ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'}`}
+            className={`relative overflow-hidden p-4 rounded-2xl text-left transition-all group border ${
+              activeTab === 'referral'
+                ? 'bg-rose-600/90 border-rose-500/60 shadow-lg shadow-rose-900/40'
+                : 'bg-slate-800/60 border-slate-700/50 hover:border-rose-500/40 hover:bg-slate-800'
+            }`}
           >
-            <div className="text-2xl mb-2">🎁</div>
-            <div className="font-semibold">推荐奖励</div>
-            <div className="text-sm text-gray-400">邀请好友得奖励</div>
+            {activeTab !== 'referral' && <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-rose-400/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />}
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 transition-transform group-hover:scale-105 ${
+              activeTab === 'referral' ? 'bg-white/20' : 'bg-gradient-to-br from-rose-400 to-pink-700 shadow-lg shadow-rose-900/50'
+            }`}>
+              <Gift className="w-5 h-5 text-white" strokeWidth={1.5} />
+            </div>
+            <div className="font-semibold text-sm">推荐奖励</div>
+            <div className="text-xs text-slate-400 mt-0.5">邀请好友得奖励</div>
           </button>
+          {/* 临时 VPN */}
           <Link
             href="/vpn"
-            className="p-4 rounded-xl text-left transition bg-slate-800 hover:bg-slate-700"
+            className="relative overflow-hidden p-4 rounded-2xl text-left transition-all group border bg-slate-800/60 border-slate-700/50 hover:border-slate-500/60 hover:bg-slate-800"
           >
-            <div className="text-2xl mb-2">🌐</div>
-            <div className="font-semibold">临时 VPN</div>
-            <div className="text-sm text-gray-400">1 小时短时使用</div>
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-slate-400/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-400 to-slate-700 shadow-lg shadow-slate-900/50 flex items-center justify-center mb-3 transition-transform group-hover:scale-105">
+              <Globe className="w-5 h-5 text-white" strokeWidth={1.5} />
+            </div>
+            <div className="font-semibold text-sm">临时 VPN</div>
+            <div className="text-xs text-slate-400 mt-0.5">暂未上线</div>
           </Link>
+          {/* 订阅教程 */}
           <Link
             href="/guide"
-            className="p-4 rounded-xl text-left transition bg-slate-800 hover:bg-slate-700"
+            className="relative overflow-hidden p-4 rounded-2xl text-left transition-all group border bg-slate-800/60 border-slate-700/50 hover:border-amber-500/40 hover:bg-slate-800"
           >
-            <div className="text-2xl mb-2">📖</div>
-            <div className="font-semibold">订阅教程</div>
-            <div className="text-sm text-gray-400">保姆级出海 AI 指南</div>
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 shadow-lg shadow-amber-900/50 flex items-center justify-center mb-3 transition-transform group-hover:scale-105">
+              <BookOpen className="w-5 h-5 text-white" strokeWidth={1.5} />
+            </div>
+            <div className="font-semibold text-sm">订阅教程</div>
+            <div className="text-xs text-slate-400 mt-0.5">出海 AI 指南</div>
           </Link>
         </div>
 
-        {/* Claude AI 常驻横幅 */}
-        <button
-          onClick={() => { setActiveTab('ai'); fetchAIData(); }}
-          className={`w-full mb-8 relative overflow-hidden rounded-2xl p-4 md:p-5 text-left transition-all group ${
-            activeTab === 'ai'
-              ? 'bg-gradient-to-r from-[#2a1a0a] via-[#3a2010] to-[#2a1a0a] border-2 border-orange-500/50 shadow-lg shadow-orange-900/20'
-              : 'bg-gradient-to-r from-[#1a1207] via-[#241810] to-[#1a1207] border border-orange-900/30 hover:border-orange-700/50 hover:shadow-lg hover:shadow-orange-900/10'
-          }`}
-        >
-          <div className="absolute top-0 right-0 w-48 h-48 opacity-[0.03] group-hover:opacity-[0.06] transition-opacity">
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full text-orange-300"><path d="M12 1L13.5 9L19 4L15 10.5L23 12L15 13.5L19 20L13.5 15L12 23L10.5 15L5 20L9 13.5L1 12L9 10.5L5 4L10.5 9Z"/></svg>
+        {/* AI 服务入口卡片组 */}
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs text-gray-500 uppercase tracking-wider font-medium">AI 服务</span>
           </div>
-          <div className="relative flex items-center gap-4">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-lg shadow-orange-900/40 flex-shrink-0">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M12 1L13.5 9L19 4L15 10.5L23 12L15 13.5L19 20L13.5 15L12 23L10.5 15L5 20L9 13.5L1 12L9 10.5L5 4L10.5 9Z"/></svg>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-3">
-                <h3 className="font-bold text-white text-base sm:text-lg">Claude AI 服务</h3>
-                {aiKeys.length > 0 && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300">{aiKeys.length} 个 Key 运行中</span>
-                )}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {/* Claude AI */}
+            <Link href="/dashboard/ai/claude" className="relative overflow-hidden rounded-2xl p-4 text-left transition-all group border bg-gradient-to-br from-[#1a1207] to-[#241810] border-orange-900/30 hover:border-orange-500/60 hover:shadow-lg hover:shadow-orange-900/20 block">
+              <div className="absolute top-0 right-0 w-16 h-16 opacity-[0.04] group-hover:opacity-[0.08] transition-opacity">
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full text-orange-300"><path d="M12 1L13.5 9L19 4L15 10.5L23 12L15 13.5L19 20L13.5 15L12 23L10.5 15L5 20L9 13.5L1 12L9 10.5L5 4L10.5 9Z"/></svg>
               </div>
-              <p className="text-xs sm:text-sm text-gray-400 mt-0.5">稳定高速的 Claude 官转 API 代理 · 支持 vscode / Cursor / Claude Code 等全系列工具</p>
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-lg shadow-orange-900/40 mb-3 transition-transform group-hover:scale-105">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M12 1L13.5 9L19 4L15 10.5L23 12L15 13.5L19 20L13.5 15L12 23L10.5 15L5 20L9 13.5L1 12L9 10.5L5 4L10.5 9Z"/></svg>
+              </div>
+              <div className="font-semibold text-sm text-white">Claude AI</div>
+              <div className="text-xs text-orange-400/80 mt-0.5">官转代理</div>
+              {aiKeys.filter((k: any) => k.tier?.modelGroup !== 'gemini').length > 0 && (
+                <div className="mt-2 text-xs text-orange-300/70">{aiKeys.filter((k: any) => k.tier?.modelGroup !== 'gemini').length} 个 Key</div>
+              )}
+              <div className="absolute bottom-3 right-3 text-orange-500/40 group-hover:text-orange-400/60 text-sm transition-colors">→</div>
+            </Link>
+
+            {/* Gemini AI */}
+            <Link href="/dashboard/ai/gemini" className="relative overflow-hidden rounded-2xl p-4 text-left transition-all group border bg-gradient-to-br from-[#071a14] to-[#0a2018] border-teal-900/30 hover:border-teal-500/60 hover:shadow-lg hover:shadow-teal-900/20 block">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center shadow-lg shadow-teal-900/40 mb-3 transition-transform group-hover:scale-105 text-white font-bold text-base">G</div>
+              <div className="font-semibold text-sm text-white">Gemini AI</div>
+              <div className="text-xs text-teal-400/80 mt-0.5">免费使用</div>
+              {aiKeys.filter((k: any) => k.tier?.modelGroup === 'gemini').length > 0 ? (
+                <div className="mt-2 text-xs text-teal-300/70">{aiKeys.filter((k: any) => k.tier?.modelGroup === 'gemini').length} 个 Key</div>
+              ) : (
+                <div className="mt-2 text-xs text-green-400/70">🆓 无需认证</div>
+              )}
+              <div className="absolute bottom-3 right-3 text-teal-500/40 group-hover:text-teal-400/60 text-sm transition-colors">→</div>
+            </Link>
+
+            {/* GPT 专线（预留） */}
+            <div className="relative overflow-hidden rounded-2xl p-4 text-left border bg-slate-800/30 border-slate-700/30 opacity-50 cursor-not-allowed">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-800 flex items-center justify-center shadow-lg mb-3">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="white" strokeWidth="0"><circle cx="12" cy="12" r="10" fill="none" stroke="white" strokeWidth="1.5"/><path d="M8 12h8M12 8v8" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </div>
+              <div className="font-semibold text-sm text-gray-400">GPT 专线</div>
+              <div className="text-xs text-gray-600 mt-0.5">即将上线</div>
+              <div className="mt-2 text-xs text-gray-600">敬请期待</div>
             </div>
-            <div className="flex-shrink-0 hidden md:flex items-center gap-2 text-sm">
-              <span className={`px-3 py-1.5 rounded-lg transition ${
-                activeTab === 'ai' ? 'bg-orange-500 text-white' : 'bg-orange-500/10 text-orange-300 group-hover:bg-orange-500/20'
-              }`}>
-                {activeTab === 'ai' ? '当前页面' : '进入管理 →'}
-              </span>
+
+            {/* Grok 专线（预留） */}
+            <div className="relative overflow-hidden rounded-2xl p-4 text-left border bg-slate-800/30 border-slate-700/30 opacity-50 cursor-not-allowed">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-violet-800 flex items-center justify-center shadow-lg mb-3 text-white font-bold text-sm">X</div>
+              <div className="font-semibold text-sm text-gray-400">Grok 专线</div>
+              <div className="text-xs text-gray-600 mt-0.5">即将上线</div>
+              <div className="mt-2 text-xs text-gray-600">敬请期待</div>
             </div>
           </div>
-        </button>
+        </div>
 
         {/* 订阅公告 & 福利指南 - 仅在卡片和开卡页面显示 */}
         {(subscriptionGuide || welfareGuide) && (activeTab === 'cards' || activeTab === 'open') && (
@@ -1349,113 +1422,134 @@ export default function DashboardPage() {
             {cardTypes.length === 0 ? (
               <div className="bg-slate-800 rounded-xl p-6 text-center text-gray-400">暂无可用卡片类型</div>
             ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {cardTypes.map(card => (
-                  <div key={card.id} className={`rounded-xl p-5 border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.22)] ${card.name.toUpperCase().includes('VISA') ? 'bg-gradient-to-br from-blue-600 to-blue-800' : 'bg-gradient-to-br from-orange-500 to-red-600'}`}>
-                    {/* 卡头部 - 发行地区和卡组织图标 */}
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <span className="text-xs opacity-70">{card.issuer}发行</span>
-                        <h3 className="text-lg font-bold">{card.name}</h3>
-                        {/* 卡产品编号和卡段 */}
-                        <div className="mt-1.5 space-y-1">
-                          <div className="text-xs opacity-80">卡编号（#{card.cardBin}）</div>
-                          <div className="text-xs opacity-75">卡段（{card.cardSegment || '未配置'}）</div>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {cardTypes.map(card => {
+                  const isVisa = card.name.toUpperCase().includes('VISA');
+                  const isMaster = card.name.toUpperCase().includes('MASTER');
+                  const pricing = getCardPricing(card);
+                  const mcId = `mc-clip-${card.id}`;
+                  return (
+                    <div key={card.id} className="group rounded-2xl overflow-hidden border border-slate-700/60 bg-slate-800/40 hover:border-slate-600/80 transition-all duration-200 shadow-lg hover:shadow-2xl hover:shadow-slate-900/60 hover:-translate-y-0.5">
+                      {/* 卡面区域 */}
+                      <div className={`relative p-5 h-44 flex flex-col justify-between overflow-hidden ${
+                        isVisa
+                          ? 'bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-800'
+                          : isMaster
+                            ? 'bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900'
+                            : 'bg-gradient-to-br from-slate-600 to-slate-800'
+                      }`}>
+                        {/* 装饰圆 */}
+                        <div className="absolute -right-10 -top-10 w-44 h-44 rounded-full bg-white/[0.06] pointer-events-none" />
+                        <div className="absolute right-6 top-14 w-28 h-28 rounded-full bg-white/[0.04] pointer-events-none" />
+                        {/* 顶部：发行地区 + 品牌 */}
+                        <div className="relative flex justify-between items-start">
+                          <div>
+                            <div className="text-white/50 text-xs font-medium tracking-wide uppercase">{card.issuer}</div>
+                            <div className="text-white font-bold text-xl leading-tight mt-0.5">{card.name}</div>
+                          </div>
+                          <span className="text-white/30 text-xs font-bold tracking-widest mt-0.5">CardVela</span>
+                        </div>
+                        {/* 中部：虚拟卡段 */}
+                        <div className="relative font-mono text-white/50 text-sm tracking-[0.25em]">
+                          {card.cardSegment
+                            ? `${card.cardSegment.slice(0, 6)} •••• •••• ••••`
+                            : '•••• •••• •••• ••••'}
+                        </div>
+                        {/* 底部：卡编号 + 网络 logo */}
+                        <div className="relative flex justify-between items-end">
+                          <div className="text-white/35 text-xs font-mono">#{card.cardBin}</div>
+                          {isVisa && (
+                            <svg viewBox="0 0 60 20" className="h-5 w-auto" aria-label="Visa">
+                              <text x="2" y="17" fontFamily="Arial,Helvetica,sans-serif" fontSize="19" fontStyle="italic" fontWeight="800" fill="white" letterSpacing="-1">VISA</text>
+                            </svg>
+                          )}
+                          {isMaster && (
+                            <svg viewBox="0 0 46 30" className="h-7 w-auto" aria-label="Mastercard">
+                              <defs>
+                                <clipPath id={mcId}><circle cx="30" cy="15" r="13"/></clipPath>
+                              </defs>
+                              <circle cx="30" cy="15" r="13" fill="#F79E1B"/>
+                              <circle cx="16" cy="15" r="13" fill="#EB001B"/>
+                              <circle cx="16" cy="15" r="13" fill="#FF5F00" clipPath={`url(#${mcId})`}/>
+                            </svg>
+                          )}
+                          {!isVisa && !isMaster && (
+                            <span className="text-white/40 text-xs font-bold tracking-widest">CARD</span>
+                          )}
                         </div>
                       </div>
-                      {/* CardVela品牌 + 卡组织图标 */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold tracking-wider opacity-80">CardVela</span>
-                        <div className="w-12 h-8 flex items-center justify-center">
-                        {card.name.toUpperCase().includes('VISA') ? (
-                          <svg viewBox="0 0 48 32" className="w-full h-full">
-                            <rect fill="#1A1F71" width="48" height="32" rx="4"/>
-                            <text x="24" y="20" textAnchor="middle" fill="#FFFFFF" fontSize="12" fontWeight="bold" fontStyle="italic">VISA</text>
-                          </svg>
-                        ) : card.name.toUpperCase().includes('MASTER') ? (
-                          <svg viewBox="0 0 48 32" className="w-full h-full">
-                            <rect fill="#000000" width="48" height="32" rx="4"/>
-                            <circle cx="18" cy="16" r="10" fill="#EB001B"/>
-                            <circle cx="30" cy="16" r="10" fill="#F79E1B"/>
-                            <path d="M24 8.5a10 10 0 000 15" fill="#FF5F00"/>
-                          </svg>
-                        ) : (
-                          <div className="bg-white/20 rounded px-2 py-1 text-xs font-bold">CARD</div>
+
+                      {/* 费用信息区域 */}
+                      <div className="p-4 space-y-3">
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
+                          <div className="flex justify-between items-baseline">
+                            <span className="text-xs text-slate-500">开卡费</span>
+                            <span className="text-sm font-bold text-white">${card.displayOpenFee ?? card.openFee}</span>
+                          </div>
+                          {card.displayMonthlyFee !== null && card.displayMonthlyFee !== undefined && (
+                            <div className="flex justify-between items-baseline">
+                              <span className="text-xs text-slate-500">月费</span>
+                              <span className="text-sm font-bold text-white">${card.displayMonthlyFee}</span>
+                            </div>
+                          )}
+                          {card.displayRechargeFee && (
+                            <div className="flex justify-between items-baseline">
+                              <span className="text-xs text-slate-500">充值费</span>
+                              <span className="text-sm font-semibold text-slate-200">{card.displayRechargeFee}</span>
+                            </div>
+                          )}
+                          {card.displayTransactionFee && (
+                            <div className="flex justify-between items-baseline">
+                              <span className="text-xs text-slate-500">交易费</span>
+                              <span className="text-sm font-semibold text-slate-200">{card.displayTransactionFee}</span>
+                            </div>
+                          )}
+                          {card.displayAuthFee && (
+                            <div className="flex justify-between items-baseline">
+                              <span className="text-xs text-slate-500">授权费</span>
+                              <span className="text-sm font-semibold text-slate-200">{card.displayAuthFee}</span>
+                            </div>
+                          )}
+                          {card.displayRefundFee && (
+                            <div className="flex justify-between items-baseline">
+                              <span className="text-xs text-slate-500">退款费</span>
+                              <span className="text-sm font-semibold text-slate-200">{card.displayRefundFee}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {getMinimumInitialAmountForCardBin(card.cardBin) > 0 && (
+                          <div className="flex justify-between items-center pt-2.5 border-t border-slate-700/60">
+                            <span className="text-xs text-slate-400">开卡合计（含预充值）</span>
+                            <span className="text-base font-bold text-white">${pricing.totalCost.toFixed(2)}</span>
+                          </div>
                         )}
-                        </div>
+
+                        {card.description && (
+                          <p className="text-xs text-slate-500 leading-relaxed border-t border-slate-700/40 pt-2.5">
+                            {card.description}
+                          </p>
+                        )}
+
+                        <button
+                          onClick={() => handleOpenCard(card)}
+                          disabled={openingCard === card.id}
+                          className="w-full mt-1 py-2.5 rounded-xl font-semibold text-sm transition-all bg-white text-slate-900 hover:bg-slate-100 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {openingCard === card.id ? (
+                            <span className="flex items-center justify-center gap-2">
+                              <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                              </svg>
+                              开卡中...
+                            </span>
+                          ) : '开通此卡'}
+                        </button>
                       </div>
                     </div>
-                    
-                    {/* 费用信息 - 紧凑布局 */}
-                    <div className="grid grid-cols-2 gap-x-2 sm:gap-x-3 gap-y-1.5 text-xs sm:text-sm mb-3">
-                      <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
-                        <span className="opacity-80">开卡费</span>
-                        <span className="font-semibold">${card.displayOpenFee ?? card.openFee}</span>
-                      </div>
-                            {getMinimumInitialAmountForCardBin(card.cardBin) > 0 && (
-                              <>
-                                <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
-                                  <span className="opacity-80">预充值</span>
-                                  <span className="font-medium">${getCardPricing(card).initialAmount.toFixed(2)}</span>
-                                </div>
-                                <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
-                                  <span className="opacity-80">手续费</span>
-                                  <span className="font-medium">${getCardPricing(card).rechargeFee.toFixed(2)}</span>
-                                </div>
-                                <div className="flex items-center justify-between col-span-2 rounded-md border border-white/25 bg-white/10 px-2.5 py-1.5 mt-0.5">
-                                  <span className="opacity-90">开卡合计</span>
-                                  <span className="font-semibold">${getCardPricing(card).totalCost.toFixed(2)}</span>
-                                </div>
-                              </>
-                            )}
-                      {(card.displayMonthlyFee !== null && card.displayMonthlyFee !== undefined) && (
-                        <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
-                          <span className="opacity-80">月费</span>
-                          <span className="font-medium">${card.displayMonthlyFee}</span>
-                        </div>
-                      )}
-                      {card.displayRechargeFee && (
-                        <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
-                          <span className="opacity-80">充值费</span>
-                          <span className="font-medium">{card.displayRechargeFee}</span>
-                        </div>
-                      )}
-                      {card.displayTransactionFee && (
-                        <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
-                          <span className="opacity-80">交易费</span>
-                          <span className="font-medium">{card.displayTransactionFee}</span>
-                        </div>
-                      )}
-                      {card.displayAuthFee && (
-                        <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
-                          <span className="opacity-80">授权费</span>
-                          <span className="font-medium">{card.displayAuthFee}</span>
-                        </div>
-                      )}
-                      {card.displayRefundFee && (
-                        <div className="flex items-center justify-between rounded-md bg-white/10 px-2 py-1">
-                          <span className="opacity-80">退款费</span>
-                          <span className="font-medium">{card.displayRefundFee}</span>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* 产品说明 */}
-                    {card.description && (
-                      <div className="text-xs opacity-80 mb-3 leading-relaxed border-t border-white/20 pt-2">
-                        {card.description}
-                      </div>
-                    )}
-                    
-                    <button 
-                      onClick={() => handleOpenCard(card)}
-                      disabled={openingCard === card.id}
-                      className="w-full bg-white text-slate-800 py-2.5 rounded-lg font-semibold hover:bg-gray-100 disabled:opacity-50 text-sm"
-                    >
-                      {openingCard === card.id ? '开卡中...' : '开通此卡'}
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1877,61 +1971,64 @@ export default function DashboardPage() {
                     </div>
                     {tier.description && <p className="text-sm text-gray-400 mb-4">{tier.description}</p>}
 
-                    {/* 基础价格 + 特性 */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4">
-                      <div className="rounded-lg bg-slate-800/80 p-3">
-                        <div className="text-xs text-gray-400">基础 Input 价格</div>
-                        <div className="text-lg font-bold text-cyan-300 mt-1">${tier.pricePerMillionInput}<span className="text-xs text-gray-400 font-normal">/百万tokens</span></div>
-                      </div>
-                      <div className="rounded-lg bg-slate-800/80 p-3">
-                        <div className="text-xs text-gray-400">基础 Output 价格</div>
-                        <div className="text-lg font-bold text-orange-300 mt-1">${tier.pricePerMillionOutput}<span className="text-xs text-gray-400 font-normal">/百万tokens</span></div>
-                      </div>
-                      {tier.features && tier.features.length > 0 && (
-                        <div className="rounded-lg bg-slate-800/80 p-3 col-span-2">
-                          <div className="text-xs text-gray-400 mb-1">核心特性</div>
-                          <div className="flex flex-wrap gap-x-4 gap-y-1">
-                            {tier.features.map((f: string, i: number) => (
-                              <span key={i} className="text-sm text-gray-300 flex items-center gap-1">
-                                <span className="text-green-400">✓</span> {f}
-                              </span>
-                            ))}
-                          </div>
+                    {/* 特性 */}
+                    {tier.features && tier.features.length > 0 && (
+                      <div className="mb-4 rounded-lg bg-slate-800/80 p-3">
+                        <div className="text-xs text-gray-400 mb-1">核心特性</div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                          {tier.features.map((f: string, i: number) => (
+                            <span key={i} className="text-sm text-gray-300 flex items-center gap-1">
+                              <span className="text-green-400">✓</span> {f}
+                            </span>
+                          ))}
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {/* 模型定价表 */}
                     {tier.models && tier.models.length > 0 && (
                       <div className="border-t border-slate-700 pt-4">
-                        <p className="text-sm font-medium text-gray-300 mb-3">可用模型定价明细</p>
+                        <p className="text-sm font-medium text-gray-300 mb-3">可用模型官方定价 <span className="text-xs text-gray-500">(按实际 token 计费 / 百万 tokens)</span></p>
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="text-gray-400 border-b border-slate-700">
                                 <th className="pb-2 text-left font-medium">模型名称</th>
-                                <th className="pb-2 text-center font-medium hidden sm:table-cell">倍率</th>
                                 <th className="pb-2 text-right font-medium">Input</th>
                                 <th className="pb-2 text-right font-medium">Output</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {tier.models.map((m: any, i: number) => (
-                                <tr key={i} className="border-b border-slate-700/30 hover:bg-slate-800/40">
-                                  <td className="py-2 text-gray-200 font-mono text-xs">{m.name}</td>
-                                  <td className="py-2 text-center hidden sm:table-cell">
-                                    <span className={`font-mono text-xs px-1.5 py-0.5 rounded ${
-                                      m.ratio >= 3 ? 'bg-red-500/15 text-red-400' :
-                                      m.ratio >= 1 ? 'bg-yellow-500/15 text-yellow-400' :
-                                      'bg-green-500/15 text-green-400'
-                                    }`}>
-                                      {m.ratio}x
-                                    </span>
+                              {tier.models.map((m: any, i: number) => {
+                                const isLegacyOpus = /^claude-opus-4\.(5|6)(-|$)/.test(m.name || '');
+                                const inR = (typeof m.inputRatio === 'number' && m.inputRatio > 0) ? m.inputRatio
+                                          : (typeof m.ratio === 'number' && m.ratio > 0) ? m.ratio
+                                          : (typeof m.inputPrice === 'number' && tier.pricePerMillionInput > 0) ? m.inputPrice / tier.pricePerMillionInput
+                                          : 1;
+                                const outR = (typeof m.outputRatio === 'number' && m.outputRatio > 0) ? m.outputRatio
+                                           : (typeof m.ratio === 'number' && m.ratio > 0) ? m.ratio
+                                           : (typeof m.outputPrice === 'number' && tier.pricePerMillionOutput > 0) ? m.outputPrice / tier.pricePerMillionOutput
+                                           : inR;
+                                const fmtR = (n: number) => Number.isInteger(n) ? `${n}x` : `${n.toFixed(2)}x`;
+                                const ratioLabel = (Math.abs(inR - outR) < 0.001) ? fmtR(inR) : `${fmtR(inR)} / ${fmtR(outR)}`;
+                                const ratioColorBase = Math.max(inR, outR);
+                                const inputPriceShown = typeof m.inputPrice === 'number' ? m.inputPrice : tier.pricePerMillionInput * inR;
+                                const outputPriceShown = typeof m.outputPrice === 'number' ? m.outputPrice : tier.pricePerMillionOutput * outR;
+                                return (
+                                <tr key={i} className={`border-b border-slate-700/30 hover:bg-slate-800/40 ${isLegacyOpus ? 'opacity-60' : ''}`}>
+                                  <td className="py-2 text-gray-200 font-mono text-xs">
+                                    {m.name}
+                                    {isLegacyOpus && (
+                                      <span className="ml-2 inline-block text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-sans" title="GitHub Copilot 已下线 Opus 4.5/4.6，请改用 claude-opus-4.7">
+                                        已下线 · 请用 opus-4.7
+                                      </span>
+                                    )}
                                   </td>
-                                  <td className="py-2 text-right text-cyan-300 font-mono text-xs">${(tier.pricePerMillionInput * m.ratio).toFixed(2)}</td>
-                                  <td className="py-2 text-right text-orange-300 font-mono text-xs">${(tier.pricePerMillionOutput * m.ratio).toFixed(2)}</td>
+                                  <td className="py-2 text-right text-cyan-300 font-mono text-xs">${inputPriceShown.toFixed(2)}</td>
+                                  <td className="py-2 text-right text-orange-300 font-mono text-xs">${outputPriceShown.toFixed(2)}</td>
                                 </tr>
-                              ))}
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
@@ -1946,6 +2043,19 @@ export default function DashboardPage() {
             <div className="bg-slate-800 rounded-xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold">🔑 我的 API Key</h2>
+              </div>
+
+              {/* 防滥用警示 */}
+              <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
+                <div className="flex items-start gap-2">
+                  <span className="text-red-400 text-sm leading-none mt-0.5">⚠️</span>
+                  <div className="space-y-1 leading-relaxed">
+                    <p className="font-semibold text-red-300">使用须知（请仔细阅读）</p>
+                    <p>· 每个 API Key 仅供本人单端使用，<span className="text-red-300 font-medium">严禁多人共享或同时在多个平台/设备调用同一 Key</span>。</p>
+                    <p>· 一经核实违规共享，将<span className="text-red-300 font-medium">立即禁用账户全部 AI 功能、冻结 AI 钱包余额且不予退款</span>。</p>
+                    <p>· 普通用户最多创建 2 个 Key；如需更多，请申请企业认证。</p>
+                  </div>
+                </div>
               </div>
 
               {aiKeys.length === 0 ? (
@@ -2483,16 +2593,16 @@ export default function DashboardPage() {
                   type="number"
                   value={aiTransferAmount}
                   onChange={(e) => setAiTransferAmount(e.target.value)}
-                  placeholder="最低 $1"
-                  min="1"
+                  placeholder={aiTransferDirection === 'main_to_ai' ? '最低 $10' : '最低 $1'}
+                  min={aiTransferDirection === 'main_to_ai' ? '10' : '1'}
                   step="0.01"
                   className="w-full bg-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               {aiTransferDirection === 'main_to_ai' && (
-                <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-200">
-                  当前到账倍率为 {aiTransferMultiplier}x。
-                  {creditedPreview > 0 ? ` 本次预计到账 AI 余额 $${creditedPreview.toFixed(2)}。` : ''}
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">
+                  ⚠️ AI 钱包充值<span className="font-semibold text-amber-300">最低 $10 起</span>，单次不足 $10 将无法提交。
+                  {aiTransferMultiplier > 1 && ` 当前赠送倍率 ${aiTransferMultiplier}x，预计到账 $${creditedPreview > 0 ? creditedPreview.toFixed(2) : '0.00'}。`}
                 </div>
               )}
               {!canTransferOut && (
