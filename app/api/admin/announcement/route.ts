@@ -71,8 +71,8 @@ export async function POST(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const token = getTokenFromRequest(request);
-    if (!isAdmin(token)) {
+    const admin = await verifyAdmin(request);
+    if (!admin) {
       return NextResponse.json({ error: '无权限' }, { status: 403 });
     }
     const body = await request.json();
@@ -81,14 +81,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '公告内容不能为空' }, { status: 400 });
     }
 
-    // 每次保存内容变更时 version +1，强制所有用户重新阅读
-    const existing = await db.systemConfig.findUnique({ where: { key: KEY } });
+    const existing = await prisma.systemConfig.findUnique({ where: { key: KEY } });
     const prevData = existing ? JSON.parse(existing.value) : { version: 0 };
     const prevContent = prevData.content || '';
     const version = prevContent.trim() !== content.trim() ? (prevData.version || 0) + 1 : (prevData.version || 1);
 
     const value = JSON.stringify({ content: content.trim(), enabled: !!enabled, version });
-    await db.systemConfig.upsert({
+    await prisma.systemConfig.upsert({
       where: { key: KEY },
       update: { value },
       create: { key: KEY, value },
