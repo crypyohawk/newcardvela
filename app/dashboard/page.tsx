@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getMinimumInitialAmountForCardBin, getOpenCardPricing } from '../../src/lib/cardOpening';
-import { CreditCard, CirclePlus, WalletMinimal, ArrowUpFromLine, Gift, Globe, BookOpen } from 'lucide-react';
+import { CreditCard, CirclePlus, WalletMinimal, ArrowUpFromLine, Gift, Globe, BookOpen, Sparkles } from 'lucide-react';
 
 interface CardType {
   id: string;
@@ -74,6 +74,7 @@ export default function DashboardPage() {
   const [userCards, setUserCards] = useState<UserCard[]>([]);
   const [notices, setNotices] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'cards' | 'open' | 'recharge' | 'referral' | 'ai'>('cards');
+  const [serviceCategory, setServiceCategory] = useState<'card' | 'ai'>('card');
   const [openingCard, setOpeningCard] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
@@ -826,7 +827,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0e1a]">
         <p className="text-white">加载中...</p>
       </div>
     );
@@ -835,15 +836,15 @@ export default function DashboardPage() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
+    <div className="min-h-screen bg-[#0a0e1a] text-white">
       {/* 导航栏 */}
-      <nav className="bg-slate-800 border-b border-slate-700">
+      <nav className="sticky top-0 z-40 bg-[#0a0e1a]/80 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-7xl mx-auto px-4 py-2 flex flex-col gap-2 sm:flex-row sm:h-16 sm:items-center sm:justify-between sm:py-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 flex-wrap">
-              <Link href="/" className="flex items-center gap-2">
-                <img src="/brand/cardvela-wordmark.svg" alt="CardVela" className="h-8 w-auto" />
-                <span className="text-sm text-gray-400 hidden sm:inline">卡维拉</span>
+              <Link href="/" className="flex items-center gap-2 whitespace-nowrap">
+                <img src="/brand/cardvela-mark.svg" alt="CardVela" className="h-7 w-auto" />
+                <span className="text-base font-semibold text-white tracking-tight">cardvela<span className="text-gray-400 font-normal text-sm ml-1">（卡维拉）</span></span>
               </Link>
               {(user.role === 'admin' || user.role === 'ADMIN') && (
                 <Link href="/admin" className="text-purple-400 hover:text-purple-300 font-semibold text-sm">
@@ -860,9 +861,9 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-gray-300 text-sm">欢迎, {user.username}</span>
             <div className="flex items-center gap-2">
-              <div className="bg-green-600 px-3 py-1.5 rounded-lg">
-                <span className="text-xs text-green-200">账户</span>
-                <span className="font-bold text-sm ml-1">${user.balance.toFixed(2)}</span>
+              <div className="bg-emerald-500/15 border border-emerald-400/30 px-3 py-1.5 rounded-full">
+                <span className="text-xs text-emerald-300">账户</span>
+                <span className="font-bold text-sm ml-1 text-emerald-100">${user.balance.toFixed(2)}</span>
               </div>
               <button
                 onClick={() => {
@@ -928,8 +929,94 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* 快捷操作 */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
+        {/* 服务分类选择器 - 顶层分类入口 */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="inline-flex items-center gap-2 text-[11px] text-cyan-300/80 uppercase tracking-[0.2em] mb-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                AI 一站式服务平台
+              </div>
+              <h2 className="text-base sm:text-lg font-semibold text-white">
+                欢迎回来，{user.username}
+              </h2>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <button
+              onClick={() => setServiceCategory('ai')}
+              className={`relative overflow-hidden rounded-2xl p-5 text-left transition-all border ${
+                serviceCategory === 'ai'
+                  ? 'bg-gradient-to-br from-cyan-500/20 to-blue-600/15 border-cyan-400/50 shadow-lg shadow-cyan-900/30'
+                  : 'bg-white/[0.03] border-white/8 hover:border-cyan-400/30 hover:bg-white/[0.05]'
+              }`}
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-900/40">
+                  <Sparkles className="w-5 h-5 text-white" strokeWidth={1.8} />
+                </div>
+                {serviceCategory === 'ai' && <span className="text-[10px] text-cyan-300 bg-cyan-400/10 border border-cyan-400/30 rounded-full px-2 py-0.5">当前</span>}
+              </div>
+              <div className="font-semibold text-base text-white">AI 服务</div>
+              <div className="text-xs text-gray-400 mt-1">Claude / Gemini / GPT / Grok</div>
+            </button>
+
+            <button
+              onClick={() => setServiceCategory('card')}
+              className={`relative overflow-hidden rounded-2xl p-5 text-left transition-all border ${
+                serviceCategory === 'card'
+                  ? 'bg-gradient-to-br from-blue-500/20 to-violet-600/15 border-blue-400/50 shadow-lg shadow-blue-900/30'
+                  : 'bg-white/[0.03] border-white/8 hover:border-blue-400/30 hover:bg-white/[0.05]'
+              }`}
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-400 to-blue-700 flex items-center justify-center shadow-lg shadow-blue-900/40 p-2">
+                  <img src="/brand/cardvela-mark.svg" alt="" className="w-full h-full object-contain" />
+                </div>
+                {serviceCategory === 'card' && <span className="text-[10px] text-blue-300 bg-blue-400/10 border border-blue-400/30 rounded-full px-2 py-0.5">当前</span>}
+              </div>
+              <div className="font-semibold text-base text-white">虚拟卡服务</div>
+              <div className="text-xs text-gray-400 mt-1">开卡 / 充值 / 提现 / 推荐</div>
+            </button>
+
+            <Link
+              href="/guide"
+              className="relative overflow-hidden rounded-2xl p-5 text-left transition-all border bg-white/[0.03] border-white/8 hover:border-amber-400/40 hover:bg-white/[0.05] block"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-900/40">
+                  <BookOpen className="w-5 h-5 text-white" strokeWidth={1.8} />
+                </div>
+                <span className="text-amber-400/40 text-sm">→</span>
+              </div>
+              <div className="font-semibold text-base text-white">订阅教程</div>
+              <div className="text-xs text-gray-400 mt-1">出海 AI 订阅指南</div>
+            </Link>
+
+            <Link
+              href="/vpn"
+              className="relative overflow-hidden rounded-2xl p-5 text-left transition-all border bg-white/[0.03] border-white/8 hover:border-slate-400/40 hover:bg-white/[0.05] block"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-slate-400 to-slate-700 flex items-center justify-center shadow-lg shadow-slate-900/40">
+                  <Globe className="w-5 h-5 text-white" strokeWidth={1.8} />
+                </div>
+                <span className="text-slate-400/40 text-sm">→</span>
+              </div>
+              <div className="font-semibold text-base text-white">临时 VPN</div>
+              <div className="text-xs text-gray-400 mt-1">暂未上线</div>
+            </Link>
+          </div>
+        </div>
+
+        {/* 虚拟卡子功能组 - 仅在选中虚拟卡分类时显示 */}
+        {serviceCategory === 'card' && (
+          <>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs text-blue-300/80 uppercase tracking-wider font-medium">虚拟卡 · 账户</span>
+          <span className="h-px flex-1 bg-white/5" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
           {/* 我的卡片 */}
           <button
             onClick={() => setActiveTab('cards')}
@@ -1014,36 +1101,16 @@ export default function DashboardPage() {
             <div className="font-semibold text-sm">推荐奖励</div>
             <div className="text-xs text-slate-400 mt-0.5">邀请好友得奖励</div>
           </button>
-          {/* 临时 VPN */}
-          <Link
-            href="/vpn"
-            className="relative overflow-hidden p-4 rounded-2xl text-left transition-all group border bg-slate-800/60 border-slate-700/50 hover:border-slate-500/60 hover:bg-slate-800"
-          >
-            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-slate-400/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-400 to-slate-700 shadow-lg shadow-slate-900/50 flex items-center justify-center mb-3 transition-transform group-hover:scale-105">
-              <Globe className="w-5 h-5 text-white" strokeWidth={1.5} />
-            </div>
-            <div className="font-semibold text-sm">临时 VPN</div>
-            <div className="text-xs text-slate-400 mt-0.5">暂未上线</div>
-          </Link>
-          {/* 订阅教程 */}
-          <Link
-            href="/guide"
-            className="relative overflow-hidden p-4 rounded-2xl text-left transition-all group border bg-slate-800/60 border-slate-700/50 hover:border-amber-500/40 hover:bg-slate-800"
-          >
-            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 shadow-lg shadow-amber-900/50 flex items-center justify-center mb-3 transition-transform group-hover:scale-105">
-              <BookOpen className="w-5 h-5 text-white" strokeWidth={1.5} />
-            </div>
-            <div className="font-semibold text-sm">订阅教程</div>
-            <div className="text-xs text-slate-400 mt-0.5">出海 AI 指南</div>
-          </Link>
         </div>
+        </>
+        )}
 
-        {/* AI 服务入口卡片组 */}
+        {/* AI 服务子功能组 - 仅在选中 AI 分类时显示 */}
+        {serviceCategory === 'ai' && (
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs text-gray-500 uppercase tracking-wider font-medium">AI 服务</span>
+            <span className="text-xs text-cyan-300/80 uppercase tracking-wider font-medium">AI 聚合中转 · 核心服务</span>
+            <span className="h-px flex-1 bg-white/5" />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {/* Claude AI */}
@@ -1094,9 +1161,10 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* 订阅公告 & 福利指南 - 仅在卡片和开卡页面显示 */}
-        {(subscriptionGuide || welfareGuide) && (activeTab === 'cards' || activeTab === 'open') && (
+        {(subscriptionGuide || welfareGuide) && serviceCategory === 'card' && (activeTab === 'cards' || activeTab === 'open') && (
           <div className={`grid gap-4 mb-6 ${subscriptionGuide && welfareGuide ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
             {/* 订阅公告 */}
             {subscriptionGuide && (
@@ -1177,7 +1245,7 @@ export default function DashboardPage() {
         )}
 
         {/* 我的卡片 */}
-        {activeTab === 'cards' && (
+        {serviceCategory === 'card' && activeTab === 'cards' && (
           <div className="bg-slate-800 rounded-xl p-6">
             <h2 className="text-xl font-bold mb-6">我的卡片</h2>
             
@@ -1435,7 +1503,7 @@ export default function DashboardPage() {
         )}
 
         {/* 开通新卡 */}
-        {activeTab === 'open' && (
+        {serviceCategory === 'card' && activeTab === 'open' && (
           <div>
             <h2 className="text-xl font-bold mb-6">选择卡片类型</h2>
             {cardTypes.length === 0 ? (
@@ -1575,7 +1643,7 @@ export default function DashboardPage() {
         )}
 
         {/* 充值 */}
-        {activeTab === 'recharge' && (
+        {serviceCategory === 'card' && activeTab === 'recharge' && (
           <div className="bg-slate-800 rounded-xl p-6">
             <h2 className="text-xl font-bold mb-6">账户充值</h2>
             {rechargeStep === 'input' ? (
@@ -1829,7 +1897,7 @@ export default function DashboardPage() {
         )}
 
         {/* 推荐奖励 */}
-        {activeTab === 'referral' && (
+        {serviceCategory === 'card' && activeTab === 'referral' && (
           <div className="bg-slate-800 rounded-xl p-6">
             <h2 className="text-xl font-bold mb-6">🎁 推荐奖励</h2>
             
