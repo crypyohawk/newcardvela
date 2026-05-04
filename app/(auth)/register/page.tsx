@@ -25,7 +25,7 @@ function RegisterContent() {
 
   // 密码验证规则
   const pwRules = {
-    length: password.length >= 8 && password.length <= 10,
+    length: password.length >= 10 && password.length <= 20,
     upper: /[A-Z]/.test(password),
     lower: /[a-z]/.test(password),
     special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password),
@@ -123,9 +123,10 @@ function RegisterContent() {
 
       <div className="relative w-full max-w-md">
         {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-sm font-black text-black">C</div>
-          <span className="text-lg font-bold text-white tracking-tight">CardVela</span>
+        <div className="flex items-center justify-center mb-8">
+          <a href="/" aria-label="CardVela">
+            <img src="/brand/cardvela-wordmark.svg" alt="CardVela" className="h-10 w-auto" />
+          </a>
         </div>
 
         <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-2xl p-8">
@@ -179,7 +180,7 @@ function RegisterContent() {
               {password.length > 0 && (
                 <div className="mt-2 grid grid-cols-2 gap-1 text-xs">
                   <span className={pwRules.length ? 'text-green-400' : 'text-gray-500'}>
-                    {pwRules.length ? '✓' : '○'} 8-10位字符
+                    {pwRules.length ? '✓' : '○'} 10-20位字符
                   </span>
                   <span className={pwRules.upper ? 'text-green-400' : 'text-gray-500'}>
                     {pwRules.upper ? '✓' : '○'} 含大写字母
@@ -236,7 +237,7 @@ function RegisterContent() {
                       const tips: string[] = [];
                       if (!email.trim()) tips.push('请填写邮箱');
                       else if (!emailValid) tips.push('邮箱格式不正确');
-                      if (!pwRules.length) tips.push('密码需8-10位');
+                      if (!pwRules.length) tips.push('密码需10-20位');
                       if (!pwRules.upper) tips.push('密码需含大写字母');
                       if (!pwRules.lower) tips.push('密码需含小写字母');
                       if (!pwRules.special) tips.push('密码需含特殊字符');

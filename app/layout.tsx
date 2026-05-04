@@ -16,8 +16,9 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/brand/cardvela-mark.svg', type: 'image/svg+xml' },
     ],
-    apple: '/icon.svg',
+    apple: '/brand/cardvela-mark.svg',
   },
 };
 

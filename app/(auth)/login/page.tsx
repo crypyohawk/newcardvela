@@ -53,8 +53,9 @@ export default function LoginPage() {
       <div className="relative w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-sm font-black text-black">C</div>
-          <span className="text-lg font-bold text-white tracking-tight">CardVela</span>
+          <a href="/" aria-label="CardVela" className="inline-flex">
+            <img src="/brand/cardvela-wordmark.svg" alt="CardVela" className="h-10 w-auto" />
+          </a>
         </div>
 
         <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-2xl p-8">
