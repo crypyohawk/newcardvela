@@ -96,7 +96,7 @@ function PerplexityPlansInner() {
             <li><span className="text-purple-300">monthlyQuotaUsd</span>：本期可用额度（按 token 实际消耗扣减）</li>
             <li><span className="text-purple-300">payAsYouGoEquivUsd</span>：同等用量按 token 实时计费的等价价格，用于在用户端展示「省 X%」</li>
             <li><span className="text-purple-300">intro</span>：Markdown，支持换行 / 列表，将在用户端套餐卡片下方展示</li>
-            <li><span className="text-purple-300">features</span>：JSON 数组字符串，例如 <code className="px-1 bg-slate-800 rounded">["6 大模型不限切换","Sonar 联网搜索","学术引用"]</code></li>
+            <li><span className="text-purple-300">features</span>：JSON 数组字符串，例如 <code className="px-1 bg-slate-800 rounded">{`["6 大模型不限切换","Sonar 联网搜索","学术引用"]`}</code></li>
             <li>不开通的用户走 token 实时计费（从 aiBalance 直接扣每次调用费用）</li>
           </ul>
         </div>
