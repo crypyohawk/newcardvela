@@ -23,7 +23,9 @@ interface Plan {
 const EMPTY: Partial<Plan> = {
   code: '', displayName: '', priceUsd: 22, durationDays: 30,
   monthlyQuotaUsd: 50, payAsYouGoEquivUsd: 80,
-  intro: '', features: '', highlight: false, sortOrder: 0, isActive: true,
+  intro: '## 为什么选择 Cardvela Pro?\n\n- 22 美元享 50 美元等价用量\n- 接入 Claude / GPT / Gemini / Sonar 全模型\n- 适合学术写作 / 研究助手 / 数据分析',
+  features: '["6 大模型不限切换","Sonar 联网搜索","学术引用"]',
+  highlight: false, sortOrder: 0, isActive: true,
 };
 
 function PerplexityPlansInner() {
@@ -31,6 +33,7 @@ function PerplexityPlansInner() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Partial<Plan> | null>(null);
   const [msg, setMsg] = useState<{ t: 'ok' | 'err'; m: string } | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   useEffect(() => { load(); }, []);
   useEffect(() => { if (msg) { const t = setTimeout(() => setMsg(null), 4000); return () => clearTimeout(t); } }, [msg]);
@@ -47,6 +50,7 @@ function PerplexityPlansInner() {
 
   const save = async () => {
     if (!editing) return;
+    setModalError(null);
     const isNew = !editing.id;
     try {
       const res = await fetch(isNew ? '/api/admin/perplexity-plans' : `/api/admin/perplexity-plans/${editing.id}`, {
@@ -59,7 +63,7 @@ function PerplexityPlansInner() {
       setMsg({ t: 'ok', m: isNew ? '已创建' : '已更新' });
       setEditing(null);
       load();
-    } catch (e: any) { setMsg({ t: 'err', m: e.message }); }
+    } catch (e: any) { setModalError(e.message); }
   };
 
   const remove = async (id: string) => {
@@ -138,9 +142,10 @@ function PerplexityPlansInner() {
       </main>
 
       {editing && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto" onClick={() => setEditing(null)}>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto" onClick={() => { setEditing(null); setModalError(null); }}>
           <div className="bg-slate-900 border border-purple-500/30 rounded-2xl p-6 max-w-2xl w-full my-8" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">{editing.id ? '编辑套餐' : '新建套餐'}</h3>
+            {modalError && <div className="mb-4 p-3 rounded-lg text-sm bg-red-500/15 border border-red-500/30 text-red-300">{modalError}</div>}
             <div className="grid grid-cols-2 gap-3">
               <Field label="code (内部代码)" v={editing.code} onChange={(v) => setEditing({ ...editing, code: v })} placeholder="pro-monthly" />
               <Field label="显示名" v={editing.displayName} onChange={(v) => setEditing({ ...editing, displayName: v })} placeholder="Cardvela Pro 月度" />
@@ -163,7 +168,7 @@ function PerplexityPlansInner() {
               </div>
             </div>
             <div className="flex gap-2 mt-6 justify-end">
-              <button onClick={() => setEditing(null)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded text-sm">取消</button>
+              <button onClick={() => { setEditing(null); setModalError(null); }} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded text-sm">取消</button>
               <button onClick={save} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-sm">保存</button>
             </div>
           </div>
