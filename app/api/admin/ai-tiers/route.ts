@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '名称不能为空' }, { status: 400 });
     }
 
-    const { providerId, modelGroup, channelGroup, models, maxKeys, requiredRole, minAiBalance } = body;
+    const { providerId, modelGroup, channelGroup, models, maxKeys, requiredRole, minAiBalance, groupRatio } = body;
 
     const tier = await db.aIServiceTier.create({
       data: {
@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
         providerId: providerId || null,
         modelGroup: modelGroup || 'claude',
         channelGroup: channelGroup || null,
+        groupRatio: groupRatio != null && !isNaN(parseFloat(groupRatio)) ? parseFloat(groupRatio) : 1,
       },
       include: {
         provider: { select: { id: true, name: true, displayName: true, type: true } },

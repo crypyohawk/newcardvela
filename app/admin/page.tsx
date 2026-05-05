@@ -77,7 +77,7 @@ interface AdminAIUserDetail {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds' | 'referral' | 'monthlyFee' | 'ai' | 'enterprise' | 'copilot' | 'announcement'>('cards');
+  const [activeTab, setActiveTab] = useState<'cards' | 'notices' | 'users' | 'recharges' | 'withdraws' | 'refunds' | 'referral' | 'monthlyFee' | 'ai' | 'enterprise' | 'copilot' | 'perplexity' | 'announcement'>('cards');
   const [monthlyFeePreview, setMonthlyFeePreview] = useState<any>(null);
   const [monthlyFeeLoading, setMonthlyFeeLoading] = useState(false);
   const [monthlyFeeExecuting, setMonthlyFeeExecuting] = useState(false);
@@ -1254,6 +1254,7 @@ export default function AdminPage() {
             { key: 'enterprise', label: '🏢 企业审核' },
             { key: 'ai', label: '✦ AI 管理' },
             { key: 'copilot', label: '🤖 Copilot池' },
+            { key: 'perplexity', label: '🔮 Perplexity池' },
             { key: 'announcement', label: '📢 平台公告' },
           ].map(tab => (
             <button
@@ -3365,6 +3366,39 @@ export default function AdminPage() {
                   <p>• 账号数量：动态</p>
                   <p>• 总额度：动态计算</p>
                   <p>• 活跃账号：动态</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Perplexity 池管理 */}
+        {!tabLoading && activeTab === 'perplexity' && (
+          <div className="space-y-6">
+            <div className="bg-slate-800 p-6 rounded-xl">
+              <h3 className="text-lg font-bold mb-4">🔮 Perplexity 账号池管理</h3>
+              <p className="text-gray-400 mb-4">
+                管理 Perplexity Pro 订阅账号池（用户端展示为 <span className="text-purple-300">Cardvela Pro</span>）。
+                每个账号一个独立端口 + new-api 渠道，由 new-api 做负载均衡。
+              </p>
+              <div className="flex gap-4 flex-wrap">
+                <Link
+                  href="/admin/perplexity-accounts"
+                  className="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg text-sm font-medium transition"
+                >
+                  📦 账号池管理 →
+                </Link>
+                <Link
+                  href="/admin/perplexity-plans"
+                  className="bg-fuchsia-600 hover:bg-fuchsia-700 px-6 py-3 rounded-lg text-sm font-medium transition"
+                >
+                  💎 Pro 套餐管理 →
+                </Link>
+                <div className="text-sm text-gray-500">
+                  <p>• 共享池模式：所有用户共用</p>
+                  <p>• Pro 套餐：扣 AI 余额，赠送固定额度</p>
+                  <p>• Token 计费：未订阅按调用实时扣费</p>
+                  <p>• 渠道分组：perplexity-pool</p>
                 </div>
               </div>
             </div>

@@ -1,5 +1,11 @@
 const http = require('http');
-const TOKEN = 'sk-SHssuQvVynAvJ2tPxZG6Rgbm0OB7hgIqgszNanYapkUPxsBM';
+const TOKEN = process.env.TEST_API_TOKEN;
+
+if (!TOKEN) {
+  console.error('Missing TEST_API_TOKEN');
+  process.exit(1);
+}
+
 function post(desc, body) {
   return new Promise((resolve) => {
     const data = JSON.stringify(body);

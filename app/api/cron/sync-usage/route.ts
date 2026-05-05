@@ -331,11 +331,9 @@ async function syncKeyUsages() {
       totalUsed: true,
       monthUsed: true,
       lastRemoteUsedUsd: true,
-      tier: { select: { channelGroup: true } },
+      tier: { select: { channelGroup: true, groupRatio: true } },
     },
   });
-
-  // 检测并记录重复 tokenId（数据完整性检查）
   // 如果多个 Key 指向同一 new-api token，则只允许 active 状态的 Key 计费，避免双重扣费
   const tokenIdToKeys = new Map<number, typeof keys>();
   for (const key of keys) {
@@ -451,6 +449,10 @@ async function syncKeyUsages() {
       }
       const usedUSD = Math.round(quotaToUSD(usage.usedQuota) * 10000) / 10000;
       let localTotalUsedBefore = key.totalUsed;
+      // 分组扣费倍率: 用户感知按官方 token 价, 实际扣费 = 官方价 × groupRatio
+      const groupRatio = (key.tier as any)?.groupRatio && (key.tier as any).groupRatio > 0
+        ? (key.tier as any).groupRatio
+        : 1;
 
       const txResult = await db.$transaction(async (tx) => {
         const currentKey = await tx.aIKey.findUnique({
@@ -487,7 +489,9 @@ async function syncKeyUsages() {
           baselineReason = 'remote-counter-reset';
         }
 
-        const delta = Math.round((usedUSD - remoteBaseline) * 10000) / 10000;
+        const rawDelta = Math.round((usedUSD - remoteBaseline) * 10000) / 10000;
+        // 应用 groupRatio: 实际扣费金额 = 远端原始增量(官方价) × 分组倍率
+        const delta = Math.round(rawDelta * groupRatio * 10000) / 10000;
 
         if (delta <= 0) {
           if (baselineReason) {

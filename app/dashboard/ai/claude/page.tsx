@@ -73,8 +73,8 @@ export default function ClaudeAIPage() {
         fetch('/api/user/ai-service/usage/summary', { headers }),
         fetch('/api/user/ai-service/usage?period=30d', { headers }),
       ]);
-      if (tiersRes.ok) { const d = await tiersRes.json(); setAiTiers((d.tiers || []).filter((t: any) => t.modelGroup !== 'gemini')); }
-      if (keysRes.ok) { const d = await keysRes.json(); setAiKeys((d.keys || []).filter((k: any) => k.tier?.modelGroup !== 'gemini')); }
+      if (tiersRes.ok) { const d = await tiersRes.json(); setAiTiers((d.tiers || []).filter((t: any) => t.modelGroup !== 'gemini' && t.modelGroup !== 'perplexity')); }
+      if (keysRes.ok) { const d = await keysRes.json(); setAiKeys((d.keys || []).filter((k: any) => k.tier?.modelGroup !== 'gemini' && k.tier?.modelGroup !== 'perplexity')); }
       if (summaryRes.ok) { const d = await summaryRes.json(); setAiSummary(d); }
       if (usageRes.ok) { const d = await usageRes.json(); setAiUsage(d); }
       const entUsageRes = await fetch('/api/user/enterprise/usage', { headers });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../../../src/lib/prisma';
 import { verifyAdmin, adminError } from '../../../../src/lib/adminAuth';
 
@@ -10,8 +11,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // 支持按 poolType 过滤
+    const { searchParams } = new URL(request.url);
+    const poolTypeFilter = searchParams.get('poolType');
+    const whereFilter = (poolTypeFilter ? { poolType: poolTypeFilter } : {}) as any;
+
     // 第一遍：取出账号做一致性修复
     const rawAccounts = await prisma.copilotAccount.findMany({
+      where: whereFilter,
       orderBy: { githubId: 'asc' },
     });
 
@@ -76,7 +83,7 @@ export async function GET(request: NextRequest) {
 
     // 修复后重新查询，确保数据一致
     const accounts = repaired
-      ? await prisma.copilotAccount.findMany({ orderBy: { githubId: 'asc' } })
+      ? await prisma.copilotAccount.findMany({ where: whereFilter, orderBy: { githubId: 'asc' } })
       : rawAccounts;
 
     // 构建用户和 Key 映射（基于修复后的数据）
@@ -130,17 +137,19 @@ export async function POST(request: NextRequest) {
     }
 
     const { githubId, token, quotaLimit = 10 } = body;
+    const poolType: string = body.poolType ?? 'copilot';
 
     if (!githubId || !token) {
-      return NextResponse.json({ error: 'GitHub ID和token必填' }, { status: 400 });
+      return NextResponse.json({ error: '账号 ID 和 token 必填' }, { status: 400 });
     }
 
     const account = await prisma.copilotAccount.create({
       data: {
+        poolType,
         githubId,
         token,
         quotaLimit: parseFloat(quotaLimit)
-      }
+      } as any
     });
 
     return NextResponse.json(account, { status: 201 });

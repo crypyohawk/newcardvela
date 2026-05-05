@@ -30,6 +30,7 @@ export async function PUT(
     if (body.maxKeys !== undefined) updateData.maxKeys = parseInt(body.maxKeys) || 0;
     if (body.requiredRole !== undefined) updateData.requiredRole = body.requiredRole || null;
     if (body.minAiBalance !== undefined) updateData.minAiBalance = parseFloat(body.minAiBalance) || 0;
+    if (body.groupRatio !== undefined) updateData.groupRatio = isNaN(parseFloat(body.groupRatio)) ? 1 : parseFloat(body.groupRatio);
 
     const tier = await db.aIServiceTier.update({
       where: { id: params.id },

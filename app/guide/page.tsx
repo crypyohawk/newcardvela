@@ -3,6 +3,84 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { DEFAULT_GUIDE_SECTIONS, GuideSection } from '../../src/lib/guideData';
+import {
+  ClipboardList, FileText, DollarSign, CheckCircle, Key, MapPin,
+  Lock, Layers, RefreshCw, Settings, ShieldCheck, CreditCard
+} from 'lucide-react';
+
+// 品牌 SVG 图标组件
+function SectionBrandIcon({ id, size }: { id: string; size: 'sm' | 'lg' }) {
+  const sz = size === 'lg' ? 28 : 16;
+  switch (id) {
+    case 'chatgpt':
+      return (
+        <svg width={sz} height={sz} viewBox="0 0 24 24" fill="#10a37f">
+          <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.911 6.046 6.046 0 0 0-6.51-2.9 6.065 6.065 0 0 0-4.54-2.02 6.046 6.046 0 0 0-5.774 4.193 6.065 6.065 0 0 0-4.031 2.944 6.046 6.046 0 0 0 .747 7.097 5.985 5.985 0 0 0 .511 4.91 6.046 6.046 0 0 0 6.515 2.9 6.065 6.065 0 0 0 4.544 2.019 6.046 6.046 0 0 0 5.773-4.191 6.065 6.065 0 0 0 4.031-2.944 6.046 6.046 0 0 0-.75-7.097zm-9.022 12.608a4.474 4.474 0 0 1-2.876-1.041c.057-.032.162-.089.23-.131l4.779-2.758a.776.776 0 0 0 .392-.679v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.583 4.543zm-9.661-4.125a4.47 4.47 0 0 1-.535-3.014c.057.033.157.096.23.14l4.779 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.032.062l-4.83 2.786a4.504 4.504 0 0 1-6.235-1.696zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.815-3.354 2.02-1.168a.076.076 0 0 1 .071 0l4.83 2.786a4.494 4.494 0 0 1-.677 8.104v-5.677a.79.79 0 0 0-.429-.69zm2.01-3.023c-.057-.033-.157-.096-.23-.14l-4.779-2.758a.776.776 0 0 0-.78 0L9.316 9.197V6.865a.08.08 0 0 1 .032-.062l4.83-2.787a4.504 4.504 0 0 1 6.72 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.504 4.504 0 0 1 7.375-3.453c-.057.032-.162.088-.23.131l-4.779 2.758a.775.775 0 0 0-.393.678zm1.097-2.365l2.602-1.5 2.607 1.498v2.999l-2.597 1.5-2.607-1.498z"/>
+        </svg>
+      );
+    case 'claude':
+      // Anthropic Claude — coral asterisk (6-spoke)
+      return (
+        <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none">
+          <path d="M12 3v18M3 12h18M5.64 5.64l12.72 12.72M18.36 5.64L5.64 18.36" stroke="#DA7756" strokeWidth={size === 'lg' ? 2.2 : 2.5} strokeLinecap="round"/>
+        </svg>
+      );
+    case 'gemini':
+      // Google Gemini — 4-pointed elongated diamond star
+      return (
+        <svg width={sz} height={sz} viewBox="0 0 24 24" fill="#4285F4">
+          <path d="M12 2C11.5 7 9.5 10.5 7 12C9.5 13.5 11.5 17 12 22C12.5 17 14.5 13.5 17 12C14.5 10.5 12.5 7 12 2Z"/>
+          <path d="M2 12C7 11.5 10.5 9.5 12 7C13.5 9.5 17 11.5 22 12C17 12.5 13.5 14.5 12 17C10.5 14.5 7 12.5 2 12Z" fill="#4285F4" opacity="0.5"/>
+        </svg>
+      );
+    case 'grok':
+      // xAI Grok — bold X
+      return (
+        <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none">
+          <path d="M4.5 4.5L19.5 19.5M19.5 4.5L4.5 19.5" stroke="#E5E7EB" strokeWidth={size === 'lg' ? 2.8 : 3} strokeLinecap="round"/>
+        </svg>
+      );
+    case 'cursor':
+      // Cursor IDE — arrow cursor
+      return (
+        <svg width={sz} height={sz} viewBox="0 0 24 24">
+          <path d="M5 3L19.5 11.5L13 13.5L9.5 21L5 3Z" fill="#007AFF" stroke="#339AF0" strokeWidth="0.8" strokeLinejoin="round"/>
+        </svg>
+      );
+    case 'card-tips':
+      return (
+        <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="5" width="20" height="14" rx="2.5" stroke="#818cf8" strokeWidth="1.5"/>
+          <path d="M2 9.5h20" stroke="#818cf8" strokeWidth="1.5"/>
+          <rect x="5" y="13" width="5" height="2.5" rx="1" fill="#818cf8"/>
+          <rect x="12" y="13" width="3" height="2.5" rx="1" fill="#818cf8" opacity="0.5"/>
+        </svg>
+      );
+    case 'preparation':
+    default:
+      return (
+        <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none">
+          <path d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437" stroke="#f59e0b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      );
+  }
+}
+
+// 步骤图标映射（对应 guideData 中 step.icon 字段）
+const STEP_ICON: Record<string, React.ReactNode> = {
+  '📋': <ClipboardList className="w-4 h-4" strokeWidth={1.5} />,
+  '📝': <FileText className="w-4 h-4" strokeWidth={1.5} />,
+  '💰': <DollarSign className="w-4 h-4" strokeWidth={1.5} />,
+  '💳': <CreditCard className="w-4 h-4" strokeWidth={1.5} />,
+  '✅': <CheckCircle className="w-4 h-4" strokeWidth={1.5} />,
+  '🔑': <Key className="w-4 h-4" strokeWidth={1.5} />,
+  '🏠': <MapPin className="w-4 h-4" strokeWidth={1.5} />,
+  '🔐': <Lock className="w-4 h-4" strokeWidth={1.5} />,
+  '🃏': <Layers className="w-4 h-4" strokeWidth={1.5} />,
+  '🔄': <RefreshCw className="w-4 h-4" strokeWidth={1.5} />,
+  '🔧': <Settings className="w-4 h-4" strokeWidth={1.5} />,
+  '🔒': <ShieldCheck className="w-4 h-4" strokeWidth={1.5} />,
+};
 
 export default function GuidePage() {
   const [sections, setSections] = useState<GuideSection[]>(DEFAULT_GUIDE_SECTIONS);
@@ -61,7 +139,9 @@ export default function GuidePage() {
                       : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                   }`}
                 >
-                  <span className="text-lg shrink-0">{section.icon}</span>
+                  <span className="shrink-0">
+                    <SectionBrandIcon id={section.id} size="sm" />
+                  </span>
                   <div className="min-w-0">
                     <div className="text-sm font-medium leading-tight truncate">{section.title}</div>
                     {section.price && (
@@ -77,7 +157,9 @@ export default function GuidePage() {
             <div className={`rounded-2xl border bg-gradient-to-br p-6 mb-6 ${currentSection.color}`}>
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="flex items-center gap-3 flex-1">
-                  <span className="text-4xl">{currentSection.icon}</span>
+                  <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur flex items-center justify-center shrink-0">
+                    <SectionBrandIcon id={currentSection.id} size="lg" />
+                  </div>
                   <div>
                     <h1 className="text-2xl font-bold">{currentSection.title}</h1>
                     <p className="text-slate-400 mt-0.5 text-sm">{currentSection.subtitle}</p>
@@ -107,8 +189,10 @@ export default function GuidePage() {
                       className="w-full text-left px-5 py-4 flex items-center gap-4 hover:bg-slate-800/40 transition"
                       onClick={() => setExpandedStep(isExpanded && expandedStep === stepKey ? null : stepKey)}
                     >
-                      <span className="shrink-0 w-8 h-8 rounded-full bg-slate-700 text-slate-300 text-sm font-bold flex items-center justify-center">
-                        {step.icon ?? String(index + 1)}
+                      <span className="shrink-0 w-8 h-8 rounded-full bg-slate-700/80 border border-slate-600 text-slate-300 text-xs font-bold flex items-center justify-center">
+                        {step.icon && STEP_ICON[step.icon]
+                          ? STEP_ICON[step.icon]
+                          : String(index + 1)}
                       </span>
                       <span className="font-semibold text-white flex-1">{step.title}</span>
                       <span className={`text-slate-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▾</span>

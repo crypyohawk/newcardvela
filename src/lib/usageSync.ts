@@ -106,8 +106,12 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
         }
       }
 
-      // 计算费用（支持模型级倍率）
+      // 计算费用（支持模型级固定价格、独立 input/output 倍率，以及旧版单 ratio）
       let modelRatio = 1;
+      let inputRatio = 1;
+      let outputRatio = 1;
+      let inputPriceOverride: number | null = null;
+      let outputPriceOverride: number | null = null;
       if (aiKey.tier.models) {
         try {
           const modelsConfig = typeof aiKey.tier.models === 'string'
@@ -118,6 +122,18 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
             const modelEntry = modelsConfig
               .filter((m: any) => m.name && model_name.toLowerCase().includes(m.name.toLowerCase()))
               .sort((a: any, b: any) => (b.name?.length || 0) - (a.name?.length || 0))[0];
+            if (typeof modelEntry?.inputPrice === 'number' && modelEntry.inputPrice >= 0) {
+              inputPriceOverride = modelEntry.inputPrice;
+            }
+            if (typeof modelEntry?.outputPrice === 'number' && modelEntry.outputPrice >= 0) {
+              outputPriceOverride = modelEntry.outputPrice;
+            }
+            if (typeof modelEntry?.inputRatio === 'number' && modelEntry.inputRatio > 0) {
+              inputRatio = modelEntry.inputRatio;
+            }
+            if (typeof modelEntry?.outputRatio === 'number' && modelEntry.outputRatio > 0) {
+              outputRatio = modelEntry.outputRatio;
+            }
             if (modelEntry?.ratio && modelEntry.ratio > 0) {
               modelRatio = modelEntry.ratio;
             }
@@ -126,8 +142,20 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
           console.warn(`[用量同步] 解析模型倍率失败, tierId=${aiKey.tier.id}:`, e);
         }
       }
-      const inputCost = (inputTokens / 1000000) * aiKey.tier.pricePerMillionInput * modelRatio;
-      const outputCost = (outputTokens / 1000000) * aiKey.tier.pricePerMillionOutput * modelRatio;
+
+      const effectiveInputPrice = inputPriceOverride != null
+        ? inputPriceOverride
+        : aiKey.tier.pricePerMillionInput * (inputRatio !== 1 ? inputRatio : modelRatio);
+      const effectiveOutputPrice = outputPriceOverride != null
+        ? outputPriceOverride
+        : aiKey.tier.pricePerMillionOutput * (outputRatio !== 1 ? outputRatio : modelRatio);
+
+      // 分组倍率(后台计费,不对用户展示): 用户看到的是官方价,实际扣费 = 官方价 × groupRatio
+      const groupRatio = (aiKey.tier as any).groupRatio && (aiKey.tier as any).groupRatio > 0
+        ? (aiKey.tier as any).groupRatio
+        : 1;
+      const inputCost = (inputTokens / 1000000) * effectiveInputPrice * groupRatio;
+      const outputCost = (outputTokens / 1000000) * effectiveOutputPrice * groupRatio;
       const cost = Math.round((inputCost + outputCost) * 10000) / 10000;
 
       // 检查月度预算（超限禁用Key，但不跳过计费——请求已完成必须收费）
@@ -140,18 +168,19 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
         console.log(`[用量同步] Key ${aiKey.id} 超出月度预算 $${aiKey.monthlyLimit}，已自动禁用。此次调用仍正常扣费。`);
       }
 
-      // 查当前AI余额
+      // 查当前 AI 余额
       const currentUser = await db.user.findUnique({
         where: { id: aiKey.userId },
-        select: { aiBalance: true },
+        select: { aiBalance: true, balance: true },
       });
       if (!currentUser) {
         skipped++;
         continue;
       }
+      const currentBalance = currentUser.aiBalance;
 
-      // 如果AI余额已经低于信用下限，禁用所有 Key 并跳过
-      if (currentUser.aiBalance <= -creditLimit) {
+      // 如果余额已经低于信用下限，禁用所有 Key 并跳过
+      if (currentBalance <= -creditLimit) {
         const activeKeys = await db.aIKey.findMany({
           where: { userId: aiKey.userId, status: 'active' },
           select: { id: true, newApiTokenId: true },
@@ -164,7 +193,7 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
           for (const k of activeKeys) {
             await disableKeyOnNewApi(k.newApiTokenId);
           }
-          console.log(`[用量同步] 用户 ${aiKey.userId} 已超出信用额度(AI余额$${currentUser.aiBalance.toFixed(4)}, 信用上限-$${creditLimit})，禁用所有Key`);
+          console.log(`[用量同步] 用户 ${aiKey.userId} 已超出信用额度(AI余额$${currentBalance.toFixed(4)}, 信用上限-$${creditLimit})，禁用所有Key`);
         }
         skipped++;
         continue;
@@ -253,12 +282,13 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
         }
       }
 
-      // 扣费后检查：AI余额低于信用下限则禁用所有 Key
+      // 扣费后检查：余额低于信用下限则禁用所有 Key
       const updatedUser = await db.user.findUnique({
         where: { id: aiKey.userId },
-        select: { aiBalance: true },
+        select: { aiBalance: true, balance: true },
       });
-      if (updatedUser && updatedUser.aiBalance <= -creditLimit) {
+      const updatedBalance = updatedUser ? updatedUser.aiBalance : 0;
+      if (updatedUser && updatedBalance <= -creditLimit) {
         const activeKeys = await db.aIKey.findMany({
           where: { userId: aiKey.userId, status: 'active' },
           select: { id: true, newApiTokenId: true },
@@ -270,7 +300,7 @@ export async function processUsageLogs(logs: UsageLog[]): Promise<SyncResult> {
         for (const k of activeKeys) {
           await disableKeyOnNewApi(k.newApiTokenId);
         }
-        console.log(`[用量同步] 用户 ${aiKey.userId} 扣费后超出信用额度(AI余额$${updatedUser.aiBalance.toFixed(4)})，已禁用所有 Key`);
+        console.log(`[用量同步] 用户 ${aiKey.userId} 扣费后超出信用额度(AI余额$${updatedBalance.toFixed(4)})，已禁用所有 Key`);
       }
     } catch (logError: any) {
       // 单条日志处理失败不应中断整个批次

@@ -7,6 +7,7 @@ import ClientAuthProvider from '../../../src/components/ClientAuthProvider';
 
 interface CopilotAccount {
   id: string;
+  poolType: string;
   githubId: string;
   token: string;
   quotaUsed: number;
@@ -58,8 +59,10 @@ export default function CopilotAccountsPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [activePoolType, setActivePoolType] = useState<string>('all');
   const [bindingAccountId, setBindingAccountId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
+    poolType: 'copilot',
     githubId: '',
     token: '',
     quotaLimit: 10
@@ -122,7 +125,7 @@ export default function CopilotAccountsPage() {
       });
       if (res.ok) {
         setShowAddForm(false);
-        setFormData({ githubId: '', token: '', quotaLimit: 10 });
+        setFormData({ poolType: 'copilot', githubId: '', token: '', quotaLimit: 10 });
         fetchAccounts();
       }
     } catch (error) {
@@ -244,16 +247,32 @@ export default function CopilotAccountsPage() {
     }
   };
 
+  // 当前 Tab 筛选后的账号列表
+  const filteredAccounts = activePoolType === 'all'
+    ? accounts
+    : accounts.filter(a => a.poolType === activePoolType);
+
+  // 各类型账号数（用于 Tab 徽标）
+  const poolTypeConfig = [
+    { key: 'all',     label: '全部',           badge: 'bg-gray-100 text-gray-700' },
+    { key: 'copilot', label: 'GitHub Copilot', badge: 'bg-blue-100 text-blue-700' },
+    { key: 'kiro',    label: 'Amazon Kiro',    badge: 'bg-orange-100 text-orange-700' },
+  ];
+  const countByType: Record<string, number> = { all: accounts.length };
+  for (const a of accounts) {
+    countByType[a.poolType] = (countByType[a.poolType] ?? 0) + 1;
+  }
+
   // 用 boundAiKeyId 判断是否已绑定（比 status 字段更可靠）
-  const idleCount = accounts.filter(a => !a.boundAiKeyId && a.status !== 'inactive' && a.status !== 'error' && a.status !== 'quota_exhausted').length;
-  const boundCount = accounts.filter(a => a.boundAiKeyId).length;
-  const syncedCount = accounts.filter(a => a.newApiChannelId).length;
-  const errorCount = accounts.filter(a => a.status === 'error').length;
-  const exhaustedCount = accounts.filter(a => a.status === 'quota_exhausted').length;
-  const totalQuotaUsed = accounts.reduce((sum, a) => sum + a.quotaUsed, 0);
+  const idleCount = filteredAccounts.filter(a => !a.boundAiKeyId && a.status !== 'inactive' && a.status !== 'error' && a.status !== 'quota_exhausted').length;
+  const boundCount = filteredAccounts.filter(a => a.boundAiKeyId).length;
+  const syncedCount = filteredAccounts.filter(a => a.newApiChannelId).length;
+  const errorCount = filteredAccounts.filter(a => a.status === 'error').length;
+  const exhaustedCount = filteredAccounts.filter(a => a.status === 'quota_exhausted').length;
+  const totalQuotaUsed = filteredAccounts.reduce((sum, a) => sum + a.quotaUsed, 0);
 
   // 已被绑定的渠道ID列表
-  const boundChannelIds = accounts.filter(a => a.newApiChannelId).map(a => a.newApiChannelId!);
+  const boundChannelIds = filteredAccounts.filter(a => a.newApiChannelId).map(a => a.newApiChannelId!);
 
   // 重置单个账号月度用量
   const handleResetQuota = async (id: string) => {
@@ -297,11 +316,11 @@ export default function CopilotAccountsPage() {
     <ClientAuthProvider>
       <AdminGuard>
         <div className="p-6">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-4">
           <div>
-            <h1 className="text-2xl font-bold">Copilot 账号池管理</h1>
+            <h1 className="text-2xl font-bold">AI 账号池管理</h1>
             <p className="text-gray-500 text-sm mt-1">
-              共 {accounts.length} 个账号 · {idleCount} 个空闲 · {boundCount} 个已绑定 · {syncedCount} 个已绑渠道{errorCount > 0 && <span className="text-red-600"> · {errorCount} 个异常</span>}{exhaustedCount > 0 && <span className="text-orange-600"> · {exhaustedCount} 个额度耗尽</span>} · 本月总消耗 ${totalQuotaUsed.toFixed(2)}
+              共 {filteredAccounts.length} 个账号 · {idleCount} 个空闲 · {boundCount} 个已绑定 · {syncedCount} 个已绑渠道{errorCount > 0 && <span className="text-red-600"> · {errorCount} 个异常</span>}{exhaustedCount > 0 && <span className="text-orange-600"> · {exhaustedCount} 个额度耗尽</span>} · 本月总消耗 ${totalQuotaUsed.toFixed(2)}
             </p>
           </div>
           <div className="flex gap-2">
@@ -329,6 +348,28 @@ export default function CopilotAccountsPage() {
               添加账号
             </button>
           </div>
+        </div>
+
+        {/* 类型 Tab */}
+        <div className="flex gap-1 mb-6 border-b border-gray-200">
+          {poolTypeConfig.map(({ key, label, badge }) => (
+            <button
+              key={key}
+              onClick={() => setActivePoolType(key)}
+              className={`px-4 py-2 text-sm rounded-t transition-colors ${
+                activePoolType === key
+                  ? 'border border-b-white border-gray-200 bg-white font-semibold -mb-px'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {label}
+              {countByType[key] !== undefined && (
+                <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${badge}`}>
+                  {countByType[key] ?? 0}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
 
         {/* 操作结果 */}
@@ -421,7 +462,18 @@ export default function CopilotAccountsPage() {
             <h2 className="text-lg font-semibold mb-4">添加新账号</h2>
             <form onSubmit={handleAddAccount} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">GitHub ID</label>
+                <label className="block text-sm font-medium mb-1">号池类型</label>
+                <select
+                  value={formData.poolType}
+                  onChange={(e) => setFormData({...formData, poolType: e.target.value})}
+                  className="w-full p-2 border rounded"
+                >
+                  <option value="copilot">GitHub Copilot</option>
+                  <option value="kiro">Amazon Kiro</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">账号 ID（Copilot 填 GitHub 用户名，Kiro 填邮箱）</label>
                 <input
                   type="text"
                   value={formData.githubId}
@@ -472,7 +524,8 @@ export default function CopilotAccountsPage() {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left">GitHub ID</th>
+                <th className="px-4 py-3 text-left">账号 ID</th>
+                <th className="px-4 py-3 text-left">类型</th>
                 <th className="px-4 py-3 text-left">状态</th>
                 <th className="px-4 py-3 text-left">号池绑定</th>
                 <th className="px-4 py-3 text-left">端口</th>
@@ -484,9 +537,18 @@ export default function CopilotAccountsPage() {
               </tr>
             </thead>
             <tbody>
-              {accounts.map((account) => (
+              {filteredAccounts.map((account) => (
                 <tr key={account.id} className="border-t">
-                  <td className="px-4 py-3">{account.githubId}</td>
+                  <td className="px-4 py-3 font-mono text-sm">{account.githubId}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                      account.poolType === 'kiro'
+                        ? 'bg-orange-100 text-orange-700'
+                        : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {account.poolType === 'kiro' ? 'Kiro' : 'Copilot'}
+                    </span>
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded text-sm ${
                       account.status === 'quota_exhausted' ? 'bg-orange-100 text-orange-800' :
@@ -601,7 +663,7 @@ export default function CopilotAccountsPage() {
               ))}
             </tbody>
           </table>
-          {accounts.length === 0 && (
+          {filteredAccounts.length === 0 && (
             <div className="p-6 text-center text-gray-500">
               暂无账号，点击&quot;添加账号&quot;开始
             </div>

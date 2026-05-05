@@ -958,7 +958,7 @@ export default function DashboardPage() {
                 {serviceCategory === 'ai' && <span className="text-[10px] text-cyan-300 bg-cyan-400/10 border border-cyan-400/30 rounded-full px-2 py-0.5">当前</span>}
               </div>
               <div className="font-semibold text-base text-white">AI 服务</div>
-              <div className="text-xs text-gray-400 mt-1">Claude / Gemini / GPT / Grok</div>
+              <div className="text-xs text-gray-400 mt-1">Claude AI · Cardvela Pro</div>
             </button>
 
             <button
@@ -1112,7 +1112,7 @@ export default function DashboardPage() {
             <span className="text-xs text-cyan-300/80 uppercase tracking-wider font-medium">AI 聚合中转 · 核心服务</span>
             <span className="h-px flex-1 bg-white/5" />
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Claude AI */}
             <Link href="/dashboard/ai/claude" className="relative overflow-hidden rounded-2xl p-4 text-left transition-all group border bg-gradient-to-br from-[#1a1207] to-[#241810] border-orange-900/30 hover:border-orange-500/60 hover:shadow-lg hover:shadow-orange-900/20 block">
               <div className="absolute top-0 right-0 w-16 h-16 opacity-[0.04] group-hover:opacity-[0.08] transition-opacity">
@@ -1123,42 +1123,26 @@ export default function DashboardPage() {
               </div>
               <div className="font-semibold text-sm text-white">Claude AI</div>
               <div className="text-xs text-orange-400/80 mt-0.5">官转代理</div>
-              {aiKeys.filter((k: any) => k.tier?.modelGroup !== 'gemini').length > 0 && (
-                <div className="mt-2 text-xs text-orange-300/70">{aiKeys.filter((k: any) => k.tier?.modelGroup !== 'gemini').length} 个 Key</div>
+              {aiKeys.length > 0 && (
+                <div className="mt-2 text-xs text-orange-300/70">{aiKeys.length} 个 Key</div>
               )}
               <div className="absolute bottom-3 right-3 text-orange-500/40 group-hover:text-orange-400/60 text-sm transition-colors">→</div>
             </Link>
 
-            {/* Gemini AI */}
-            <Link href="/dashboard/ai/gemini" className="relative overflow-hidden rounded-2xl p-4 text-left transition-all group border bg-gradient-to-br from-[#071a14] to-[#0a2018] border-teal-900/30 hover:border-teal-500/60 hover:shadow-lg hover:shadow-teal-900/20 block">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center shadow-lg shadow-teal-900/40 mb-3 transition-transform group-hover:scale-105 text-white font-bold text-base">G</div>
-              <div className="font-semibold text-sm text-white">Gemini AI</div>
-              <div className="text-xs text-teal-400/80 mt-0.5">免费使用</div>
-              {aiKeys.filter((k: any) => k.tier?.modelGroup === 'gemini').length > 0 ? (
-                <div className="mt-2 text-xs text-teal-300/70">{aiKeys.filter((k: any) => k.tier?.modelGroup === 'gemini').length} 个 Key</div>
-              ) : (
-                <div className="mt-2 text-xs text-green-400/70">🆓 无需认证</div>
-              )}
-              <div className="absolute bottom-3 right-3 text-teal-500/40 group-hover:text-teal-400/60 text-sm transition-colors">→</div>
-            </Link>
-
-            {/* GPT 专线（预留） */}
-            <div className="relative overflow-hidden rounded-2xl p-4 text-left border bg-slate-800/30 border-slate-700/30 opacity-50 cursor-not-allowed">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-800 flex items-center justify-center shadow-lg mb-3">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="white" strokeWidth="0"><circle cx="12" cy="12" r="10" fill="none" stroke="white" strokeWidth="1.5"/><path d="M8 12h8M12 8v8" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            {/* Cardvela Pro（Perplexity 池） */}
+            <Link href="/dashboard/ai/perplexity" className="relative overflow-hidden rounded-2xl p-4 text-left transition-all group border bg-gradient-to-br from-[#0d0a1f] to-[#170f2e] border-purple-900/40 hover:border-purple-500/60 hover:shadow-lg hover:shadow-purple-900/30 block">
+              <div className="absolute top-0 right-0 w-20 h-20 opacity-[0.06] group-hover:opacity-[0.12] transition-opacity">
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full text-purple-300"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6m11-11h-6m-10 0H1m17.07-7.07l-4.24 4.24m-5.66 5.66l-4.24 4.24m12.02 0l-4.24-4.24m-5.66-5.66L4.93 4.93"/></svg>
               </div>
-              <div className="font-semibold text-sm text-gray-400">GPT 专线</div>
-              <div className="text-xs text-gray-600 mt-0.5">即将上线</div>
-              <div className="mt-2 text-xs text-gray-600">敬请期待</div>
-            </div>
-
-            {/* Grok 专线（预留） */}
-            <div className="relative overflow-hidden rounded-2xl p-4 text-left border bg-slate-800/30 border-slate-700/30 opacity-50 cursor-not-allowed">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-violet-800 flex items-center justify-center shadow-lg mb-3 text-white font-bold text-sm">X</div>
-              <div className="font-semibold text-sm text-gray-400">Grok 专线</div>
-              <div className="text-xs text-gray-600 mt-0.5">即将上线</div>
-              <div className="mt-2 text-xs text-gray-600">敬请期待</div>
-            </div>
+              <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-400/30 text-[10px] text-purple-300 font-medium">NEW</div>
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 via-fuchsia-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-900/50 mb-3 transition-transform group-hover:scale-105">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+              </div>
+              <div className="font-semibold text-sm text-white">Cardvela Pro</div>
+              <div className="text-xs text-purple-400/80 mt-0.5">AI 聚合旗舰订阅</div>
+              <div className="mt-2 text-xs text-purple-300/70">Claude · GPT · Gemini · Sonar · Grok</div>
+              <div className="absolute bottom-3 right-3 text-purple-500/40 group-hover:text-purple-400/60 text-sm transition-colors">→</div>
+            </Link>
           </div>
         </div>
         )}
@@ -2028,20 +2012,14 @@ export default function DashboardPage() {
                 <h2 className="text-xl font-bold">📦 可选套餐</h2>
                 {aiTiers.map((tier: any) => (
                   <div key={tier.id} className={`rounded-xl p-6 border transition-all ${
-                    tier.modelGroup === 'gpt' ? 'border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-emerald-900/10' :
-                    tier.modelGroup === 'mixed' ? 'border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-purple-900/10' :
                     'border-orange-500/30 bg-gradient-to-br from-orange-500/5 to-amber-900/10'
                   }`}>
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2 flex-wrap">
-                        {tier.modelGroup === 'gpt' ? <span className="text-lg">🤖</span> : tier.modelGroup === 'mixed' ? <span className="text-lg">🔀</span> : <span><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-[#D4A27C] inline"><path d="M12 1L13.5 9L19 4L15 10.5L23 12L15 13.5L19 20L13.5 15L12 23L10.5 15L5 20L9 13.5L1 12L9 10.5L5 4L10.5 9Z"/></svg></span>}
+                        <span><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-[#D4A27C] inline"><path d="M12 1L13.5 9L19 4L15 10.5L23 12L15 13.5L19 20L13.5 15L12 23L10.5 15L5 20L9 13.5L1 12L9 10.5L5 4L10.5 9Z"/></svg></span>
                         <span className="font-bold text-lg">{tier.displayName}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          tier.modelGroup === 'gpt' ? 'bg-emerald-500/20 text-emerald-400' :
-                          tier.modelGroup === 'mixed' ? 'bg-purple-500/20 text-purple-400' :
-                          'bg-amber-500/20 text-amber-400'
-                        }`}>
-                          {tier.modelGroup === 'gpt' ? 'GPT' : tier.modelGroup === 'mixed' ? '混合' : 'Claude'}
+                        <span className="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                          Claude
                         </span>
                       </div>
                       <button
@@ -2158,12 +2136,8 @@ export default function DashboardPage() {
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-3 flex-wrap">
                           <span className="font-semibold">{key.keyName}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded ${
-                            key.tier?.modelGroup === 'gpt' ? 'bg-emerald-600/20 text-emerald-400' :
-                            key.tier?.modelGroup === 'mixed' ? 'bg-purple-600/20 text-purple-400' :
-                            'bg-amber-600/20 text-amber-400'
-                          }`}>
-                            {key.tier?.modelGroup === 'gpt' ? 'GPT' : key.tier?.modelGroup === 'mixed' ? '混合' : 'Claude'}
+                          <span className="text-xs px-2 py-0.5 rounded bg-amber-600/20 text-amber-400">
+                            Claude
                           </span>
                           <span className="text-xs px-2 py-0.5 rounded bg-blue-600/20 text-blue-400">
                             {key.tier?.displayName || key.tier?.name}

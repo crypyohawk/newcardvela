@@ -31,8 +31,15 @@ export async function POST(request: NextRequest) {
     if (!transferAmount || transferAmount <= 0) {
       return NextResponse.json({ error: '转账金额必须大于 0' }, { status: 400 });
     }
-    if (transferAmount < 1) {
-      return NextResponse.json({ error: '最低转账金额为 $1' }, { status: 400 });
+    // AI 钱包 → 主余额 最低 $1；主余额 → AI 钱包 最低 $10
+    if (body.direction === 'ai_to_main') {
+      if (transferAmount < 1) {
+        return NextResponse.json({ error: '最低转账金额为 $1' }, { status: 400 });
+      }
+    } else {
+      if (transferAmount < 10) {
+        return NextResponse.json({ error: 'AI 钱包充值最低 $10 起' }, { status: 400 });
+      }
     }
 
     const user = await db.user.findUnique({ where: { id: payload.userId } });

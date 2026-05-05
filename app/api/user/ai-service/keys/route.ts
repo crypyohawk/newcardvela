@@ -125,7 +125,7 @@ async function syncCurrentUserKeyUsage(userId: string) {
       lastRemoteUsedUsd: true,
       monthlyLimit: true,
       lastSyncAt: true,
-      tier: { select: { channelGroup: true } },
+      tier: { select: { channelGroup: true, groupRatio: true } },
     },
   });
 
@@ -134,6 +134,8 @@ async function syncCurrentUserKeyUsage(userId: string) {
       const usage = await getNewApiTokenUsageWithRepair(key);
       if (!usage) return;
       const usedUSD = Math.round(quotaToUSD(usage.usedQuota) * 10000) / 10000;
+      // 分组扣费倍率: 用户感知按官方 token 价, 实际扣费 = 官方价 × groupRatio
+      const groupRatio = key.tier?.groupRatio && key.tier.groupRatio > 0 ? key.tier.groupRatio : 1;
 
       const txResult = await db.$transaction(async (tx) => {
         const currentKey = await tx.aIKey.findUnique({
@@ -168,7 +170,9 @@ async function syncCurrentUserKeyUsage(userId: string) {
           baselineReason = 'remote-counter-reset';
         }
 
-        const delta = Math.round((usedUSD - remoteBaseline) * 10000) / 10000;
+        const rawDelta = Math.round((usedUSD - remoteBaseline) * 10000) / 10000;
+        // 应用 groupRatio: 实际扣费金额 = 远端原始增量 × 分组倍率
+        const delta = Math.round(rawDelta * groupRatio * 10000) / 10000;
         if (delta <= 0) {
           if (baselineReason) {
             const updated = await tx.aIKey.updateMany({
@@ -221,7 +225,9 @@ async function syncCurrentUserKeyUsage(userId: string) {
 
         await tx.user.update({
           where: { id: currentKey.userId },
-          data: { aiBalance: { decrement: delta } },
+          data: key.tier?.channelGroup === 'gemini'
+            ? { balance: { decrement: delta } }
+            : { aiBalance: { decrement: delta } },
         });
 
         if (delta >= 0.01) {
@@ -245,7 +251,7 @@ async function syncCurrentUserKeyUsage(userId: string) {
 
       // 号池账号用量现在由 cron syncUsageStatsIfDue 按实际渠道归因
 
-      const user = await db.user.findUnique({ where: { id: userId }, select: { aiBalance: true } });
+      const user = await db.user.findUnique({ where: { id: userId }, select: { aiBalance: true, balance: true } });
       if (user && key.newApiTokenId) {
         // 重新读取 key 最新状态，防止并行处理时另一个 handler 已经禁用了这个 key
         const freshKey = await db.aIKey.findUnique({
@@ -253,8 +259,10 @@ async function syncCurrentUserKeyUsage(userId: string) {
           select: { status: true },
         });
         const keyIsActive = freshKey?.status === 'active';
+        const isGemini = key.tier?.channelGroup === 'gemini';
+        const effectiveBalance = isGemini ? user.balance : user.aiBalance;
         const availableUsd = getAvailableTokenUsd({
-          aiBalance: user.aiBalance,
+          aiBalance: effectiveBalance,
           creditLimit,
           monthUsed: txResult.monthUsed,
           monthlyLimit: txResult.monthlyLimit,
@@ -271,7 +279,7 @@ async function syncCurrentUserKeyUsage(userId: string) {
         } catch (_) {}
 
         if (isAiKeyQuotaExhausted({
-          aiBalance: user.aiBalance,
+          aiBalance: effectiveBalance,
           creditLimit,
           monthUsed: txResult.monthUsed,
           monthlyLimit: txResult.monthlyLimit,
@@ -417,28 +425,27 @@ export async function POST(request: NextRequest) {
 
     // === 号池套餐额外校验 ===
     if (isCopilotPool) {
-      // 号池套餐必须是企业用户
       const userRole = user.role?.toLowerCase();
-      if (userRole !== 'enterprise' && userRole !== 'admin') {
-        return NextResponse.json({ error: '号池套餐仅限企业用户，请先申请企业认证' }, { status: 403 });
-      }
+      const isEnterpriseOrAdmin = userRole === 'enterprise' || userRole === 'admin';
 
-      // AI 等级对应的 Key 上限
+      // AI 等级对应的 Key 上限（企业用户走 aiTier 体系；普通用户固定 2 个 Key）
       const aiTierLimits: Record<string, { maxKeys: number; minBalance: number }> = {
         basic:   { maxKeys: 3,  minBalance: 50 },
         pro:     { maxKeys: 10, minBalance: 500 },
         premium: { maxKeys: 20, minBalance: 1000 },
       };
-      const tierConfig = aiTierLimits[user.aiTier || 'basic'] || aiTierLimits.basic;
+      const tierConfig = isEnterpriseOrAdmin
+        ? (aiTierLimits[user.aiTier || 'basic'] || aiTierLimits.basic)
+        : { maxKeys: 2, minBalance: 0 };  // 普通用户：最多 2 个 Key，无额外余额门槛
 
-      // 检查 AI 余额门槛
-      if (user.aiBalance < tierConfig.minBalance) {
+      // 检查 AI 余额门槛（企业用户）
+      if (tierConfig.minBalance > 0 && user.aiBalance < tierConfig.minBalance) {
         return NextResponse.json({
           error: `当前 AI 等级(${user.aiTier || 'basic'})要求 AI 余额 ≥ $${tierConfig.minBalance}，当前 $${user.aiBalance.toFixed(2)}`,
         }, { status: 400 });
       }
 
-      // 检查用户级 Key 数量上限（按 AI 等级）
+      // 检查用户级 Key 数量上限
       const userPoolKeyCount = await db.aIKey.count({
         where: {
           userId: payload.userId,
@@ -447,41 +454,50 @@ export async function POST(request: NextRequest) {
         },
       });
       if (userPoolKeyCount >= tierConfig.maxKeys) {
-        return NextResponse.json({
-          error: `当前 AI 等级(${user.aiTier || 'basic'})最多创建 ${tierConfig.maxKeys} 个号池 Key，已有 ${userPoolKeyCount} 个。升级等级可创建更多`,
-        }, { status: 400 });
+        const hint = isEnterpriseOrAdmin
+          ? `当前 AI 等级(${user.aiTier || 'basic'})最多创建 ${tierConfig.maxKeys} 个号池 Key，已有 ${userPoolKeyCount} 个。升级等级可创建更多`
+          : `普通用户最多创建 ${tierConfig.maxKeys} 个 AI Key，已有 ${userPoolKeyCount} 个。升级企业认证可创建更多`;
+        return NextResponse.json({ error: hint }, { status: 400 });
       }
 
-      // 检查号池总容量（所有用户共享）
+      // 检查号池总容量（所有用户共享，企业用户触发自动扩容申请）
       const capacity = await getCopilotPoolCapacity();
       if (!capacity.available) {
-        // 自动提交扩容申请
-        const pendingRequest = await db.poolExpansionRequest.findFirst({
-          where: { userId: payload.userId, status: 'pending' },
-        });
-        if (!pendingRequest) {
-          await db.poolExpansionRequest.create({
-            data: {
-              userId: payload.userId,
-              currentTier: user.aiTier || 'basic',
-              keyCount: userPoolKeyCount,
-              maxKeys: tierConfig.maxKeys,
-              message: `号池容量已满 (${capacity.activeKeys}/${capacity.maxKeys})，自动提交扩容`,
-            },
+        if (isEnterpriseOrAdmin) {
+          const pendingRequest = await db.poolExpansionRequest.findFirst({
+            where: { userId: payload.userId, status: 'pending' },
           });
+          if (!pendingRequest) {
+            await db.poolExpansionRequest.create({
+              data: {
+                userId: payload.userId,
+                currentTier: user.aiTier || 'basic',
+                keyCount: userPoolKeyCount,
+                maxKeys: tierConfig.maxKeys,
+                message: `号池容量已满 (${capacity.activeKeys}/${capacity.maxKeys})，自动提交扩容`,
+              },
+            });
+          }
         }
         return NextResponse.json({
-          error: `号池容量已满（${capacity.activeKeys}/${capacity.maxKeys} 个 Key），已为您提交扩容申请`,
+          error: `号池容量已满（${capacity.activeKeys}/${capacity.maxKeys} 个 Key），${isEnterpriseOrAdmin ? '已为您提交扩容申请' : '请稍后再试'}`,
         }, { status: 400 });
       }
     }
 
-    // 检查 AI 专用余额
-    if (user.aiBalance <= 0) {
-      return NextResponse.json({ error: 'AI 余额不足，请先从账户余额转入 AI 钱包' }, { status: 400 });
+    // 余额检查：Gemini 套餐扣账户余额，其它（Claude / Copilot 号池）扣 AI 钱包余额
+    const isGemini = tier.channelGroup === 'gemini';
+    const effectiveBalance = isGemini ? user.balance : user.aiBalance;
+    const balanceLabel = isGemini ? '账户余额' : 'AI 余额';
+    if (effectiveBalance <= 0) {
+      return NextResponse.json({
+        error: isGemini ? '账户余额不足，请先充值' : 'AI 余额不足，请先从账户余额转入 AI 钱包',
+      }, { status: 400 });
     }
-    if (tier.minAiBalance > 0 && user.aiBalance < tier.minAiBalance) {
-      return NextResponse.json({ error: `该套餐要求 AI 余额不低于 $${tier.minAiBalance}，当前 AI 余额 $${user.aiBalance.toFixed(2)}` }, { status: 400 });
+    if (tier.minAiBalance > 0 && effectiveBalance < tier.minAiBalance) {
+      return NextResponse.json({
+        error: `该套餐要求${balanceLabel}不低于 $${tier.minAiBalance}，当前${balanceLabel} $${effectiveBalance.toFixed(2)}`,
+      }, { status: 400 });
     }
 
     // 限制 Key 数量（非号池套餐的通用限制）
@@ -511,7 +527,7 @@ export async function POST(request: NextRequest) {
       const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
       const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
       const maxQuotaUSD = getAvailableTokenUsd({
-        aiBalance: user.aiBalance,
+        aiBalance: effectiveBalance,
         creditLimit,
         monthUsed: 0,
         monthlyLimit: monthlyLimit == null || monthlyLimit === '' ? null : Number(monthlyLimit),

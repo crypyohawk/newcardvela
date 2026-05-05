@@ -50,6 +50,7 @@ model User {
   enterpriseApps      EnterpriseApplication[]
   poolRequests        PoolExpansionRequest[]
   vpnSessions         VpnSession[]
+  perplexitySubs      PerplexitySubscription[]
 
   @@index([email])
   @@index([referralCode])
@@ -395,6 +396,7 @@ model AIServiceTier {
   provider                AIProvider? @relation(fields: [providerId], references: [id])
   modelGroup              String   @default("claude")   // "claude" | "gpt" | "mixed"
   channelGroup            String?                       // 上游分组名(proxy模式: PoloAPI分组名)
+  groupRatio              Float    @default(1.0)        // 分组扣费倍率(后台计费用,不展示给用户): 实际扣费 = 官方token价 × groupRatio
   apiBaseUrl              String?                       // 用户调用的 API 地址(覆盖默认)
 
   createdAt               DateTime @default(now())
@@ -531,8 +533,9 @@ model EnterpriseApplication {
 // Copilot账号池模型
 model CopilotAccount {
   id              String   @id @default(cuid())
-  githubId        String   // GitHub账号ID
-  token           String   // ghu_开头的token
+  poolType        String   @default("copilot") // copilot | kiro | (可扩展)
+  githubId        String   // 账号标识（copilot 填 GitHub ID，kiro 填邮箱/账号名）
+  token           String   // Auth token（copilot: ghu_xxx，kiro: AWS token 等）
   quotaUsed       Float    @default(0)  // 已用额度（美元）
   quotaLimit      Float    @default(10) // 月额度上限
   status          String   @default("active") // active/inactive/error/bound/quota_exhausted
@@ -549,6 +552,71 @@ model CopilotAccount {
   updatedAt       DateTime @updatedAt
 
   @@index([status])
+  @@index([poolType])
+}
+
+// Cardvela Pro 订阅套餐（管理员可编辑）
+model PerplexityPlan {
+  id              String   @id @default(cuid())
+  code            String   @unique              // 内部代号，如 pro-monthly / pro-quarterly
+  displayName     String                        // 用户端显示名，如 "Cardvela Pro 月度"
+  priceUsd        Float                         // 一次性扣费价格（美元）
+  durationDays    Int      @default(30)         // 有效期（天）
+  monthlyQuotaUsd Float                         // 套餐内可用额度（美元等价 token 用量）
+  payAsYouGoEquivUsd Float?                     // 同等用量按 token 实时计费的等价价格（用于展示"省 X%"）
+  intro           String?  @db.Text             // 套餐介绍（Markdown，管理员编辑）
+  features        String?  @db.Text             // JSON 数组：亮点功能列表
+  highlight       Boolean  @default(false)      // 是否为推荐套餐（高亮显示）
+  sortOrder       Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  subscriptions   PerplexitySubscription[]
+
+  @@index([isActive, sortOrder])
+}
+
+// 用户的 Cardvela Pro 订阅记录
+model PerplexitySubscription {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId        String
+  plan          PerplexityPlan @relation(fields: [planId], references: [id])
+  pricePaidUsd  Float                            // 实际扣费金额
+  quotaTotalUsd Float                            // 本期总额度
+  quotaUsedUsd  Float    @default(0)             // 已使用额度
+  startAt       DateTime @default(now())
+  expiresAt     DateTime
+  status        String   @default("active")     // active | expired | cancelled
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([expiresAt])
+}
+
+// Perplexity 订阅号池（共享池：所有用户共用，由 new-api 渠道做负载均衡）
+model PerplexityAccount {
+  id              String   @id @default(cuid())
+  email           String   @unique              // Perplexity 登录邮箱
+  password        String?                       // 可选：登录密码（便于运维）
+  cookie          String   @db.Text             // 完整 Cookie 串
+  port            Int      @unique              // pplx-proxy 监听端口
+  newApiChannelId Int?                          // 对应 new-api 渠道 ID
+  apiKey          String?                       // 给 new-api 用的内部 key（pplx-pool-internal-XXXX）
+  accountType     String   @default("pro")      // pro | free
+  status          String   @default("active")   // active | expired | disabled | error
+  expiresAt       DateTime?                     // 订阅到期时间
+  lastCheckAt     DateTime?                     // 上次健康检查时间
+  lastError       String?  @db.Text             // 最近一次错误信息
+  notes           String?  @db.Text             // 运维备注
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@index([expiresAt])
 }
 
 // 号池扩容申请

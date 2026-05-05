@@ -207,15 +207,19 @@ export async function PUT(
 
       // === 启用非号池 Key：普通余额检查 ===
       if (body.status === 'active') {
-        const user = await db.user.findUnique({ where: { id: payload.userId }, select: { aiBalance: true } });
-        if (!user || user.aiBalance <= 0) {
-          return NextResponse.json({ error: 'AI 余额不足，无法启用 Key，请先从账户余额转入 AI 钱包' }, { status: 400 });
+        const user = await db.user.findUnique({ where: { id: payload.userId }, select: { aiBalance: true, balance: true } });
+        const isGemini = aiKey.tier.channelGroup === 'gemini';
+        const effectiveBalance = isGemini ? (user?.balance ?? 0) : (user?.aiBalance ?? 0);
+        if (!user || effectiveBalance <= 0) {
+          return NextResponse.json({
+            error: isGemini ? '账户余额不足，无法启用 Key，请先充值' : 'AI 余额不足，无法启用 Key，请先从账户余额转入 AI 钱包',
+          }, { status: 400 });
         }
 
         const creditConfig = await db.systemConfig.findUnique({ where: { key: 'ai_credit_limit' } });
         const creditLimit = creditConfig ? parseFloat(creditConfig.value) : 1;
         const availableUsd = getAvailableTokenUsd({
-          aiBalance: user.aiBalance,
+          aiBalance: effectiveBalance,
           creditLimit,
           monthUsed: aiKey.monthUsed,
           monthlyLimit: aiKey.monthlyLimit,

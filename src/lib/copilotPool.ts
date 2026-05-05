@@ -14,7 +14,7 @@ import { db } from './db';
 
 const DEFAULT_POOL_MULTIPLIER = 2.0;
 
-export async function getCopilotPoolCapacity(): Promise<{
+export async function getCopilotPoolCapacity(poolType?: string): Promise<{
   totalAccounts: number;
   healthyAccounts: number;
   multiplier: number;
@@ -22,9 +22,10 @@ export async function getCopilotPoolCapacity(): Promise<{
   activeKeys: number;
   available: boolean;
 }> {
+  const typeFilter = poolType ? { poolType } : {};
   const [totalAccounts, healthyAccounts, activeKeys, multiplierConfig] = await Promise.all([
-    db.copilotAccount.count(),
-    db.copilotAccount.count({ where: { status: { in: ['active', 'bound'] } } }),
+    db.copilotAccount.count({ where: typeFilter }),
+    db.copilotAccount.count({ where: { ...typeFilter, status: { in: ['active', 'bound'] } } }),
     db.aIKey.count({
       where: {
         status: 'active',
