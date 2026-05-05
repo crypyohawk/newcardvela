@@ -389,7 +389,7 @@ export default function PerplexityPage() {
           ) : plans.length === 0 ? (
             <div className="bg-slate-800/40 border border-slate-700 rounded-2xl p-8 text-center">
               <p className="text-gray-300 mb-2">暂无可订阅套餐 🚀</p>
-              <p className="text-xs text-gray-500">您仍可通过下方"按 Token 实时计费"模式直接调用</p>
+              <p className="text-xs text-gray-500">您仍可通过下方&ldquo;按 Token 实时计费&rdquo;模式直接调用</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
