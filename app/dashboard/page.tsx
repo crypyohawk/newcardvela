@@ -97,6 +97,20 @@ export default function DashboardPage() {
   const [submitting, setSubmitting] = useState(false);
   const [usdtNetwork, setUsdtNetwork] = useState<'trc20' | 'erc20' | 'bep20'>('trc20');
 
+  // 充值记录列表
+  interface RechargeRecord {
+    id: string;
+    amount: number;
+    status: 'processing' | 'completed' | 'failed';
+    paymentMethod?: string | null;
+    paymentNetwork?: string | null;
+    rejectReason?: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }
+  const [rechargeHistory, setRechargeHistory] = useState<RechargeRecord[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
   // 卡充值相关
   const [selectedCardForRecharge, setSelectedCardForRecharge] = useState<UserCard | null>(null);
   const [cardRechargeAmount, setCardRechargeAmount] = useState('');
@@ -193,6 +207,29 @@ export default function DashboardPage() {
     fetchReferralInfo();
     fetchAIData();
   }, []);
+
+  // 进入充值 tab 时拉充值历史
+  useEffect(() => {
+    if (serviceCategory === 'card' && activeTab === 'recharge') {
+      fetchRechargeHistory();
+    }
+  }, [serviceCategory, activeTab]);
+
+  const fetchRechargeHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/user/recharge/history?limit=20', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) setRechargeHistory(data.records || []);
+    } catch (e) {
+      // 静默失败
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -668,6 +705,7 @@ export default function DashboardPage() {
       setPaymentInfo(null);
       setTxHash('');
       setPaymentProof('');
+      fetchRechargeHistory();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
     } finally {
@@ -1628,7 +1666,8 @@ export default function DashboardPage() {
 
         {/* 充值 */}
         {serviceCategory === 'card' && activeTab === 'recharge' && (
-          <div className="bg-slate-800 rounded-xl p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="bg-slate-800 rounded-xl p-6 lg:col-span-2">
             <h2 className="text-xl font-bold mb-6">账户充值</h2>
             {rechargeStep === 'input' ? (
               <div className="max-w-md">
@@ -1877,6 +1916,66 @@ export default function DashboardPage() {
                 </div>
               </div>
             )}
+            </div>
+
+            {/* 右侧：充值记录 */}
+            <div className="bg-slate-800 rounded-xl p-6 lg:col-span-1">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold">充值记录</h2>
+                <button
+                  onClick={fetchRechargeHistory}
+                  disabled={historyLoading}
+                  className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50"
+                >
+                  {historyLoading ? '刷新中…' : '刷新'}
+                </button>
+              </div>
+              {rechargeHistory.length === 0 ? (
+                <p className="text-gray-400 text-sm text-center py-8">
+                  {historyLoading ? '加载中…' : '暂无充值记录'}
+                </p>
+              ) : (
+                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+                  {rechargeHistory.map(rec => {
+                    const statusMeta =
+                      rec.status === 'completed' ? { label: '已完成', cls: 'bg-green-600/30 text-green-300 border-green-700/50' } :
+                      rec.status === 'failed'    ? { label: '已拒绝', cls: 'bg-red-600/30 text-red-300 border-red-700/50' } :
+                                                   { label: '待审核', cls: 'bg-yellow-600/30 text-yellow-300 border-yellow-700/50' };
+                    return (
+                      <div key={rec.id} className="bg-slate-700/60 border border-slate-600 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-green-400 font-bold text-base">${rec.amount.toFixed(2)}</span>
+                          <span className={`px-2 py-0.5 rounded text-[11px] border ${statusMeta.cls}`}>
+                            {statusMeta.label}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] text-gray-400">
+                          <span>
+                            {rec.paymentMethod ? rec.paymentMethod.toUpperCase() : '—'}
+                            {rec.paymentNetwork ? ` · ${rec.paymentNetwork.toUpperCase()}` : ''}
+                          </span>
+                          <span>
+                            {new Date(rec.createdAt).toLocaleString('zh-CN', {
+                              month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                        {rec.status === 'failed' && rec.rejectReason && (
+                          <div className="mt-2 text-xs bg-red-900/40 border border-red-700/50 rounded p-2 text-red-300">
+                            <span className="font-medium">拒绝原因：</span>{rec.rejectReason}
+                          </div>
+                        )}
+                        {rec.status === 'processing' && (
+                          <div className="mt-2 text-[11px] text-yellow-400/80">
+                            凭证已提交，管理员将尽快审核
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

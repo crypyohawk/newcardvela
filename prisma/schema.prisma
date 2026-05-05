@@ -131,6 +131,7 @@ model Transaction {
   paymentNetwork String?
   txHash         String?
   paymentProof   String?  @db.Text
+  rejectReason   String?  @db.Text
   
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt

@@ -1059,6 +1059,17 @@ export default function AdminPage() {
   // 订单操作
   const handleOrderAction = async (orderId: string, action: 'confirm' | 'reject') => {
     if (processingOrderId) return;
+    let rejectReason: string | undefined;
+    if (action === 'reject') {
+      const input = window.prompt('请填写拒绝原因（用户将看到此信息）\n例如：支付截图不正确 / 金额不一致 / 未收到账款 等');
+      if (input === null) return; // 用户取消
+      const trimmed = input.trim();
+      if (!trimmed) {
+        setMessage({ type: 'error', text: '拒绝原因不能为空' });
+        return;
+      }
+      rejectReason = trimmed.slice(0, 500);
+    }
     setProcessingOrderId(orderId);
     try {
       const res = await fetch('/api/admin/orders', {
@@ -1067,7 +1078,7 @@ export default function AdminPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getToken()}`,
         },
-        body: JSON.stringify({ orderId, action }),
+        body: JSON.stringify({ orderId, action, rejectReason }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -1931,6 +1942,12 @@ export default function AdminPage() {
                         })}
                       </div>
 
+                      {order.status === 'failed' && order.rejectReason && (
+                        <div className="text-xs bg-red-900/40 border border-red-700/50 rounded p-2 text-red-300">
+                          <span className="font-medium">拒绝原因：</span>{order.rejectReason}
+                        </div>
+                      )}
+
                       <div className="flex gap-2 flex-wrap">
                         {(order.hasTxHash || order.hasPaymentProof || order.txHash || order.paymentProof) && (
                           <button
@@ -2026,6 +2043,11 @@ export default function AdminPage() {
                                order.status === 'pending' ? '待支付' :
                                '已拒绝'}
                             </span>
+                            {order.status === 'failed' && order.rejectReason && (
+                              <div className="mt-1 text-xs text-red-300 max-w-[200px] truncate" title={order.rejectReason}>
+                                {order.rejectReason}
+                              </div>
+                            )}
                           </td>
                           <td className="py-4 text-gray-400 text-sm">
                             {new Date(order.createdAt).toLocaleString()}

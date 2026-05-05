@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
           status: true,
           paymentMethod: true,
           paymentNetwork: true,
+          rejectReason: true,
           // 排除 paymentProof 和 txHash 大字段，仅返回是否存在
           createdAt: true,
           updatedAt: true,
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { action, orderId } = body;
+    const { action, orderId, rejectReason } = body;
 
     if (!orderId) {
       return NextResponse.json({ error: '订单ID不能为空' }, { status: 400 });
@@ -156,12 +157,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'reject') {
+      const reason = typeof rejectReason === 'string' ? rejectReason.trim().slice(0, 500) : '';
+      if (!reason) {
+        return NextResponse.json({ error: '请填写拒绝原因' }, { status: 400 });
+      }
       await db.transaction.update({
         where: { id: orderId },
-        data: { status: 'failed' },
+        data: { status: 'failed', rejectReason: reason },
       });
 
-      console.log('[管理后台] 订单拒绝:', orderId);
+      console.log('[管理后台] 订单拒绝:', orderId, '原因:', reason);
 
       return NextResponse.json({ success: true, message: '订单已拒绝' });
     }
